@@ -15,6 +15,7 @@ import { signOut } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { firebaseAuth, firebaseDb } from "../firebase";
 import { usePresence, recordLogout } from "./presence";
+import { ScreenErrorBoundary } from "./error-boundary";
 import { useAppSelector } from "../store/hooks";
 import { AuthGuard } from "../dashboard/auth-guard";
 import { menuItems } from "../dashboard/menu-items";
@@ -1188,7 +1189,7 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
 
             {/* Main content */}
             <main className="main">
-              <LivePulseContext.Provider value={livePulse}>{children}</LivePulseContext.Provider>
+              <LivePulseContext.Provider value={livePulse}><ScreenErrorBoundary>{children}</ScreenErrorBoundary></LivePulseContext.Provider>
               <footer className="disclaimer-bar">
                 MarketCatalyst LLC is not a registered investment advisor and does not manage client assets. Information and tools on this platform are for informational and educational purposes only and do not constitute investment advice. MarketCatalyst is a data provider, not a stock-picks or alert service. Trading stocks and options carries risk — consult your own financial advisor.
               </footer>
