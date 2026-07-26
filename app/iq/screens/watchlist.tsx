@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TickerSearchInput } from "../ticker-search-input";
 import { doc, onSnapshot, setDoc, arrayUnion, arrayRemove, Timestamp } from "firebase/firestore";
 import { firebaseDb, firebaseAuth } from "../../firebase";
-import { watch as watchData } from "../data";
 import { useCollection } from "../hooks/useCollection";
-import { useEnsureCompanies } from "../hooks/useEnsureCompanies";
+import { useLivePrices } from "../live-prices";
 import { arr, sign } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
+import { trackFeatureOpen } from "../feature-adoption";
 
 interface CompanyDoc {
   id: string; ticker: string; name: string | null; price: number | null; pctChange: number | null;
@@ -22,14 +23,14 @@ export function WatchlistScreen() {
   const { data: companies } = useCollection<CompanyDoc>("companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
-  const [items, setItems]                 = useState<string[]>(() => watchData.map(w => w.ticker));
-  const [sel, setSel]                     = useState<string | null>(() => watchData[0]?.ticker ?? null);
+  const [items, setItems]                 = useState<string[]>([]);
+  const [sel, setSel]                     = useState<string | null>(null);
   const [addOpen, setAddOpen]             = useState(false);
   const [newSym, setNewSym]               = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  // Firestore persistence layered on top of the demo watchlist: once signed in,
-  // a saved list (if any) takes over; an empty/missing doc keeps the demo names.
+  // The watchlist is the user's own — it starts empty and is populated from the
+  // saved Firestore doc once signed in. No demo/sample tickers are ever shown.
   useEffect(() => {
     if (!uid) return;
     const unsub = onSnapshot(watchlistRef(uid), (snap) => {
@@ -41,34 +42,39 @@ export function WatchlistScreen() {
     });
     return () => unsub();
   }, [uid]);
-  useEnsureCompanies(items);
 
+  // Live delayed prices for the watchlist's tickers, refreshed intraday. Takes
+  // precedence over the once-a-day EOD price on `companies`. A ticker with no
+  // synced price reads as "—" rather than a fabricated number.
+  const snaps = useLivePrices(items);
   const list = items.map(sym => {
-    const w = watchData.find(x => x.ticker === sym);
     const c = byTicker.get(sym);
-    const live = c?.price != null;
-    return {
-      ticker: sym,
-      name: c?.name ?? w?.name ?? sym,
-      price: c?.price ?? w?.price ?? 0,
-      pctChange: c?.pctChange ?? w?.pctChange ?? 0,
-      live,
-    };
+    const q = snaps.get(sym.toUpperCase());
+    const price: number | null = q?.price ?? c?.price ?? null;
+    const pctChange: number | null = q?.changePct ?? c?.pctChange ?? null;
+    const live = q?.price != null || c?.price != null;
+    return { ticker: sym, name: c?.name ?? sym, price, pctChange, live };
   });
   const liveCount = list.filter(w => w.live).length;
-  const up   = list.filter(w => w.pctChange > 0).length;
-  const dn   = list.filter(w => w.pctChange < 0).length;
-  const best  = [...list].sort((a, b) => b.pctChange - a.pctChange)[0];
-  const worst = [...list].sort((a, b) => a.pctChange - b.pctChange)[0];
+  const rated = list.filter(w => w.pctChange != null) as { ticker: string; pctChange: number }[];
+  const up   = rated.filter(w => w.pctChange > 0).length;
+  const dn   = rated.filter(w => w.pctChange < 0).length;
+  const best  = [...rated].sort((a, b) => b.pctChange - a.pctChange)[0];
+  const worst = [...rated].sort((a, b) => a.pctChange - b.pctChange)[0];
 
-  const sumTxt =
-    `Your ${list.length} watched names finished <b class="up">${up} up</b> / <b class="down">${dn} down</b> today.` +
-    (best  ? ` <b>${best.ticker}</b> led (${sign(best.pctChange)})` : "") +
-    (worst && worst.ticker !== best?.ticker ? `, <b>${worst.ticker}</b> lagged (${sign(worst.pctChange)})` : "") +
-    `. Broad market: Nasdaq <b class="up">+1.02%</b>, S&P 500 <b class="up">+0.73%</b>.`;
+  // Derived entirely from the real per-ticker changes above — no fabricated
+  // broad-market figures (the live index values live in the header tape).
+  const sumTxt = list.length === 0
+    ? `Add tickers to your watchlist to see a live leaders / laggards summary here.`
+    : `Your ${list.length} watched names finished <b class="up">${up} up</b> / <b class="down">${dn} down</b> today.` +
+      (best  ? ` <b>${best.ticker}</b> led (${sign(best.pctChange)})` : "") +
+      (worst && worst.ticker !== best?.ticker ? `, <b>${worst.ticker}</b> lagged (${sign(worst.pctChange)})` : "") +
+      `.`;
 
-  async function addStock() {
-    const s = newSym.trim().toUpperCase();
+  // `explicit` lets a dropdown pick add the ticker directly (the ticker isn't in
+  // `newSym` yet on the same tick). Without it, add reads the input value.
+  async function addStock(explicit?: string) {
+    const s = (explicit ?? newSym).trim().toUpperCase();
     setNewSym("");
     setAddOpen(false);
     if (!s || items.includes(s)) return;
@@ -76,6 +82,7 @@ export function WatchlistScreen() {
     setSel(s);
     if (uid) {
       await setDoc(watchlistRef(uid), { name: "My Watchlist", tickers: arrayUnion(s), createdAt: Timestamp.now() }, { merge: true });
+      trackFeatureOpen("watchlist.add");
     }
   }
 
@@ -88,6 +95,7 @@ export function WatchlistScreen() {
     });
     if (uid) {
       await setDoc(watchlistRef(uid), { tickers: arrayRemove(sym) }, { merge: true });
+      trackFeatureOpen("watchlist.remove");
     }
   }
 
@@ -120,9 +128,7 @@ export function WatchlistScreen() {
             <p dangerouslySetInnerHTML={{ __html: sumTxt }}
               style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }} />
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <span className="src-chip">Up {up}/{list.length}</span>
-              <span className="src-chip">Nasdaq +1.02%</span>
-              <span className="src-chip">S&amp;P +0.73%</span>
+              {list.length > 0 && <span className="src-chip">Up {up}/{list.length}</span>}
               {liveCount > 0 && <span className="src-chip">{liveCount}/{list.length} live</span>}
               {uid && <span className="src-chip">Synced to your account</span>}
             </div>
@@ -147,13 +153,13 @@ export function WatchlistScreen() {
                   sym={w.ticker}
                   name={w.name}
                   seed={i + 3}
-                  sparkUp={w.pctChange >= 0}
+                  sparkUp={(w.pctChange ?? 0) >= 0}
                   isSelected={sel === w.ticker}
                   onClick={() => setSel(w.ticker)}
                   onDelete={() => setConfirmDelete(w.ticker)}
-                  valueTop={w.price >= 1000 ? `$${(w.price / 1000).toFixed(2)}K` : `$${w.price.toFixed(2)}`}
-                  valueBottom={`${arr(w.pctChange)} ${sign(w.pctChange)}`}
-                  valueBottomClass={w.pctChange >= 0 ? "up" : "down"}
+                  valueTop={w.price == null ? "—" : w.price >= 1000 ? `$${(w.price / 1000).toFixed(2)}K` : `$${w.price.toFixed(2)}`}
+                  valueBottom={w.pctChange == null ? "—" : `${arr(w.pctChange)} ${sign(w.pctChange)}`}
+                  valueBottomClass={w.pctChange == null ? "" : w.pctChange >= 0 ? "up" : "down"}
                 />
               ))}
             </StockListCard>
@@ -173,17 +179,17 @@ export function WatchlistScreen() {
             </div>
             <div className="drawer-b" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", display: "block", marginBottom: 5 }}>Ticker symbol</label>
-                <input
+                <label style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", display: "block", marginBottom: 5 }}>Ticker or company name</label>
+                <TickerSearchInput
                   autoFocus
-                  style={{ width: "100%", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "8px 12px", color: "var(--text)", fontSize: ".9rem" }}
-                  placeholder="e.g. TSLA"
+                  placeholder="Ticker or company name — e.g. Apple"
                   value={newSym}
-                  onChange={e => setNewSym(e.target.value.toUpperCase())}
-                  onKeyDown={e => { if (e.key === "Enter") addStock(); }}
+                  onChange={v => setNewSym(v.toUpperCase())}
+                  onPick={t => addStock(t)}
+                  onEnter={() => addStock()}
                 />
               </div>
-              <button className="btn primary" style={{ width: "100%" }} onClick={addStock}>
+              <button className="btn primary" style={{ width: "100%" }} onClick={() => addStock()}>
                 Add to watchlist
               </button>
             </div>
