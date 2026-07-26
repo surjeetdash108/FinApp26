@@ -113,6 +113,21 @@ export default function RootLayout({
               '(function(){try{if(location.hostname==="marketcatalyst.firebaseapp.com"){location.replace("https://marketcatalyst.web.app"+location.pathname+location.search+location.hash);}}catch(e){}})();',
           }}
         />
+        {/*
+          Self-heal stale bundles after a redeploy. A tab still holding an old
+          bundle that navigates to a route asks for chunk files whose hashes no
+          longer exist on Hosting → the dynamic import rejects and the app
+          router renders NOTHING (silent blank screen, no spinner, no error
+          boundary — the failure happens before any component renders). Detect
+          the ChunkLoadError signature and hard-reload ONCE per session, which
+          fetches the current bundle and replays the navigation.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              '(function(){function stale(m){return /Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(m||"")}function heal(){try{if(sessionStorage.getItem("mc-chunk-reload"))return;sessionStorage.setItem("mc-chunk-reload","1");location.reload();}catch(e){}}window.addEventListener("error",function(e){if(stale(e&&e.message))heal()},true);window.addEventListener("unhandledrejection",function(e){var r=e&&e.reason;if(stale(r&&(r.message||String(r))))heal()});})();',
+          }}
+        />
         <FirebaseAnalytics />
         <SentryInit />
         <ReduxProvider>{children}</ReduxProvider>
