@@ -1,24 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { doc, onSnapshot, setDoc, arrayUnion, arrayRemove, Timestamp } from "firebase/firestore";
-import { firebaseDb, firebaseAuth } from "../../firebase";
+import { useCallback, useEffect, useState } from "react";
+import { firebaseAuth } from "../../firebase";
 import { watch as watchData } from "../data";
-import { useCollection } from "../hooks/useCollection";
+import { apiGet, apiPost, apiDelete } from "../backend";
+import { useApiList } from "../hooks/useApiList";
+import type { CompanyDoc, WatchlistDoc } from "../types";
 import { arr, sign } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
-interface CompanyDoc {
-  id: string; ticker: string; name: string | null; price: number | null; pctChange: number | null;
-}
-
-function watchlistRef(uid: string) {
-  return doc(firebaseDb, "users", uid, "watchlists", "default");
-}
-
 export function WatchlistScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  const { data: companies } = useCollection<CompanyDoc>("companies");
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
   const [items, setItems]                 = useState<string[]>(() => watchData.map(w => w.ticker));
@@ -27,19 +20,20 @@ export function WatchlistScreen() {
   const [newSym, setNewSym]               = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  // Firestore persistence layered on top of the demo watchlist: once signed in,
+  // Backend persistence layered on top of the demo watchlist: once signed in,
   // a saved list (if any) takes over; an empty/missing doc keeps the demo names.
-  useEffect(() => {
+  const refreshWatchlist = useCallback(async () => {
     if (!uid) return;
-    const unsub = onSnapshot(watchlistRef(uid), (snap) => {
-      const tickers = snap.data()?.tickers as string[] | undefined;
-      if (tickers && tickers.length > 0) {
+    try {
+      const { tickers } = await apiGet<WatchlistDoc>("/api/watchlist");
+      if (tickers.length > 0) {
         setItems(tickers);
         setSel(prev => prev ?? tickers[0] ?? null);
       }
-    });
-    return () => unsub();
+    } catch { /* stay on demo data */ }
   }, [uid]);
+
+  useEffect(() => { void refreshWatchlist(); }, [refreshWatchlist]);
 
   const list = items.map(sym => {
     const w = watchData.find(x => x.ticker === sym);
@@ -73,7 +67,10 @@ export function WatchlistScreen() {
     setItems(prev => [...prev, s]);
     setSel(s);
     if (uid) {
-      await setDoc(watchlistRef(uid), { name: "My Watchlist", tickers: arrayUnion(s), createdAt: Timestamp.now() }, { merge: true });
+      try {
+        const { tickers } = await apiPost<WatchlistDoc>("/api/watchlist/tickers", { ticker: s });
+        setItems(tickers);
+      } catch { /* optimistic add above already applied locally */ }
     }
   }
 
@@ -85,7 +82,9 @@ export function WatchlistScreen() {
       return next;
     });
     if (uid) {
-      await setDoc(watchlistRef(uid), { tickers: arrayRemove(sym) }, { merge: true });
+      try {
+        await apiDelete<WatchlistDoc>(`/api/watchlist/tickers/${encodeURIComponent(sym)}`);
+      } catch { /* optimistic removal above already applied locally */ }
     }
   }
 

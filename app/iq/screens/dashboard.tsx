@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { collection, doc, onSnapshot } from "firebase/firestore";
-import { firebaseAuth, firebaseDb } from "../../firebase";
+import { firebaseAuth } from "../../firebase";
 import { useIQActions, ExpandBtn } from "../shell";
 import { pulse as mockPulse, wmn, movers as mockMovers, earnings as mockEarnings, folio, analyst, watch, sectorList, screenerStocks, type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol } from "../utils";
-import { useCollection } from "../hooks/useCollection";
-import { mergePulse, type IndexDoc } from "../live-market-indices";
+import { useApiList } from "../hooks/useApiList";
+import { useApiResource } from "../hooks/useApiResource";
+import { useTapeStream } from "../hooks/useTapeStream";
+import { mergePulse, tapeItemsToIndexDocs } from "../live-market-indices";
+import type {
+  LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
+  InsiderTxDoc, AnalystConsensusDoc, MarketSentimentDoc,
+  WatchlistDoc, HoldingDoc, NewsArticleDoc,
+} from "../types";
 
 const INSIDER_MINI_MOCK = [
   { s: "NVDA", role: "CEO",        dir: "buy",  val: "4.8M" },
@@ -95,28 +101,9 @@ function DpRow({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// ---- live Firestore doc shapes ----
-interface LiveMoverDoc {
-  id: string; ticker: string; name: string | null; price: number; pctChange: number;
-  volume: number; sector: string | null; cap: string | null; direction: "gainer" | "loser"; asOfDate: string;
-}
-interface LiveEarningsDoc {
-  id: string; ticker: string; date: string; epsEstimate: number | null; epsActual: number | null;
-}
-interface CompanyDoc {
-  id: string; ticker: string; name: string | null; price: number | null; pctChange: number | null; marketCap: number | null;
-}
-interface SectorApiDoc { id: string; sector: string; pctChange: number; }
-interface InsiderTxDoc {
-  id: string; ticker: string; ownerName: string | null; officerTitle: string | null;
-  acquiredOrDisposed: string; shares: number; pricePerShare: number | null; transactionDate: string;
-}
-interface AnalystConsensusDoc {
-  id: string; ticker: string; strongBuy: number; buy: number; hold: number; sell: number; strongSell: number; consensus: string;
-}
-interface HoldingDoc {
-  id: string; ticker: string; shares: number; positionSize: "Small" | "Medium" | "Large"; conviction: "High" | "Medium" | "Low";
-}
+// ---- live doc shapes (movers/earnings/companies/sectors/insider/analyst/
+// watchlist/portfolio are promoted to ../types — Phase 2/3/5 of the
+// UI→backend migration) ----
 
 
 function mergeMoversData(mock: Mover[], live: LiveMoverDoc[]): Mover[] {
@@ -306,19 +293,22 @@ function analystDir(type: string) {
 export function DashboardScreen() {
   const { openStock, openMoverModal, openEarnings, openSector, openIndex } = useIQActions();
 
-  const { data: liveIndices } = useCollection<IndexDoc>("market_indices");
-  const { data: liveMovers } = useCollection<LiveMoverDoc>("market_movers");
-  const { data: liveEarnings } = useCollection<LiveEarningsDoc>("earnings_events");
-  const { data: companies } = useCollection<CompanyDoc>("companies");
-  const { data: sectorsLive } = useCollection<SectorApiDoc>("sectors");
-  const { data: liveInsiderTx } = useCollection<InsiderTxDoc>("insider_transactions");
+  // Same shared upstream tape SSE broadcast the shell's ticker strip uses
+  // (Phase 1) — not a direct market_indices Firestore listener.
+  const { frame: tapeFrame } = useTapeStream();
+  const liveIndices = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items) : [];
+  const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
+  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const { data: liveInsiderTx } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
   // Live Fear & Greed (fear-greed.job → market_sentiment/fear_greed); falls
   // back to the illustrative 62/"Greed" until the job has run.
-  const { data: marketSentiment } = useCollection<{ id: string; value?: number; label?: string }>("market_sentiment");
+  const { data: marketSentiment } = useApiList<MarketSentimentDoc>("/market-data/market-sentiment");
   const fearGreed = marketSentiment.find(d => d.id === "fear_greed");
   const fgVal = fearGreed?.value ?? 62;
   const fgLabel = fearGreed?.label ?? "Greed";
-  const { data: consensusLive } = useCollection<AnalystConsensusDoc>("analyst_actions");
+  const { data: consensusLive } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
 
   const pulse = mergePulse(mockPulse, liveIndices);
   const movers = mergeMoversData(mockMovers, liveMovers);
@@ -346,19 +336,10 @@ export function DashboardScreen() {
   // mock arrays the moment either exists, exactly matching the pattern
   // already used on the standalone Watchlist/Portfolio screens.
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  const [realWatchTickers, setRealWatchTickers] = useState<string[]>([]);
-  const [realHoldings, setRealHoldings] = useState<HoldingDoc[]>([]);
-
-  useEffect(() => {
-    if (!uid) return;
-    const unsubWatch = onSnapshot(doc(firebaseDb, "users", uid, "watchlists", "default"), snap => {
-      setRealWatchTickers((snap.data()?.tickers as string[] | undefined) ?? []);
-    });
-    const unsubHoldings = onSnapshot(collection(firebaseDb, "users", uid, "portfolios", "default", "holdings"), snap => {
-      setRealHoldings(snap.docs.map(d => ({ id: d.id, ...d.data() }) as HoldingDoc));
-    });
-    return () => { unsubWatch(); unsubHoldings(); };
-  }, [uid]);
+  const { data: watchlistDoc } = useApiResource<WatchlistDoc>(uid ? "/api/watchlist" : null);
+  const { data: portfolioDoc } = useApiResource<{ holdings: HoldingDoc[] }>(uid ? "/api/portfolio" : null);
+  const realWatchTickers = watchlistDoc?.tickers ?? [];
+  const realHoldings = portfolioDoc?.holdings ?? [];
 
   const isRealWatch = realWatchTickers.length > 0;
   const watchMini: WatchItem[] = isRealWatch
@@ -1245,8 +1226,7 @@ export function DashboardScreen() {
 
 /** Live Market Feed — real synced news, falling back to the original mock items if none are synced yet. */
 function LiveFeedList() {
-  interface NewsDoc { id: string; ticker: string; headline: string; category: string; publishedAt: string; source: string; }
-  const { data: news } = useCollection<NewsDoc>("news");
+  const { data: news } = useApiList<NewsArticleDoc>("/market-data/news");
   const recent = [...news].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 5);
 
   const MOCK_LIVE_FEED = [

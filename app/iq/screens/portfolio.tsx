@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { doc, onSnapshot, setDoc, deleteDoc, collection, Timestamp } from "firebase/firestore";
-import { firebaseDb, firebaseAuth } from "../../firebase";
+import { useCallback, useEffect, useState } from "react";
+import { firebaseAuth } from "../../firebase";
 import { folio as folioData, type FolioItem } from "../data";
-import { useCollection } from "../hooks/useCollection";
+import { apiGet, apiPost, apiDelete } from "../backend";
+import { useApiList } from "../hooks/useApiList";
+import type { CompanyDoc, HoldingDoc } from "../types";
 import { cls, arr, sign } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
@@ -13,31 +14,13 @@ const DEFAULT_SHARES: Record<string, number> = {
   HD: 15, MSFT: 60, AMZN: 80, PLTR: 1000,
 };
 
-interface CompanyDoc {
-  id: string; ticker: string; name: string | null; price: number | null; pctChange: number | null;
-}
-interface HoldingDoc {
-  id: string; // ticker
-  ticker: string;
-  shares: number;
-  positionSize: "Small" | "Medium" | "Large";
-  conviction: "High" | "Medium" | "Low";
-}
-
-function portfolioRef(uid: string) {
-  return doc(firebaseDb, "users", uid, "portfolios", "default");
-}
-function holdingsCol(uid: string) {
-  return collection(firebaseDb, "users", uid, "portfolios", "default", "holdings");
-}
-
 function usd(v: number) {
   return v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${v.toFixed(2)}`;
 }
 
 export function PortfolioScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  const { data: companies } = useCollection<CompanyDoc>("companies");
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
   const [holdings, setHoldings] = useState<FolioItem[]>(() => [...folioData]);
@@ -56,13 +39,13 @@ export function PortfolioScreen() {
   const [newSize, setNewSize]       = useState<"Small"|"Medium"|"Large">("Small");
   const [newConv, setNewConv]       = useState<"High"|"Medium"|"Low">("Medium");
 
-  // Firestore persistence layered on top of the demo portfolio: once signed in,
-  // saved holdings (if any) take over; an empty/missing subcollection keeps the demo names.
-  useEffect(() => {
+  // Backend persistence layered on top of the demo portfolio: once signed in,
+  // saved holdings (if any) take over; an empty/missing set keeps the demo names.
+  const refreshHoldings = useCallback(async () => {
     if (!uid) return;
-    const unsub = onSnapshot(holdingsCol(uid), (snap) => {
-      if (snap.empty) return;
-      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }) as HoldingDoc);
+    try {
+      const { holdings: rows } = await apiGet<{ holdings: HoldingDoc[] }>("/api/portfolio");
+      if (rows.length === 0) return;
       const nextShares: Record<string, number> = {};
       const nextHoldings: FolioItem[] = rows.map(r => {
         nextShares[r.ticker] = r.shares;
@@ -75,9 +58,10 @@ export function PortfolioScreen() {
       setHoldings(nextHoldings);
       setShares(nextShares);
       setPfSel(prev => prev || nextHoldings[0]?.ticker || "");
-    });
-    return () => unsub();
+    } catch { /* stay on demo data */ }
   }, [uid]);
+
+  useEffect(() => { void refreshHoldings(); }, [refreshHoldings]);
 
   // Live price/% overlay — merged on top of the mock/demo holdings, never dropping a row.
   const merged = holdings.map(h => {
@@ -90,36 +74,12 @@ export function PortfolioScreen() {
   const sel      = merged.find(h => h.ticker === pfSel);
   const totalVal = merged.reduce((s, h) => s + (shares[h.ticker] ?? 10) * h.price, 0);
   const dayPL    = merged.reduce((s, h) => s + (shares[h.ticker] ?? 10) * h.price * h.pctChange / 100, 0);
-  const dayPLPct = totalVal > 0 ? (dayPL / (totalVal - dayPL)) * 100 : 0;
   const green    = merged.filter(h => h.pctChange > 0).length;
   const driver   = [...merged].sort((a, b) => (shares[b.ticker] ?? 10) * b.price - (shares[a.ticker] ?? 10) * a.price)[0];
   const leader   = [...merged].sort((a, b) => b.pctChange - a.pctChange)[0];
   const laggard  = [...merged].sort((a, b) => a.pctChange - b.pctChange)[0];
   const driverWt = driver && totalVal > 0
     ? ((shares[driver.ticker] ?? 10) * driver.price / totalVal * 100).toFixed(0) : "0";
-
-  // Materialize the computed summary into Firestore (debounced) so anything
-  // outside this browser tab — notifications, a future backend job, historical
-  // tracking — can read portfolio value without recomputing it from holdings +
-  // live prices. Display above stays purely client-derived/live; this write is
-  // a side effect, never the render source, so it adds no latency to the UI.
-  const lastWritten = useRef<{ totalVal: number; dayPL: number } | null>(null);
-  useEffect(() => {
-    if (!uid || merged.length === 0) return;
-    const timer = setTimeout(() => {
-      const prev = lastWritten.current;
-      if (prev && Math.abs(prev.totalVal - totalVal) < 0.01 && Math.abs(prev.dayPL - dayPL) < 0.01) return;
-      lastWritten.current = { totalVal, dayPL };
-      setDoc(portfolioRef(uid), {
-        totalValue: totalVal,
-        dayPL,
-        dayPLPct,
-        holdingsCount: merged.length,
-        updatedAt: Timestamp.now(),
-      }, { merge: true });
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [uid, totalVal, dayPL, dayPLPct, merged.length]);
 
   async function addHolding() {
     if (!newSym.trim()) return;
@@ -129,8 +89,9 @@ export function PortfolioScreen() {
     setShares(prev => ({ ...prev, [s]: 10 }));
     setNewSym(""); setAddOpen(false);
     if (uid) {
-      await setDoc(portfolioRef(uid), { name: "My Portfolio", createdAt: Timestamp.now() }, { merge: true });
-      await setDoc(doc(holdingsCol(uid), s), { ticker: s, shares: 10, positionSize: newSize, conviction: newConv, addedAt: Timestamp.now() });
+      try {
+        await apiPost<HoldingDoc>("/api/portfolio/holdings", { ticker: s, positionSize: newSize, conviction: newConv });
+      } catch { /* optimistic add above already applied locally */ }
     }
   }
 
@@ -139,7 +100,11 @@ export function PortfolioScreen() {
     setHoldings(prev => prev.filter(h => h.ticker !== sym));
     if (pfSel === sym) setPfSel(next?.ticker ?? "");
     setConfirmDel(null);
-    if (uid) await deleteDoc(doc(holdingsCol(uid), sym));
+    if (uid) {
+      try {
+        await apiDelete(`/api/portfolio/holdings/${encodeURIComponent(sym)}`);
+      } catch { /* optimistic removal above already applied locally */ }
+    }
   }
 
   function startImport() {

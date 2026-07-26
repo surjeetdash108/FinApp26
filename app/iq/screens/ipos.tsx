@@ -3,18 +3,8 @@
 import { useState } from "react";
 import { useIQActions } from "../shell";
 import { cls, sign, StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
-
-interface IpoEventDoc {
-  id: string;
-  date: string;
-  symbol: string | null;
-  name: string;
-  exchange: string | null;
-  priceLow: number | null;
-  priceHigh: number | null;
-  status: "expected" | "priced" | "filed" | "withdrawn";
-}
+import { useApiList } from "../hooks/useApiList";
+import type { IpoEventDoc } from "../types";
 
 function formatIpoPrice(low: number | null, high: number | null): string {
   if (low == null && high == null) return "—";
@@ -57,7 +47,7 @@ const SECTOR_OPTIONS = [
 export function IPOsScreen() {
   const { openStock } = useIQActions();
   const [sector, setSector] = useState("All");
-  const { data: liveIpos } = useCollection<IpoEventDoc>("ipos");
+  const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   const liveIposSorted = [...liveIpos].sort((a, b) => b.date.localeCompare(a.date));
 
   // Live ipos docs carry the offering, not its aftermarket performance, so

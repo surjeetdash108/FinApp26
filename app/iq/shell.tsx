@@ -12,18 +12,18 @@ const StockScreenEmbed = dynamic<{ initialSym?: string }>(
   { ssr: false, loading: () => <div style={{ padding: 40, textAlign: "center", color: "var(--text-dim-solid)" }}>Loading…</div> }
 );
 import { signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { firebaseAuth, firebaseDb } from "../firebase";
+import { firebaseAuth } from "../firebase";
+import { apiGet, apiPatch } from "./backend";
 import { useAppSelector } from "../store/hooks";
 import { AuthGuard } from "../dashboard/auth-guard";
 import { menuItems } from "../dashboard/menu-items";
 import { pulse, sectorList, sectorByName, funds, fundDetail, folio, earnings as earningsData, movers, screenerStocks, type SectorRow, type Fund, type FundDetail, type PulseItem } from "./data";
 import { fmt, sign, cls, arr, SemiGauge } from "./utils";
-import { useCollection } from "./hooks/useCollection";
 import { NotificationBell } from "./notification-bell";
 import { useTickerSearch } from "./hooks/useTickerSearch";
-import { mergePulse, type IndexDoc } from "./live-market-indices";
-import { getMarketStatus, type MarketStatus } from "./market-status";
+import { useTapeStream } from "./hooks/useTapeStream";
+import { useBackendMarketStatus } from "./hooks/useBackendMarketStatus";
+import { mergePulse, tapeItemsToIndexDocs } from "./live-market-indices";
 
 // ---- Route helpers ----
 function slugToHref(slug: string): string {
@@ -783,7 +783,10 @@ export function IQShell({ children }: { children: React.ReactNode }) {
 
   // Same live merge Dashboard's Market Pulse widget uses — keeps the top
   // ticker strip and the index drawer it opens in sync with each other.
-  const { data: liveIndices } = useCollection<IndexDoc>("market_indices");
+  // Backed by the backend's ticker-tape SSE broadcast, not a direct Firestore
+  // listener — one shared upstream Polygon call for every connected browser.
+  const { frame: tapeFrame } = useTapeStream();
+  const liveIndices = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items) : [];
   const livePulse = mergePulse(pulse, liveIndices);
   const tickerItems = [...livePulse, ...livePulse];
 
@@ -801,7 +804,9 @@ export function IQShell({ children }: { children: React.ReactNode }) {
     const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     return { day, time };
   });
-  const [mkt, setMkt] = useState<MarketStatus>(() => getMarketStatus());
+  // GET /live/market-status (vendor session state), not the local ET-clock
+  // computation — falls back to that computation internally on a fetch failure.
+  const mkt = useBackendMarketStatus();
 
   useEffect(() => {
     const tick = () => {
@@ -810,7 +815,6 @@ export function IQShell({ children }: { children: React.ReactNode }) {
         day: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
         time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
       });
-      setMkt(getMarketStatus(d));
     };
     tick(); // correct any build-time (static-export) value right after hydration
     const id = setInterval(tick, 60_000);
@@ -869,24 +873,20 @@ export function IQShell({ children }: { children: React.ReactNode }) {
 
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load saved theme + font from Firestore on mount
+  // Load saved theme + font from the backend on mount
   useEffect(() => {
     if (!user?.uid) return;
-    const uid = user.uid;
     void (async () => {
       try {
-        const snap = await getDoc(doc(firebaseDb, "settings", uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          if (typeof data.darkMode === "boolean") {
-            const resolved = data.darkMode ? "dark" : "light";
-            localStorage.setItem("iq-theme", resolved);
-            setTheme(resolved);
-          }
-          if (typeof data.font === "string") {
-            localStorage.setItem("iq-font", data.font);
-            setFont(data.font as FontKey);
-          }
+        const data = await apiGet<{ darkMode?: boolean; font?: string }>("/api/settings");
+        if (typeof data.darkMode === "boolean") {
+          const resolved = data.darkMode ? "dark" : "light";
+          localStorage.setItem("iq-theme", resolved);
+          setTheme(resolved);
+        }
+        if (typeof data.font === "string") {
+          localStorage.setItem("iq-font", data.font);
+          setFont(data.font as FontKey);
         }
       } catch { /* keep defaults on error */ }
     })();
@@ -1093,7 +1093,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                   localStorage.setItem("iq-theme", next);
                   setTheme(next);
                   if (user?.uid) {
-                    void setDoc(doc(firebaseDb, "settings", user.uid), { darkMode: next === "dark" }, { merge: true });
+                    void apiPatch("/api/settings", { darkMode: next === "dark" });
                   }
                 }}
               >

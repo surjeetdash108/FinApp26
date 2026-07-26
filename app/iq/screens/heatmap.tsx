@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import { useIQActions } from "../shell";
 import { sectorList, movers, screenerStocks, type SectorRow } from "../data";
 import { sign, heatCol, fmt, cls, StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { useApiList } from "../hooks/useApiList";
+import type { CompanyDoc, SectorApiDoc } from "../types";
 
 const TABS = ["Stocks", "S&P 500"];
 const HEADER_H = 24;
@@ -48,13 +49,6 @@ interface HoverStock {
   peers: [string, number, number][];
 }
 
-interface CompanyDoc {
-  id: string; ticker: string; price: number | null; pctChange: number | null; marketCap: number | null;
-}
-interface SectorApiDoc {
-  id: string; sector: string; pctChange: number;
-}
-
 /**
  * Merges live company price/%change/marketCap and live sector %change into
  * the original curated sectorList — never drops a sector or stock, only
@@ -83,8 +77,8 @@ function mergeSectorList(base: SectorRow[], companies: CompanyDoc[], sectorsLive
 
 export function HeatmapScreen() {
   const { openSector, openStockFull } = useIQActions();
-  const { data: companies } = useCollection<CompanyDoc>("companies");
-  const { data: sectorsLive } = useCollection<SectorApiDoc>("sectors");
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
   const mergedSectorList = mergeSectorList(sectorList, companies, sectorsLive);
 
   const [tab, setTab]     = useState(0);

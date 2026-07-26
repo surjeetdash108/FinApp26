@@ -1,9 +1,9 @@
 "use client";
 
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 import { useEffect } from "react";
-import { firebaseAuth, firebaseDb } from "../firebase";
+import { firebaseAuth } from "../firebase";
+import { apiGet } from "../iq/backend";
 import { setAuthReady, setUser } from "./auth-slice";
 import { useAppDispatch } from "./hooks";
 import { setProfile, setProfileLoading, StoredProfile } from "./profile-slice";
@@ -35,17 +35,8 @@ export function FirebaseListener() {
 
           dispatch(setProfileLoading());
           try {
-            const snap = await getDoc(doc(firebaseDb, "users", user.uid));
-            if (!cancelled) {
-              const raw = snap.exists() ? snap.data() : null;
-              if (raw) {
-                // Strip Firestore Timestamps — they are not Redux-serializable
-                const { createdAt: _ca, updatedAt: _ua, ...rest } = raw;
-                dispatch(setProfile(rest as StoredProfile));
-              } else {
-                dispatch(setProfile(null));
-              }
-            }
+            const raw = await apiGet<Record<string, unknown> | null>("/api/profile");
+            if (!cancelled) dispatch(setProfile(raw ? (raw as StoredProfile) : null));
           } catch {
             if (!cancelled) dispatch(setProfile(null));
           }

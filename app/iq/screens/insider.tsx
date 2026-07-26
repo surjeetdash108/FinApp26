@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, limit as fbLimit } from "firebase/firestore";
-import { firebaseDb } from "../../firebase";
 import { useIQActions } from "../shell";
 import { funds as mockFunds, fundDetail, type Fund } from "../data";
 import { StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { apiGet } from "../backend";
+import { useApiList } from "../hooks/useApiList";
+import type { InsiderTxDoc } from "../types";
 
 // ---- types ----
 type InsFilter   = "All" | "Buys" | "Sells" | "10% owners" | "Clusters";
@@ -161,12 +161,7 @@ function QBar({ chg }: { chg: number }) {
   );
 }
 
-// ---- Firestore doc shapes (see backend/src/sync/sec-13f.job.ts and sec-form4.job.ts) ----
-interface InsiderTxDoc {
-  id: string; ticker: string; issuerName: string | null; ownerName: string | null; isOfficer: boolean;
-  officerTitle: string | null; transactionDate: string; transactionCode: string;
-  acquiredOrDisposed: "A" | "D" | string; shares: number; pricePerShare: number | null;
-}
+// ---- backend doc shape (see backend/src/sync/sec-13f.job.ts, market-data/insider-positions.controller.ts) ----
 interface FundHoldingDoc {
   id: string; fundName: string; latestFilingDate: string; latestAccessionNumber: string;
   totalPositions: number; totalValue: number;
@@ -180,9 +175,9 @@ function fmtValue(v: number) {
   return `$${v}`;
 }
 async function fetchPositions(cik: string, accessionNumber: string): Promise<PositionDoc[]> {
-  const col = collection(firebaseDb, `fund_holdings/${cik}/filings/${accessionNumber}/positions`);
-  const snap = await getDocs(query(col, orderBy("value", "desc"), fbLimit(25)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PositionDoc);
+  return apiGet<PositionDoc[]>(
+    `/market-data/fund-holdings/positions?cik=${encodeURIComponent(cik)}&accession=${encodeURIComponent(accessionNumber)}`,
+  );
 }
 /** Loosely matches "Berkshire Hathaway" (live) with "Berkshire Hathaway" or "Berkshire" (mock) etc. */
 function fuzzyFundMatch(a: string, b: string): boolean {
@@ -402,8 +397,8 @@ export function InsiderScreen() {
   const [instSort,   setInstSort]   = useState<InstSort>("owners");
   const [drawer,     setDrawer]     = useState<DrawerState>(null);
 
-  const { data: liveInsiderTx } = useCollection<InsiderTxDoc>("insider_transactions");
-  const { data: liveFunds } = useCollection<FundHoldingDoc>("fund_holdings");
+  const { data: liveInsiderTx } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  const { data: liveFunds } = useApiList<FundHoldingDoc>("/market-data/fund-holdings");
 
   // Real cross-fund overlap (CUSIP-matched across live 13F positions) — additive, alongside the mock "Cross-fund signals" card.
   const [liveOverlap, setLiveOverlap] = useState<Array<{ cusip: string; name: string; funds: string[] }> | null>(null);

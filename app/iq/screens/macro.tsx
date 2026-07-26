@@ -2,30 +2,9 @@
 
 import { useState, useRef } from "react";
 import { StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { useApiList } from "../hooks/useApiList";
+import type { MacroEventDoc, DividendDoc } from "../types";
 import { rangeFor, inRange, fmtMonthDay, rangeLabel, type RangeTabKey } from "../calendar-range";
-
-interface MacroEventDoc {
-  id: string;
-  name: string;
-  seriesId: string;
-  unit: string;
-  importance: "high" | "medium" | "low";
-  eventDate: string;
-  actual: number | null;
-  previous: number | null;
-  source: string;
-}
-
-interface DividendDoc {
-  id: string;
-  ticker: string;
-  exDividendDate: string;
-  paymentDate: string | null;
-  dividendAmount: number;
-  yieldPct: number | null;
-  frequency: string | null;
-}
 
 // ── Economic calendar ────────────────────────────────────────────────────────
 const ECO_TABS = ["Last month", "Last week", "This week", "Next week", "This month"];
@@ -456,10 +435,10 @@ function formatMacroValue(value: number | null, unit: string): string {
 }
 
 export function MacroScreen() {
-  const { data: macroLive } = useCollection<MacroEventDoc>("macro_events");
+  const { data: macroLive } = useApiList<MacroEventDoc>("/market-data/macro-events");
   const macroLiveSorted = [...macroLive].sort((a, b) => IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance]);
 
-  const { data: liveDividends } = useCollection<DividendDoc>("dividends");
+  const { data: liveDividends } = useApiList<DividendDoc>("/market-data/dividends");
   // One clock for the whole screen so tabs cannot disagree mid-render.
   const now = new Date();
   const liveDividendsSorted = [...liveDividends].sort((a, b) => a.exDividendDate.localeCompare(b.exDividendDate));

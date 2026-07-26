@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useIQActions } from "../shell";
 import { analyst } from "../data";
 import { sign, cls, StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { useApiList } from "../hooks/useApiList";
+import type { AnalystConsensusDoc } from "../types";
 
 const TABS = ["All", "Upgrades", "Downgrades", "Initiations", "PT changes"];
 
@@ -13,11 +14,6 @@ const TABS = ["All", "Upgrades", "Downgrades", "Initiations", "PT changes"];
 // Benzinga, blocked on a missing key). So this is additive — a real "what does
 // the Street think right now" card — not a replacement for the mock event table,
 // which depicts individual firm actions no live source can reconstruct yet.
-interface ConsensusDoc {
-  id: string; ticker: string;
-  strongBuy: number; buy: number; hold: number; sell: number; strongSell: number;
-  consensus: string;
-}
 
 function dirPill(dir: string) {
   if (dir === "up")   return <span className="pill up">▲ Upgrade</span>;
@@ -48,7 +44,7 @@ function computeClusters() {
 
 export function AnalystScreen() {
   const { openStock } = useIQActions();
-  const { data: liveConsensus } = useCollection<ConsensusDoc>("analyst_actions");
+  const { data: liveConsensus } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   const [tab, setTab]               = useState(0);
   const [clustersOnly, setClustersOnly] = useState(false);
   const [myNames, setMyNames]       = useState(false);

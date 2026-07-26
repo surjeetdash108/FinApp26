@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { earnings, stockInfo, type Earning } from "../data";
 import { fmt, cls, sign, earnHistory, EarnQ, StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { useApiList } from "../hooks/useApiList";
+import type { LiveEarningsDoc } from "../types";
 import { rangeFor, inRange, type RangeTabKey } from "../calendar-range";
 
 // Live source (FMP earnings calendar) has ticker/date/epsEstimate/epsActual —
@@ -13,10 +14,6 @@ import { rangeFor, inRange, type RangeTabKey } from "../calendar-range";
 // synced doc exists for the ticker; everything else (session, guidance,
 // call summaries/transcripts) stays the illustrative mock, clearly unmarked
 // as such since no vendor (Benzinga real-time, Claude) is wired for it yet.
-interface LiveEarningsDoc {
-  id: string; ticker: string; date: string;
-  epsEstimate: number | null; epsActual: number | null;
-}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -739,7 +736,7 @@ const COMPANY_BIO: Record<string, string> = {
 
 export function EarningsScreen() {
   const { openStockFull } = useIQActions();
-  const { data: liveEarnings } = useCollection<LiveEarningsDoc>("earnings_events");
+  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   // One clock for the whole screen so tabs cannot disagree mid-render.
   const now = new Date();
   const [tab, setTab] = useState<TabKey>("week");

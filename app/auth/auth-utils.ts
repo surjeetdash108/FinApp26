@@ -1,7 +1,7 @@
 import { FirebaseError } from "firebase/app";
 import { UserCredential } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { firebaseAuth, firebaseDb } from "../firebase";
+import { firebaseAuth } from "../firebase";
+import { apiGet, apiPatch } from "../iq/backend";
 import { emptyInvestorProfile } from "../profile/profile-fields";
 
 export function getAuthErrorMessage(error: unknown): string {
@@ -44,18 +44,14 @@ export function shouldUseGoogleRedirect(): boolean {
 }
 
 export async function completeGoogleLogin(userCredential: UserCredential) {
-  const profileRef = doc(firebaseDb, "users", userCredential.user.uid);
-  const profileSnap = await getDoc(profileRef);
+  const existing = await apiGet<Record<string, unknown> | null>("/api/profile");
 
-  if (!profileSnap.exists()) {
-    await setDoc(profileRef, {
+  if (!existing) {
+    await apiPatch("/api/profile", {
       ...emptyInvestorProfile,
-      uid: userCredential.user.uid,
       name: userCredential.user.displayName ?? "",
       email: userCredential.user.email ?? "",
       tier: "free",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
     });
     window.location.href = "/profile/edit";
     return;

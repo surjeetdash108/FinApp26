@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { signOut, deleteUser } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { firebaseAuth, firebaseDb } from "../../firebase";
+import { firebaseAuth } from "../../firebase";
 import { useAppSelector } from "../../store/hooks";
 import type { StoredProfile } from "../../store/profile-slice";
 import { useIQActions, type FontKey } from "../shell";
+import { apiPatch } from "../backend";
 
 const FONTS: { key: FontKey; label: string; desc: string; stack: string }[] = [
   { key: "geist",         label: "Geist",         desc: "Clean & neutral · Minimal sans",      stack: "var(--font-geist-sans,'Geist Sans',sans-serif)" },
@@ -150,7 +150,7 @@ export function SettingsScreen() {
     localStorage.setItem("iq-alert", enabled ? "1" : "0");
     try {
       if (user?.uid) {
-        await setDoc(doc(firebaseDb, "settings", user.uid), { alert: enabled }, { merge: true });
+        await apiPatch("/api/settings", { alert: enabled });
       }
     } catch (err) {
       console.error("Failed to save alert setting", err);
@@ -213,7 +213,7 @@ export function SettingsScreen() {
     if (key === font) return;
     try {
       if (user?.uid) {
-        await setDoc(doc(firebaseDb, "settings", user.uid), { font: key }, { merge: true });
+        await apiPatch("/api/settings", { font: key });
       }
       localStorage.setItem("iq-font", key);
       setFont(key);
@@ -228,7 +228,7 @@ export function SettingsScreen() {
     setSaving(true);
     try {
       if (user?.uid) {
-        await setDoc(doc(firebaseDb, "settings", user.uid), { darkMode: pending }, { merge: true });
+        await apiPatch("/api/settings", { darkMode: pending });
       }
       const resolved = pending ? "dark" : "light";
       localStorage.setItem("iq-theme", resolved);

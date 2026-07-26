@@ -3,23 +3,8 @@
 import { useState, useMemo } from "react";
 import { movers } from "../data";
 import { fmt, sign, cls, arr, StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
-
-interface LiveOptionContract {
-  contractTicker: string;
-  contractType: "call" | "put";
-  strike: number;
-  expirationDate: string;
-  lastClose: number | null;
-  lastVolume: number | null;
-  lastBarDate: string | null;
-}
-interface OptionsChainDoc {
-  id: string;
-  underlyingTicker: string;
-  contracts: LiveOptionContract[];
-  note: string;
-}
+import { useApiResource } from "../hooks/useApiResource";
+import { OptionsChainDoc, OPTIONS_UNIVERSE } from "../types";
 
 const EXTRA_STOCKS = [
   { s: "AAPL",  n: "Apple",          p:  189.98, c:  1.02 },
@@ -122,8 +107,9 @@ export function OptionsScreen() {
   const [selSym, setSelSym] = useState(stockList[0]?.s ?? "NVDA");
   const [expIdx, setExpIdx] = useState(0);
   const [query,  setQuery]  = useState("");
-  const { data: liveChains } = useCollection<OptionsChainDoc>("options_chains");
-  const liveChain = liveChains.find(c => c.underlyingTicker === selSym);
+  const { data: liveChain } = useApiResource<OptionsChainDoc>(
+    OPTIONS_UNIVERSE.includes(selSym) ? `/live/options-chain?ticker=${selSym}` : null,
+  );
 
   const cur     = stockList.find(s => s.s === selSym) ?? stockList[0];
   const rows    = useMemo(() => buildChain(cur.s, cur.p, expIdx), [cur.s, cur.p, expIdx]);

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useIQActions } from "../shell";
 import { commentary, watch, folio, movers, analyst, screenerStocks, stockInfo, sectorByName } from "../data";
 import { sign, fmt, hashStr, earnHistory, StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { useApiList } from "../hooks/useApiList";
+import { useApiResource } from "../hooks/useApiResource";
+import type { NewsArticleDoc } from "../types";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 
@@ -58,18 +60,7 @@ function catCol(c: string): string {
   return "var(--text-dim-solid)";
 }
 
-/* ── Live news doc shape + helpers ── */
-interface NewsDoc {
-  id: string;
-  ticker: string;
-  headline: string;
-  summary: string;
-  source: string;
-  url: string;
-  category: string;
-  publishedAt: string; // ISO
-}
-
+/* ── Live news helpers ── */
 type CommentaryItem = { cat: string; accent: string; time: string; text: string; why: string; live?: boolean };
 
 function etHour(iso: string): number {
@@ -99,20 +90,20 @@ function timeAgo(iso: string): string {
   return `${Math.round(mins / 1440)}d ago`;
 }
 
-function liveCatAccent(c: string): string {
+function liveCatAccent(c: string | null): string {
   if (c === "earnings") return "var(--warn)";
   if (c === "merger") return "var(--ai)";
   if (c === "company") return "var(--brand-2)";
   return "var(--text-dim-solid)";
 }
-function liveCatLabel(c: string): string {
+function liveCatLabel(c: string | null): string {
   if (c === "earnings") return "Earnings";
   if (c === "merger") return "M&A";
   if (c === "company") return "Company";
   return "Macro";
 }
 
-function liveToCommentaryItem(n: NewsDoc): CommentaryItem {
+function liveToCommentaryItem(n: NewsArticleDoc): CommentaryItem {
   return {
     cat: liveCatLabel(n.category),
     accent: liveCatAccent(n.category),
@@ -254,13 +245,17 @@ function FeedItem({ item, i, total, onItemClick }: {
 }
 
 /* ── News Drawer ── */
-function NewsDrawer({ sym, allNews, onClose }: { sym: string; allNews: NewsDoc[]; onClose: () => void }) {
+function NewsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   const { openStockFull } = useIQActions();
   const info = stockInfo[sym];
   const ss   = screenerStocks.find(x => x.ticker === sym);
   const nm   = info?.name ?? ss?.name ?? sym;
   const items = buildNewsHistory(sym);
-  const liveItems = allNews.filter(n => n.ticker === sym).sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  // Per-ticker cache-aside fill (GET /live/news?ticker=X) — independent of the
+  // main screen's bounded top-60 global feed, so a quiet ticker not in that
+  // window still gets its own recent headlines here.
+  const { data: tickerNews } = useApiResource<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`);
+  const liveItems = [...(tickerNews ?? [])].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
   return (
     <>
@@ -339,7 +334,7 @@ function NewsDrawer({ sym, allNews, onClose }: { sym: string; allNews: NewsDoc[]
 /* ── Main commentary screen ── */
 export function CommentaryScreen() {
   const router = useRouter();
-  const { data: liveNews } = useCollection<NewsDoc>("news");
+  const { data: liveNews } = useApiList<NewsArticleDoc>("/market-data/news");
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
   const [newsDrawer,    setNewsDrawer]    = useState<string | null>(null);
@@ -634,7 +629,7 @@ export function CommentaryScreen() {
 
       {/* News history sliding drawer */}
       {newsDrawer && (
-        <NewsDrawer sym={newsDrawer} allNews={liveNews} onClose={() => setNewsDrawer(null)} />
+        <NewsDrawer sym={newsDrawer} onClose={() => setNewsDrawer(null)} />
       )}
     </>
   );

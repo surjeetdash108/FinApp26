@@ -9,8 +9,8 @@ import {
   signInWithRedirect,
   updateProfile,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { firebaseAuth, firebaseDb, googleAuthProvider } from "../../firebase";
+import { firebaseAuth, googleAuthProvider } from "../../firebase";
+import { apiPatch } from "../../iq/backend";
 import {
   InvestorProfile,
   ProfileFields,
@@ -79,13 +79,10 @@ export function SignupForm() {
       }
       const cred = await createUserWithEmailAndPassword(firebaseAuth, profile.email, password);
       await updateProfile(cred.user, { displayName: profile.name });
-      await setDoc(doc(firebaseDb, "users", cred.user.uid), {
+      await apiPatch("/api/profile", {
         ...profile,
-        uid: cred.user.uid,
         email: cred.user.email ?? profile.email,
         tier: "free",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
       window.location.href = "/dashboard";
     } catch (err) {

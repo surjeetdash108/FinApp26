@@ -4,20 +4,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { stockInfo, watch, movers as moversData, folio, earnings as earningsData, sectorByName, sectorList, screenerStocks, fundDetail, StockInfo } from "../data";
 import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, earnHistory, EarnQ, EarningsGrowthChart } from "../utils";
-import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, deleteDoc, doc } from "firebase/firestore";
-import { firebaseDb, firebaseAuth } from "../../firebase";
-import { useCollection } from "../hooks/useCollection";
-import { useOhlcvBars } from "../hooks/useOhlcvBars";
-
-interface CompanyDoc {
-  id: string; ticker: string; name: string | null; price: number | null; pctChange: number | null;
-  marketCap: number | null; peRatio: number | null; dividendYield: number | null; beta: number | null;
-  sector: string | null;
-  // Real technicals from technical-indicators.job (null until it has run).
-  rsi14: number | null; macd: number | null; macdSignal: number | null; macdHistogram: number | null;
-  // Sector rank from tech-rating.job; source records which vendor served the profile.
-  sectorRank: number | null; sectorRankTotal: number | null; source: string | null;
-}
+import { firebaseAuth } from "../../firebase";
+import { apiGet, apiPost, apiDelete } from "../backend";
+import { useApiResource } from "../hooks/useApiResource";
+import { useApiList } from "../hooks/useApiList";
+import { useBackendBars } from "../hooks/useBackendBars";
+import type {
+  CompanyDoc, AnalystConsensusDoc, InsiderTxDoc,
+  DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, NewsArticleDoc,
+} from "../types";
 
 function fmtMarketCapB(billions: number): string {
   return billions >= 1000 ? `$${(billions / 1000).toFixed(2)}T` : billions >= 10 ? `$${Math.round(billions)}B` : `$${billions.toFixed(1)}B`;
@@ -32,40 +27,25 @@ interface StockNote {
 }
 
 async function loadNotes(sym: string): Promise<StockNote[]> {
-  const uid = firebaseAuth.currentUser?.uid;
-  if (!uid) return [];
+  if (!firebaseAuth.currentUser) return [];
   try {
-    const q = query(
-      collection(firebaseDb, "stock_comments"),
-      where("uid", "==", uid),
-      where("sym", "==", sym),
-      orderBy("createdAt", "desc")
+    const rows = await apiGet<Array<{ id: string; sym: string; name: string; comment: string; createdAt: string }>>(
+      `/api/stock-notes?sym=${encodeURIComponent(sym)}`,
     );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({
-      id: d.id,
-      sym: d.data().sym,
-      name: d.data().name,
-      comment: d.data().comment,
-      createdAt: (d.data().createdAt as Timestamp).toDate(),
-    }));
+    return rows.map(r => ({ ...r, createdAt: new Date(r.createdAt) }));
   } catch { return []; }
 }
 
 async function saveNote(sym: string, name: string, comment: string): Promise<string | null> {
-  const uid = firebaseAuth.currentUser?.uid;
-  if (!uid || !comment.trim()) return null;
+  if (!firebaseAuth.currentUser || !comment.trim()) return null;
   try {
-    const ref = await addDoc(collection(firebaseDb, "stock_comments"), {
-      uid, sym, name, comment: comment.trim(),
-      createdAt: Timestamp.now(),
-    });
-    return ref.id;
+    const row = await apiPost<{ id: string }>("/api/stock-notes", { sym, name, comment: comment.trim() });
+    return row.id;
   } catch { return null; }
 }
 
 async function deleteNote(id: string): Promise<void> {
-  try { await deleteDoc(doc(firebaseDb, "stock_comments", id)); } catch { /* ignore */ }
+  try { await apiDelete(`/api/stock-notes/${encodeURIComponent(id)}`); } catch { /* ignore */ }
 }
 
 const LOGO_BG: Record<string, [string, string]> = {
@@ -164,6 +144,43 @@ function earnIncome(mc: number, mg: number, px: number, period: "Q" | "A"): IncR
     const ni   = Math.max(0.01, oi * 0.82);
     const eps  = ni / sh;
     return { c, rev, cogs, gp, opex, oi, ni, eps };
+  });
+}
+
+/**
+ * Real quarterly/annual financials (GET /live/financials) mapped onto the
+ * IncRow shape the existing charts/table already render, so those components
+ * don't need to change — only their input does. Falls back to the synthetic
+ * earnIncome() generator when no real doc exists yet for this ticker/period.
+ */
+function incRowsFromFinancials(
+  period: "Q" | "A",
+  doc: FinancialsDoc | null,
+  fallback: () => IncRow[],
+): IncRow[] {
+  const rows = doc ? (period === "Q" ? doc.quarters : doc.annual) : [];
+  if (rows.length === 0) return fallback();
+  return rows.slice(0, 10).map(r => {
+    const revenue = r.revenue ?? 0;
+    const grossProfit = r.grossProfit ?? 0;
+    const operatingIncome = r.operatingIncome ?? 0;
+    const netIncome = r.netIncome ?? 0;
+    const opex = period === "Q"
+      ? (r as QuarterFinancials).operatingExpenses ?? Math.max(0, grossProfit - operatingIncome)
+      : Math.max(0, grossProfit - operatingIncome);
+    const label = period === "Q"
+      ? `${(r as QuarterFinancials).fiscalPeriod ?? "?"} '${(r.fiscalYear ?? "").slice(-2)}`
+      : `FY ${r.fiscalYear ?? "?"}`;
+    return {
+      c: label,
+      rev: revenue / 1e9,
+      cogs: Math.max(0, revenue - grossProfit) / 1e9,
+      gp: grossProfit / 1e9,
+      opex: opex / 1e9,
+      oi: operatingIncome / 1e9,
+      ni: netIncome / 1e9,
+      eps: r.epsActual ?? 0,
+    };
   });
 }
 
@@ -332,7 +349,7 @@ function StockChartExpanded({
   const [showVol, setShowVol] = useState(initialShowVol);
   const [showRsi, setShowRsi] = useState(initialShowRsi);
   const [showEarnings, setShowEarnings] = useState(initialShowEarnings);
-  const realBars = useOhlcvBars(sym, tf);
+  const realBars = useBackendBars(sym, tf);
   const isUp = px > 0;
   return (
     <div>
@@ -387,7 +404,6 @@ function StockChartExpanded({
 
 export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?: string; hideHeader?: boolean; hideChart?: boolean } = {}) {
   const { openStock, openSector } = useIQActions();
-  const { data: companies } = useCollection<CompanyDoc>("companies");
   const [sym, setSym] = useState(() => {
     if (initialSym) return initialSym;
     if (typeof window !== "undefined") return localStorage.getItem("iq-stock") || "NVDA";
@@ -408,16 +424,25 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const [chartType, setChartType] = useState<"Candles" | "Hollow" | "Bars" | "Line" | "Area">("Candles");
   const [maStep, setMaStep] = useState(0);
 
-  // Live overlays for the detail panels — real analyst consensus, news, insider
-  // transactions (from their Firestore collections) and real 52-week levels
-  // (from a year of ohlcv_bars). Each falls back to the existing mock when its
-  // collection is empty, so nothing goes blank before the jobs have run.
-  const { data: liveConsensus } = useCollection<{ id: string; ticker: string; strongBuy: number; buy: number; hold: number; sell: number; strongSell: number }>("analyst_actions");
-  const { data: liveNews } = useCollection<{ id: string; ticker: string; headline: string; publishedAt: string }>("news");
-  const { data: liveInsider } = useCollection<{ id: string; ticker: string; ownerName: string | null; acquiredOrDisposed: string; shares: number; transactionDate: string }>("insider_transactions");
-  const yearBars = useOhlcvBars(sym, "1Y");
+  // Live overlays for the detail panels — real analyst consensus and insider
+  // transactions (from the Phase 2 market-data endpoints) and real 52-week
+  // levels (from a year of bars). Each falls back to the existing mock when
+  // empty, so nothing goes blank before a ticker has been synced.
+  const { data: liveConsensus } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
+  const { data: liveInsider } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  const yearBars = useBackendBars(sym, "1Y");
   const [emaStep, setEmaStep] = useState(0);
-  const realBars = useOhlcvBars(sym, tfActive);
+  const realBars = useBackendBars(sym, tfActive);
+
+  // Per-ticker profile + dividend/split/financials history — cache-aside via
+  // GET /live/company|/live/dividend-history|/live/splits|/live/financials
+  // (replacing the direct companies Firestore listener this screen used to
+  // hold open). Re-fetches whenever `sym` changes since it's part of the path.
+  const { data: liveCompany } = useApiResource<CompanyDoc>(`/live/company?ticker=${encodeURIComponent(sym)}`);
+  const { data: dividendHistory } = useApiResource<DividendHistoryDoc>(`/live/dividend-history?ticker=${encodeURIComponent(sym)}`);
+  const { data: splitsDoc } = useApiResource<SplitsDoc>(`/live/splits?ticker=${encodeURIComponent(sym)}`);
+  const { data: financialsDoc } = useApiResource<FinancialsDoc>(`/live/financials?ticker=${encodeURIComponent(sym)}`);
+  const { data: tickerNews } = useApiResource<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`);
 
   // ── Notes (Firebase stock_comments) ──────────────────────────────────────
   const [notes, setNotes]       = useState<StockNote[]>([]);
@@ -494,7 +519,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     news: [],
     insiderActivity: [],
   };
-  const liveCompany = companies.find(c => c.ticker === sym);
   const isLiveStock = !!liveCompany && liveCompany.price != null;
 
   // Real 52-week high/low from a year of daily bars (fallback: mock range).
@@ -502,12 +526,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const week52 = yr.length > 1
     ? { high: Math.max(...yr.map(b => b.h)), low: Math.min(...yr.map(b => b.l)) }
     : null;
-  // Real news / insider for this ticker, mapped into the panels' shapes.
-  const symNews = liveNews
-    .filter(n => n.ticker === sym)
-    .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))
-    .slice(0, 6)
-    .map(n => ({ headline: n.headline, date: (n.publishedAt ?? "").slice(0, 10) }));
+  // Real insider transactions for this ticker, mapped into the panel's shape.
+  // (News panel isn't rendered anywhere in this screen yet — deferred to
+  // Phase 6, so no news fetch happens here at all.)
   const symInsider = liveInsider
     .filter(x => x.ticker === sym)
     .sort((a, b) => (b.transactionDate ?? "").localeCompare(a.transactionDate ?? ""))
@@ -534,7 +555,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
         }
       : {}),
     ...(week52 ? { week52High: week52.high, week52Low: week52.low } : {}),
-    ...(symNews.length ? { news: symNews } : {}),
     ...(symInsider.length ? { insiderActivity: symInsider } : {}),
   };
   const isUp = data.pctChange >= 0;
@@ -930,7 +950,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
           {/* Financials — grouped bar chart */}
           {(() => {
-            const inc     = earnIncome(mc, mg, p, finPeriod);
+            const inc     = incRowsFromFinancials(finPeriod, financialsDoc, () => earnIncome(mc, mg, p, finPeriod));
             const histEps = finPeriod === "Q" ? hist10.slice(0, 10) : earnHistAnnual(hist10);
             const beatsOf = histEps.filter(h => h.surp >= 0).length;
             const latestA = histEps[0]?.a ?? 0;
@@ -941,6 +961,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <div className="card-h">
                   <h3>Financials</h3>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {financialsDoc && (
+                      <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>
+                    )}
                     <div className="tf-pills">
                       <button
                         className={`rng${finPeriod === "Q" ? " on" : ""}`}
@@ -1111,48 +1134,58 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
         {/* Dividend history — row 3, col 1 */}
         {/* alignSelf stretch is default on grid children; explicit here for clarity */}
         {(() => {
-          const annualDiv = p * (data.dividendYield / 100);
-          const qDiv = annualDiv / 4;
+          const dh = dividendHistory;
+          const hasReal = !!dh && dh.isPayer;
+          const yieldPct = hasReal ? (dh!.yieldPct ?? data.dividendYield) : data.dividendYield;
+          const annualDiv = hasReal ? (dh!.ttmTotal ?? 0) : p * (data.dividendYield / 100);
           const exDay = 6 + (sym.charCodeAt(0) % 22);
-          const payoutRatio = data.dividendYield > 0 && data.eps > 0
+          const payoutRatio = yieldPct > 0 && data.eps > 0
             ? Math.min(99, Math.round((annualDiv / data.eps) * 100)) : 0;
-          const DROWS = [
-            { label: "Q2'25", mo: "Apr", dy: exDay },
-            { label: "Q1'25", mo: "Jan", dy: exDay },
-            { label: "Q4'24", mo: "Oct", dy: exDay },
-            { label: "Q3'24", mo: "Jul", dy: exDay },
-            { label: "Q2'24", mo: "Apr", dy: exDay },
-          ];
-          const divRows = DROWS.map((r, i) => ({ ...r, perShare: qDiv / Math.pow(1.065, i / 4) }));
+          const growthLabel = hasReal && dh!.cagr5yPct != null
+            ? `${dh!.cagr5yPct >= 0 ? "+" : ""}${dh!.cagr5yPct.toFixed(1)}% / yr`
+            : "+6.5% / yr";
+          const streakLabel = hasReal && dh!.increaseStreakYears > 0 ? ` · ${dh!.increaseStreakYears}-yr streak` : "";
+          const qDiv = annualDiv / 4;
+          const divRows = hasReal
+            ? dh!.history.slice(0, 5).map(h => ({
+                label: h.exDividendDate ?? "—",
+                perShare: h.amount,
+                note: h.exDividendDate ? `ex ${h.exDividendDate.slice(5)}` : "",
+              }))
+            : [
+                { label: "Q2'25", mo: "Apr" }, { label: "Q1'25", mo: "Jan" }, { label: "Q4'24", mo: "Oct" },
+                { label: "Q3'24", mo: "Jul" }, { label: "Q2'24", mo: "Apr" },
+              ].map((r, i) => ({ label: r.label, perShare: qDiv / Math.pow(1.065, i / 4), note: `ex ${r.mo} ${exDay}` }));
           return (
             <div className="card">
               <div className="card-h">
-                <h3>Dividend history</h3>
+                <h3>Dividend &amp; split history</h3>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {data.dividendYield > 0
-                    ? <span className="pill up">{data.dividendYield.toFixed(2)}% yield</span>
+                  {yieldPct > 0
+                    ? <span className="pill up">{yieldPct.toFixed(2)}% yield</span>
                     : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>No dividend</span>}
+                  {hasReal && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>}
                   <span className="link" onClick={() => setInnerDrawer("dividend")}>View all →</span>
                 </div>
               </div>
               <div className="card-b" style={{ paddingTop: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
                   <div className="cd">
-                    <span className="num">{data.dividendYield > 0 ? exDay - 1 : "—"}</span>
+                    <span className="num">{yieldPct > 0 ? exDay - 1 : "—"}</span>
                     <span className="u">days to<br />ex-div</span>
                   </div>
                   <div>
                     <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginBottom: 4 }}>5-yr dividend growth</div>
                     <div style={{ fontSize: ".78rem", color: "var(--text-hi)" }}>
-                      {data.dividendYield > 0 ? `+6.5% / yr · payout ${payoutRatio}%` : "No dividend declared"}
+                      {yieldPct > 0 ? `${growthLabel} · payout ${payoutRatio}%${streakLabel}` : "No dividend declared"}
                     </div>
                   </div>
                 </div>
-                {data.dividendYield > 0 ? divRows.map(q => (
+                {yieldPct > 0 ? divRows.map(q => (
                   <div key={q.label} className="minirow">
                     <span className="tkr" style={{ width: 60 }}>{q.label}</span>
                     <span className="mid mono">${q.perShare.toFixed(4)}/sh</span>
-                    <span className="r" style={{ color: "var(--text-dim-solid)", fontSize: ".72rem" }}>ex {q.mo} {q.dy}</span>
+                    <span className="r" style={{ color: "var(--text-dim-solid)", fontSize: ".72rem" }}>{q.note}</span>
                   </div>
                 )) : (
                   [["Annual dividend","—"],["Quarterly","—"],["Payout ratio","—"],["5-yr growth","—"],["Ex-div date","—"]].map(r => (
@@ -1163,8 +1196,22 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   ))
                 )}
                 <div className="minirow" style={{ marginTop: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 6 }}>
-                  <span className="mid">Annual ({data.dividendYield > 0 ? "4 payments" : "no payments"})</span>
-                  <span className="r" style={{ color: "var(--text-hi)" }}>{data.dividendYield > 0 ? `$${annualDiv.toFixed(2)}/sh` : "—"}</span>
+                  <span className="mid">Annual ({yieldPct > 0 ? `${hasReal ? dh!.ttmPayments : 4} payments` : "no payments"})</span>
+                  <span className="r" style={{ color: "var(--text-hi)" }}>{yieldPct > 0 ? `$${annualDiv.toFixed(2)}/sh` : "—"}</span>
+                </div>
+
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border-soft)" }}>
+                  <div style={{ fontSize: ".66rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>
+                    Stock splits
+                  </div>
+                  {splitsDoc && splitsDoc.splits.length > 0 ? splitsDoc.splits.slice(0, 3).map(s => (
+                    <div key={s.executionDate} className="minirow">
+                      <span className="mid">{s.executionDate}</span>
+                      <span className="r" style={{ color: "var(--text-hi)" }}>{s.splitFrom}:{s.splitTo}</span>
+                    </div>
+                  )) : (
+                    <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>No splits on record.</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1297,6 +1344,35 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               ))}
             </div>
           </div>
+
+        {/* News */}
+        <div className="card">
+          <div className="card-h">
+            <h3>News</h3>
+            {tickerNews && tickerNews.length > 0 && (
+              <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live</span>
+            )}
+          </div>
+          <div className="card-b" style={{ paddingTop: 6 }}>
+            {tickerNews && tickerNews.length > 0 ? (
+              tickerNews.slice(0, 6).map(n => (
+                <a key={n.id} href={n.url} target="_blank" rel="noreferrer"
+                  className="minirow" style={{ alignItems: "flex-start", gap: 10, textDecoration: "none", cursor: "pointer" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: ".8rem", color: "var(--text)" }}>{n.headline}</div>
+                    <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 3 }}>
+                      {n.source} · {new Date(n.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </div>
+                  </div>
+                </a>
+              ))
+            ) : (
+              <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "4px 0" }}>
+                No recent news synced for {sym} yet.
+              </div>
+            )}
+          </div>
+        </div>
 
       </div>
 
@@ -1627,7 +1703,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
           {/* Financials */}
           {innerDrawer === "financials" && (() => {
-            const inc = earnIncome(mc, mg, p, finPeriod);
+            const inc = incRowsFromFinancials(finPeriod, financialsDoc, () => earnIncome(mc, mg, p, finPeriod));
             const fb = (v: number) => v >= 1 ? `$${v.toFixed(2)}B` : `$${(v * 1000).toFixed(0)}M`;
             const beats10 = hist10.filter(h => h.surp >= 0).length;
             const avgMv = (hist10.reduce((a, h) => a + Math.abs(h.mv), 0) / hist10.length).toFixed(1);
@@ -1733,29 +1809,44 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           })()}
 
           {innerDrawer === "dividend" && (() => {
-            const annualDiv = p * (data.dividendYield / 100);
+            const dh = dividendHistory;
+            const hasReal = !!dh && dh.isPayer;
+            const yieldPct = hasReal ? (dh!.yieldPct ?? data.dividendYield) : data.dividendYield;
+            const annualDiv = hasReal ? (dh!.ttmTotal ?? 0) : p * (data.dividendYield / 100);
             const qDiv = annualDiv / 4;
-            const QLABELS = ["Q3'24","Q4'24","Q1'25","Q2'25","Q3'25","Q4'25","Q1'26","Q2'26"];
-            const divAmts = QLABELS.map((_, i) => qDiv * Math.pow(1 / 1.065, (7 - i) / 4));
-            const maxAmt = Math.max(...divAmts) * 1.15 || 1;
-            const W = 420, H = 110, PADB = 22, PADT = 14;
-            const bw = W / QLABELS.length * 0.55;
-            const gap = W / QLABELS.length;
+            const growthPct = hasReal ? dh!.cagr5yPct : null;
+            const growthLabel = growthPct != null ? `${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}%/yr` : "+6.5%/yr";
+            const payoutRatio = yieldPct > 0 && data.eps > 0 ? Math.round((annualDiv / data.eps) * 100) : 0;
             const exDay = 6 + (sym.charCodeAt(0) % 22);
             const payDay = exDay + 30;
+
+            // Real history is newest-first; reverse to chronological for the bar
+            // chart, oldest→newest left-to-right, matching every other chart here.
+            const barSource = hasReal
+              ? [...dh!.history].reverse().slice(-8).map(h => ({
+                  label: h.exDividendDate ? h.exDividendDate.slice(2, 7).replace("-", "'") : "—",
+                  amt: h.amount,
+                }))
+              : ["Q3'24","Q4'24","Q1'25","Q2'25","Q3'25","Q4'25","Q1'26","Q2'26"].map((label, i) => ({
+                  label, amt: qDiv * Math.pow(1 / 1.065, (7 - i) / 4),
+                }));
+            const maxAmt = Math.max(...barSource.map(b => b.amt)) * 1.15 || 1;
+            const W = 420, H = 110, PADB = 22, PADT = 14;
+            const bw = W / barSource.length * 0.55;
+            const gap = W / barSource.length;
             return (
               <div className="side-drawer" style={{ zIndex: 52 }}>
                 <div className="drawer-h">
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Dividend History · {sym}</div>
                     <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
-                      {data.dividendYield > 0 ? `${data.dividendYield.toFixed(2)}% yield · $${annualDiv.toFixed(2)}/yr` : "No dividend paid"}
+                      {yieldPct > 0 ? `${yieldPct.toFixed(2)}% yield · $${annualDiv.toFixed(2)}/yr` : "No dividend paid"}
                     </div>
                   </div>
                   <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
                 </div>
                 <div className="drawer-b">
-                  {data.dividendYield === 0 ? (
+                  {yieldPct === 0 ? (
                     <div style={{ padding: "24px 0", textAlign: "center", fontSize: ".9rem", color: "var(--text-dim-solid)" }}>
                       {sym} does not currently pay a dividend.
                     </div>
@@ -1764,35 +1855,35 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       <div className="metric-grid" style={{ marginBottom: 14 }}>
                         <div className="m"><div className="k">Annual</div><div className="v">${annualDiv.toFixed(2)}</div></div>
                         <div className="m"><div className="k">Quarterly</div><div className="v">${qDiv.toFixed(2)}</div></div>
-                        <div className="m"><div className="k">Yield</div><div className="v up">{data.dividendYield.toFixed(2)}%</div></div>
-                        <div className="m"><div className="k">5-yr growth</div><div className="v up">+6.5%/yr</div></div>
-                        <div className="m"><div className="k">Payout ratio</div><div className="v">{Math.round((annualDiv / data.eps) * 100)}%</div></div>
-                        <div className="m"><div className="k">Frequency</div><div className="v">Quarterly</div></div>
+                        <div className="m"><div className="k">Yield</div><div className="v up">{yieldPct.toFixed(2)}%</div></div>
+                        <div className="m"><div className="k">5-yr growth</div><div className="v up">{growthLabel}</div></div>
+                        <div className="m"><div className="k">Payout ratio</div><div className="v">{payoutRatio}%</div></div>
+                        <div className="m"><div className="k">Frequency</div><div className="v">{hasReal && dh!.frequency ? `${dh!.frequency}x/yr` : "Quarterly"}</div></div>
                       </div>
-                      <div className="ai-sec"><div className="h">Quarterly dividend per share</div></div>
+                      <div className="ai-sec"><div className="h">{hasReal ? "Dividend per share (recent payments)" : "Quarterly dividend per share"}</div></div>
                       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", margin: "10px 0 14px" }}>
-                        {divAmts.map((v, i) => {
-                          const bh = (v / maxAmt) * (H - PADT - PADB);
+                        {barSource.map((b, i) => {
+                          const bh = (b.amt / maxAmt) * (H - PADT - PADB);
                           const bx = gap * i + (gap - bw) / 2;
                           const by = PADT + (H - PADT - PADB) - bh;
-                          const isLast = i === divAmts.length - 1;
+                          const isLast = i === barSource.length - 1;
                           return (
                             <g key={i}>
                               <rect x={bx} y={by} width={bw} height={bh} rx={2}
                                 style={{ fill: isLast ? "var(--brand-2)" : "var(--surface-3)" }} />
                               <text x={bx + bw / 2} y={by - 3} textAnchor="middle"
                                 style={{ fill: isLast ? "var(--brand-2)" : "var(--text-dim-solid)", fontSize: "0.4375rem" }}>
-                                ${v.toFixed(2)}
+                                ${b.amt.toFixed(2)}
                               </text>
                               <text x={bx + bw / 2} y={H - 5} textAnchor="middle"
                                 style={{ fill: "var(--text-dim-solid)", fontSize: "0.5rem" }}>
-                                {QLABELS[i]}
+                                {b.label}
                               </text>
                             </g>
                           );
                         })}
                       </svg>
-                      <div className="ai-sec"><div className="h">Upcoming dates</div></div>
+                      <div className="ai-sec"><div className="h">Upcoming dates (estimated)</div></div>
                       <div className="minirow" style={{ marginTop: 8 }}>
                         <span className="mid">Ex-dividend date</span>
                         <span className="r mono" style={{ color: "var(--warn)" }}>Jul {exDay}, 2025</span>
@@ -1805,21 +1896,34 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                         <span className="mid">Declaration date</span>
                         <span className="r mono">Jun {Math.max(1, exDay - 10)}, 2025</span>
                       </div>
+
+                      <div className="ai-sec"><div className="h">Stock splits</div></div>
+                      {splitsDoc && splitsDoc.splits.length > 0 ? splitsDoc.splits.map(s => (
+                        <div key={s.executionDate} className="minirow">
+                          <span className="mid">{s.executionDate}</span>
+                          <span className="r" style={{ color: "var(--text-hi)" }}>{s.splitFrom}:{s.splitTo}</span>
+                        </div>
+                      )) : (
+                        <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "4px 0" }}>No splits on record.</div>
+                      )}
+
                       <div className="card" style={{ marginTop: 14 }}>
                         <div className="card-h"><h3 className="ai-c">◆ AI dividend read · {sym}</h3></div>
                         <div className="card-b">
                           <p style={{ fontSize: ".85rem", lineHeight: 1.6, color: "var(--text)" }}>
-                            {sym} yields <b style={{ color: "var(--up)" }}>{data.dividendYield.toFixed(2)}%</b>, paying ${annualDiv.toFixed(2)}/share annually (${qDiv.toFixed(2)} quarterly).
-                            The 5-year dividend CAGR is +6.5% with a payout ratio of {Math.round((annualDiv / data.eps) * 100)}%.
-                            {Math.round((annualDiv / data.eps) * 100) < 60
+                            {sym} yields <b style={{ color: "var(--up)" }}>{yieldPct.toFixed(2)}%</b>, paying ${annualDiv.toFixed(2)}/share annually (${qDiv.toFixed(2)} quarterly).
+                            The 5-year dividend CAGR is {growthLabel} with a payout ratio of {payoutRatio}%.
+                            {payoutRatio < 60
                               ? " Payout is conservative — suggests room for future increases."
                               : " Payout is elevated — monitor earnings coverage carefully."}
-                            {" "}Next ex-date is <b style={{ color: "var(--warn)" }}>Jul {exDay}, 2025</b>.
+                            {" "}Next ex-date is <b style={{ color: "var(--warn)" }}>Jul {exDay}, 2025 (estimated)</b>.
                           </p>
                         </div>
                       </div>
                       <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 10 }}>
-                        Dividend data is illustrative. Verify with company IR and SEC filings. Not investment advice.
+                        {hasReal
+                          ? "Historical payments and splits are real (Polygon). Upcoming dates are a calendar estimate, not a confirmed schedule — verify with company IR and SEC filings."
+                          : "Dividend data is illustrative. Verify with company IR and SEC filings. Not investment advice."}
                       </div>
                     </>
                   )}

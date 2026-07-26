@@ -2,20 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { screenerStocks, screenerPresets, watch as watchData, movers as moversData, type ScreenerStock } from "../data";
-import { useCollection } from "../hooks/useCollection";
+import { useApiList } from "../hooks/useApiList";
+import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
-
-interface CompanyDoc {
-  id: string; ticker: string; marketCap: number | null; peRatio: number | null; price: number | null; pctChange: number | null;
-  rsRating: number | null;
-  // Computed by the backend score jobs (technical-indicators / tech-rating /
-  // fundamentals-growth) from real ohlcv_bars + Polygon financials.
-  techRating: number | null;      // 1-99 composite
-  rvol: number | null;            // relative-volume ratio
-  revenueGrowthYoY: number | null; // decimal (0.064 = 6.4%)
-  epsGrowthYoY: number | null;     // decimal
-  grossMargin: number | null;      // decimal (0.469 = 46.9%)
-}
 
 // Maps the numeric 1-99 tech rating onto the mock's string categories so the
 // existing rating filter (Strong Buy / Buy / Neutral / Sell / Strong Sell)
@@ -72,7 +61,7 @@ function CheckOpt({ label, on, onToggle }: { label: string; on: boolean; onToggl
 }
 
 export function ScreenerScreen() {
-  const { data: companies } = useCollection<CompanyDoc>("companies");
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
   const universe = mergeScreenerStocks(screenerStocks, byTicker);
   const liveCount = universe.filter(s => s.live).length;

@@ -4,7 +4,8 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { movers as mockMovers, analyst, earnings, watch, folio, type Mover } from "../data";
 import { fmt, sign, cls, arr, Spark, StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { useApiList } from "../hooks/useApiList";
+import type { LiveMoverDoc, CompanyDoc } from "../types";
 
 const StockScreenEmbed = dynamic<{ initialSym?: string }>(
   () => import("./stock").then(m => ({ default: m.StockScreen })),
@@ -19,11 +20,6 @@ const TABS = [
 ] as const;
 type TabKey = "win" | "lose" | "vol" | "week";
 const CAPS = ["All", "Mega", "Large", "Mid", "Small"];
-
-interface LiveMoverDoc {
-  id: string; ticker: string; name: string | null; price: number; pctChange: number;
-  volume: number; sector: string | null; cap: string | null; direction: "gainer" | "loser"; asOfDate: string;
-}
 
 /**
  * Merges live Firestore market_movers data into the original mock list —
@@ -100,9 +96,9 @@ function computeTrending(movers: Mover[]) {
 }
 
 export function MoversScreen() {
-  const { data: liveMovers } = useCollection<LiveMoverDoc>("market_movers");
-  const { data: rvolCompanies } = useCollection<{ id: string; ticker: string; rvol: number | null }>("companies");
-  const companyRvol = new Map(rvolCompanies.map(c => [c.ticker, c.rvol]));
+  const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
+  const { data: rvolCompanies } = useApiList<CompanyDoc>("/market-data/companies");
+  const companyRvol = new Map(rvolCompanies.map(c => [c.ticker, c.rvol ?? null]));
   const { list: movers, liveCount } = mergeMovers(mockMovers, liveMovers, companyRvol);
 
   const [tab,          setTab]          = useState<TabKey>("win");

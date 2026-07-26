@@ -8,7 +8,6 @@ import {
   browserPopupRedirectResolver,
   GoogleAuthProvider,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDVjZmJ11qzbPIvruwOHiTiMWvjTcUmhuk",
@@ -39,7 +38,6 @@ function createAuth() {
 }
 
 export const firebaseAuth = createAuth();
-export const firebaseDb = getFirestore(firebaseApp);
 export const googleAuthProvider = new GoogleAuthProvider();
 
 export async function getFirebaseAnalytics() {

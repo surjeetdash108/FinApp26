@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { cls, arr, sign } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { useApiList } from "../hooks/useApiList";
+import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
 interface ThemeStock { s: string; n: string; price: number; c: number; }
@@ -107,11 +108,7 @@ const THEMES: Theme[] = [
   },
 ];
 
-interface CompanyDoc {
-  id: string; ticker: string; name: string | null; price: number | null; pctChange: number | null;
-}
-
-/** Merges live Firestore company prices into the mock theme stocks — never drops a mock stock. */
+/** Merges live company prices into the mock theme stocks — never drops a mock stock. */
 function mergeThemeStocks(mock: ThemeStock[], byTicker: Map<string, CompanyDoc>): (ThemeStock & { live: boolean })[] {
   return mock.map(s => {
     const c = byTicker.get(s.s);
@@ -121,7 +118,7 @@ function mergeThemeStocks(mock: ThemeStock[], byTicker: Map<string, CompanyDoc>)
 }
 
 export function ThemesScreen() {
-  const { data: companies } = useCollection<CompanyDoc>("companies");
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
   const [themeId, setThemeId] = useState<string>(THEMES[0].id);
