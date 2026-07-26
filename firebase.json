@@ -9,6 +9,13 @@
     ],
     "rewrites": [
       {
+        "source": "/live/**",
+        "run": {
+          "serviceId": "market-catalyst-live",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

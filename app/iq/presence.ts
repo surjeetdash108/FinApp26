@@ -36,9 +36,15 @@ import { doc, updateDoc, setDoc, serverTimestamp, increment } from "firebase/fir
 import type { User } from "firebase/auth";
 import { firebaseAuth, firebaseDb } from "../firebase";
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+import { API_BASE as BACKEND } from "./backend";
 const SESSION_KEY = "mc-session-id";
-const HEARTBEAT_MS = 90_000;
+/**
+ * 30 min, not seconds: every heartbeat is 2 Firestore writes, and at 10k users
+ * a 90-second pulse alone would cost ~$20/month. At 30 min an active user
+ * costs ~2-4 writes/day (~$0.15/month across 10k users). Presence staleness
+ * threshold is therefore ~35 min: online = isOnline && lastSeenAt < 35 min ago.
+ */
+const HEARTBEAT_MS = 30 * 60_000;
 
 // ---- client-side signals ------------------------------------------------
 
@@ -191,27 +197,36 @@ export async function recordLogout(uid: string): Promise<void> {
  */
 export function usePresence(): void {
   const sessionIdRef = useRef<string | null>(null);
+  const lastBeatRef = useRef(0);
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
     const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+
+    const beat = () => {
+      const u = firebaseAuth.currentUser;
+      if (!u || !sessionIdRef.current) return;
+      lastBeatRef.current = Date.now();
+      void heartbeat(u.uid, sessionIdRef.current);
+    };
 
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       stop();
       if (!user) { sessionIdRef.current = null; return; }
       sessionIdRef.current = await recordLogin(user);
+      lastBeatRef.current = Date.now();
       timer = setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        const u = firebaseAuth.currentUser;
-        if (u && sessionIdRef.current) heartbeat(u.uid, sessionIdRef.current);
+        beat();
       }, HEARTBEAT_MS);
     });
 
     // Refresh lastSeenAt on tab-hide (best-effort; does NOT flip offline — that
-    // would flap when merely switching tabs).
+    // would flap when merely switching tabs). Write-gated to 5 min so rapid tab
+    // switching costs nothing.
     const onHide = () => {
       if (typeof document === "undefined" || document.visibilityState !== "hidden") return;
-      const u = firebaseAuth.currentUser;
-      if (u && sessionIdRef.current) heartbeat(u.uid, sessionIdRef.current);
+      if (Date.now() - lastBeatRef.current < 5 * 60_000) return;
+      beat();
     };
     if (typeof document !== "undefined") document.addEventListener("visibilitychange", onHide);
 

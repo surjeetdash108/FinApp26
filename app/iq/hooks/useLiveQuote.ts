@@ -14,8 +14,8 @@ import { useEffect, useRef, useState } from "react";
  * one-way and EventSource reconnects on its own.
  */
 
-const BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? "http://localhost:4100";
+import { SSE_BASE } from "../backend";
+const BACKEND = SSE_BASE;
 
 export interface LiveTick {
   ticker: string;

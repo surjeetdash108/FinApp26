@@ -20,8 +20,8 @@ import { useEffect, useRef, useState } from "react";
  * 10-second poll makes it 910s stale instead of 900s.
  */
 
-const BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? "http://localhost:4100";
+import { API_BASE } from "../backend";
+const BACKEND = API_BASE;
 
 export interface SnapshotQuote {
   ticker: string;

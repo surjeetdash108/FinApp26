@@ -17,8 +17,8 @@ import type { SnapshotQuote } from "./useSnapshotQuote";
  * should say so rather than implying a live extended-hours tape.
  */
 
-const BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? "http://localhost:4100";
+import { API_BASE } from "../backend";
+const BACKEND = API_BASE;
 
 /** The backend caps a single snapshot request at 50 tickers. */
 const MAX_TICKERS = 50;

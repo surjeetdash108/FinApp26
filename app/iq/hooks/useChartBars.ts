@@ -1,143 +1,95 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, doc, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
-import { firebaseDb } from "../../firebase";
 import type { OHLCBar } from "../utils";
-import { lastSessions } from "../session-bars";
 
 /**
- * Real bars for every chart timeframe.
+ * Real bars for every chart timeframe — ON-DEMAND (2026-07-24 redesign).
  *
- * Supersedes the daily-only useOhlcvBars, which served 3M/6M/1Y and returned
- * undefined for everything else so the caller fell back to `genOHLC` — a seeded
- * random walk. 1D/1W/1M were synthetic because daily bars are too coarse for
- * them, and 5Y because only ~300 days had ever been backfilled. Neither was a
- * data-plan limit: intraday aggregates and a five-year daily window are both
- * authorized on the current Polygon plan, and the backend now syncs both
- * (`intraday-bars.job.ts`, and stock-history's backfill raised to the plan edge).
+ * Bars come from `GET /live/bars?ticker&tf` instead of direct Firestore reads.
+ * The backend is a cache-aside layer: Firestore `stock_bars/{T}_{resolution}`
+ * docs (single doc per resolution family, `createdAt` + TTL) backed by one
+ * coalesced Polygon call on miss. First user of a ticker pays one vendor call;
+ * everyone after reads the shared cache. Responses carry Cache-Control +
+ * ETag, so the BROWSER also caches — repeat views inside a minute cost zero
+ * network. Firestore is never read from the client for bars anymore.
  *
- *   1D · 1W  ← intraday_bars/{ticker}_5min   (sliced to the last N sessions)
- *   1M       ← intraday_bars/{ticker}_30min
- *   3M…5Y    ← ohlcv_bars                    (daily, limited per timeframe)
+ * Timeframes: 1H (new) · 1D · 1W · 1M · 3M · 6M · 1Y · 5Y.
+ * On any failure the hook returns undefined and the chart renders its honest
+ * empty state — it never fabricates bars.
  */
 
-interface OhlcvBarDoc {
-  open: number; high: number; low: number; close: number; volume: number;
+import { API_BASE } from "../backend";
+const BACKEND = API_BASE;
+
+export const BAR_TFS = ["1H", "1D", "1W", "1M", "3M", "6M", "1Y", "5Y"] as const;
+
+interface WireBar {
+  t: number; o: number; h: number; l: number; c: number; v: number; vw: number | null;
 }
 
-interface IntradayBar {
-  t: number; o: number; h: number; l: number; c: number; v: number;
+/** Module-level cache + inflight dedupe: N chart mounts share one fetch. */
+const cache = new Map<string, { bars: OHLCBar[]; at: number }>();
+const inflight = new Map<string, Promise<OHLCBar[]>>();
+const CACHE_MS = 60_000;
+
+/** Resolves to [] when the fetch completes with no usable bars (vs. undefined,
+ *  which the HOOK uses to mean "still fetching" so the chart shows a spinner). */
+async function fetchBars(sym: string, tf: string): Promise<OHLCBar[]> {
+  const key = `${sym}_${tf}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.bars;
+  const running = inflight.get(key);
+  if (running) return running;
+
+  const p = (async () => {
+    try {
+      const res = await fetch(
+        `${BACKEND}/live/bars?ticker=${encodeURIComponent(sym)}&tf=${encodeURIComponent(tf)}`,
+      );
+      if (!res.ok) return [];
+      const body = (await res.json()) as { bars?: WireBar[] };
+      const bars: OHLCBar[] = (body.bars ?? []).map((b) => ({
+        o: b.o, h: b.h, l: b.l, c: b.c, v: b.v,
+      }));
+      if (bars.length < 2) return [];
+      cache.set(key, { bars, at: Date.now() });
+      return bars;
+    } catch {
+      return []; // network/backend down → chart shows its honest empty state
+    } finally {
+      inflight.delete(key);
+    }
+  })();
+  inflight.set(key, p);
+  return p;
 }
 
 /**
- * Trading days to render per timeframe. Doubles as the Firestore `limit` for
- * daily reads — without one, a 5-year backfill means every chart mount
- * downloads ~1250 documents even to draw a 3-month window.
- */
-const DAILY_BARS: Record<string, number> = {
-  "3M": 64,
-  "6M": 128,
-  "1Y": 252,
-  "5Y": 1300,
-};
-
-/** Intraday resolution and how many sessions of it each timeframe shows. */
-const INTRADAY: Record<string, { resolution: "5min" | "30min"; sessions: number }> = {
-  "1D": { resolution: "5min", sessions: 1 },
-  "1W": { resolution: "5min", sessions: 5 },
-  "1M": { resolution: "30min", sessions: 22 },
-};
-
-/** Daily bars from `ohlcv_bars`, oldest-first, capped to the timeframe's window. */
-function useDailyBars(sym: string, tf: string): OHLCBar[] | undefined {
-  const [bars, setBars] = useState<OHLCBar[]>([]);
-
-  useEffect(() => {
-    const want = DAILY_BARS[tf];
-    if (!want || !sym) {
-      setBars([]);
-      return;
-    }
-    // DESC + limit reuses the deployed (ticker ASC, barDate DESC) composite
-    // index and takes the NEWEST N rows; an ASC order would need its own index
-    // AND would limit to the oldest N, which is the wrong end of the history.
-    const q = query(
-      collection(firebaseDb, "ohlcv_bars"),
-      where("ticker", "==", sym),
-      orderBy("barDate", "desc"),
-      limit(want),
-    );
-    const unsub = onSnapshot(
-      q,
-      snap => {
-        setBars(
-          snap.docs
-            .slice()
-            .reverse() // newest→oldest from the query; charts plot oldest→newest
-            .map(d => {
-              const b = d.data() as OhlcvBarDoc;
-              return { o: b.open, h: b.high, l: b.low, c: b.close, v: b.volume };
-            }),
-        );
-      },
-      err => {
-        console.error(`Firestore ohlcv_bars query failed for ${sym}:`, err);
-        setBars([]);
-      },
-    );
-    return () => unsub();
-  }, [sym, tf]);
-
-  return bars.length > 1 ? bars : undefined;
-}
-
-/** Intraday bars from the single per-ticker/resolution document. */
-function useIntradayBars(sym: string, tf: string): OHLCBar[] | undefined {
-  const [bars, setBars] = useState<OHLCBar[]>([]);
-
-  useEffect(() => {
-    const spec = INTRADAY[tf];
-    if (!spec || !sym) {
-      setBars([]);
-      return;
-    }
-    // One document holds the whole array — see intraday-bars.job.ts for why the
-    // series is not stored a document per bar.
-    const ref = doc(firebaseDb, "intraday_bars", `${sym}_${spec.resolution}`);
-    const unsub = onSnapshot(
-      ref,
-      snap => {
-        const raw = (snap.data()?.bars ?? []) as IntradayBar[];
-        setBars(
-          lastSessions(raw, spec.sessions).map(b => ({
-            o: b.o, h: b.h, l: b.l, c: b.c, v: b.v,
-          })),
-        );
-      },
-      err => {
-        console.error(`Firestore intraday_bars read failed for ${sym}:`, err);
-        setBars([]);
-      },
-    );
-    return () => unsub();
-  }, [sym, tf]);
-
-  return bars.length > 1 ? bars : undefined;
-}
-
-/**
- * Real bars for `tf`, or undefined when none have synced yet — callers keep
- * their existing fallback so a ticker outside the synced universe still renders
- * something rather than an empty pane.
+ * undefined → fetch in flight (chart renders a spinner) ·
+ * []        → resolved, no data (chart renders its honest empty state) ·
+ * bars      → plot them.
  */
 export function useChartBars(sym: string, tf: string): OHLCBar[] | undefined {
-  const daily = useDailyBars(sym, tf);
-  const intraday = useIntradayBars(sym, tf);
-  return INTRADAY[tf] ? intraday : daily;
+  const [bars, setBars] = useState<OHLCBar[] | undefined>(undefined);
+
+  useEffect(() => {
+    if (!sym || !(BAR_TFS as readonly string[]).includes(tf)) {
+      setBars([]);
+      return;
+    }
+    let alive = true;
+    setBars(undefined); // spinner while the on-demand fetch runs
+    void fetchBars(sym.toUpperCase(), tf).then((b) => {
+      if (alive) setBars(b);
+    });
+    return () => { alive = false; };
+  }, [sym, tf]);
+
+  return bars;
 }
 
 /** True when this timeframe is served by real bars — for the "live data" badge. */
 export function isRealBarTimeframe(tf: string): boolean {
-  return tf in DAILY_BARS || tf in INTRADAY;
+  return (BAR_TFS as readonly string[]).includes(tf);
 }

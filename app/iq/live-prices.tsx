@@ -24,8 +24,8 @@ import type { SnapshotQuote } from "./hooks/useSnapshotQuote";
  * browser from handing back a stale-while-revalidate body — see useSnapshotQuote.
  */
 
-const BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? "http://localhost:4100";
+import { API_BASE } from "./backend";
+const BACKEND = API_BASE;
 const TICKERS_PER_CALL = 50; // /live/snapshot ?tickers cap
 const MAX_TICKERS = 100; // hard ceiling on the union (2 calls)
 const POLL_MS = 15_000;
@@ -133,8 +133,26 @@ export function LivePricesProvider({ children }: { children: React.ReactNode }) 
     }
     let cancelled = false;
     const controller = new AbortController();
+    // ZERO-poll when closed (2026-07-26): outside 04:00–20:00 ET weekdays the
+    // quotes are frozen, so after ONE fetch to populate this ticker set the
+    // client stops polling entirely; the local clock check below runs every
+    // tick (no network) so polling resumes by itself when the session opens.
+    // A hidden tab never polls (it catches up on visibilitychange).
+    let fetchedOnce = false;
+    const marketLikelyClosed = () => {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York", hour12: false, weekday: "short", hour: "numeric",
+      }).formatToParts(new Date());
+      const wd = parts.find(p => p.type === "weekday")?.value ?? "Mon";
+      const hour = Number(parts.find(p => p.type === "hour")?.value ?? "12") % 24;
+      const weekday = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(wd);
+      return !(weekday >= 1 && weekday <= 5 && hour >= 4 && hour < 20);
+    };
 
-    const poll = async () => {
+    const poll = async (force = false) => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (!force && marketLikelyClosed() && fetchedOnce) return;
+      fetchedOnce = true;
       try {
         const results = await Promise.all(
           chunks.map(async (chunk) => {
@@ -161,12 +179,18 @@ export function LivePricesProvider({ children }: { children: React.ReactNode }) 
       }
     };
 
-    void poll();
-    const id = setInterval(poll, POLL_MS);
+    void poll(true);
+    const id = setInterval(() => void poll(), POLL_MS);
+    // Coming back to a hidden tab refreshes immediately.
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") void poll(true);
+    };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       controller.abort();
       clearInterval(id);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
     };
   }, [unionKey]);
 

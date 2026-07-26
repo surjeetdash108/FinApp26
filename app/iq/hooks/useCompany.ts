@@ -63,24 +63,81 @@ export interface CompanyDoc {
   sectorRankTotal?: number | null;
 }
 
-export function useCompany(sym: string): CompanyDoc | undefined {
+import { API_BASE } from "../backend";
+const BACKEND = API_BASE;
+
+/** One on-demand trigger per ticker per session — prevents request loops. */
+const requested = new Set<string>();
+
+/**
+ * ON-DEMAND (2026-07-24): when the company doc doesn't exist yet (the DB starts
+ * empty and grows with usage), poke `GET /live/company` once — the backend
+ * fetches the profile+price from Polygon and WRITES `companies/{ticker}`, and
+ * the snapshot listener below then fires with the real data. Existing docs are
+ * served straight from Firestore with no backend call.
+ */
+function requestOnDemand(sym: string): void {
+  if (requested.has(sym)) return;
+  requested.add(sym);
+  void fetch(`${BACKEND}/live/company?ticker=${encodeURIComponent(sym)}`).catch(() => {
+    requested.delete(sym); // allow a retry on a later mount if the poke failed
+  });
+}
+
+/** Give the on-demand fetch this long to land before screens stop spinning. */
+const ONDEMAND_GRACE_MS = 12_000;
+
+/**
+ * Company doc + loading flag. `loading` is true while the first snapshot is
+ * pending AND while the on-demand backend fetch (triggered on a missing doc)
+ * has not yet written the doc — bounded by a grace period so an unknown ticker
+ * can't spin forever. Screens show a spinner while loading, their honest
+ * "—" / empty states after.
+ */
+export function useCompanyState(sym: string): { company: CompanyDoc | undefined; loading: boolean } {
   const [data, setData] = useState<CompanyDoc | undefined>(undefined);
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     if (!sym) {
       setData(undefined);
+      setSettled(true);
       return;
     }
+    setData(undefined);
+    setSettled(false);
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
+
     const unsub = onSnapshot(
       doc(firebaseDb, "companies", sym),
-      snap => setData(snap.exists() ? (snap.data() as CompanyDoc) : undefined),
+      snap => {
+        if (snap.exists()) {
+          if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; }
+          setData(snap.data() as CompanyDoc);
+          setSettled(true);
+        } else {
+          setData(undefined);
+          // Missing → poke the backend once; keep "loading" until the doc
+          // appears via this same listener, or the grace period lapses.
+          requestOnDemand(sym.toUpperCase());
+          if (!graceTimer) graceTimer = setTimeout(() => setSettled(true), ONDEMAND_GRACE_MS);
+        }
+      },
       err => {
         console.error(`Firestore companies/${sym} read failed:`, err);
         setData(undefined);
+        setSettled(true);
       },
     );
-    return () => unsub();
+    return () => {
+      unsub();
+      if (graceTimer) clearTimeout(graceTimer);
+    };
   }, [sym]);
 
-  return data;
+  return { company: data, loading: !data && !settled };
+}
+
+export function useCompany(sym: string): CompanyDoc | undefined {
+  return useCompanyState(sym).company;
 }

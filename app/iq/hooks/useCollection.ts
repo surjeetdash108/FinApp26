@@ -43,8 +43,8 @@ import { firebaseDb } from "../../firebase";
 
 const IDLE_CLOSE_MS = 5_000;
 const CACHE_POLL_MS = 5 * 60 * 1000; // matches the backend's 5-minute TTL
-const BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? "http://localhost:4100";
+import { API_BASE } from "../backend";
+const BACKEND = API_BASE;
 
 /** Shared, slow-changing collections served from the backend cache (must match
  *  the backend allow-list in cached-collections.service.ts). */

@@ -22,8 +22,8 @@ import { useEffect, useRef, useState } from "react";
  * and same reasoning as useLiveQuote.
  */
 
-const BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? "http://localhost:4100";
+import { SSE_BASE } from "../backend";
+const BACKEND = SSE_BASE;
 
 /**
  * No frame and no heartbeat for this long means the stream is wedged in a way

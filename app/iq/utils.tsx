@@ -346,7 +346,9 @@ export function CandleChart({
 
   const data = useMemo(
     () => {
-      if (!(realBars && realBars.length > 1)) return genOHLC(sym, tf, px);
+      // No fabricated fallback: undefined realBars = the on-demand fetch is in
+      // flight (spinner below); an empty/short array = genuinely no data.
+      if (!(realBars && realBars.length > 1)) return null;
       // Reflect the live (delayed) current price on the last bar so the chart's
       // right edge tracks the header quote instead of freezing at the last
       // synced close. px comes from the shared live-price subscription; when it
@@ -358,8 +360,33 @@ export function CandleChart({
       }
       return realBars;
     },
-    [sym, tf, px, realBars],
+    [px, realBars],
   );
+
+  // All hooks above — safe to early-return. Loading: bars are being fetched on
+  // demand (first user of a ticker pays ~1-2 s); Empty: fetch resolved, no bars.
+  if (data === null) {
+    const loading = realBars === undefined;
+    return (
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: 10, minHeight: 260, color: "var(--text-dim-solid)",
+      }}>
+        {loading ? (
+          <>
+            <span style={{
+              width: 26, height: 26, borderRadius: "50%",
+              border: "2.5px solid var(--border)", borderTopColor: "var(--ai)",
+              animation: "spin .7s linear infinite", display: "inline-block",
+            }} />
+            <span style={{ fontSize: ".78rem" }}>Loading {sym} · {tf} chart…</span>
+          </>
+        ) : (
+          <span style={{ fontSize: ".8rem" }}>No chart data available for {sym} ({tf}).</span>
+        )}
+      </div>
+    );
+  }
   const n = data.length;
   const W = 720, PH = 224, VH = showVol ? 54 : 0, GAP = showVol ? 10 : 0, PADT = 12, PADB = 18, axisW = 46;
   const H = PADT + PH + GAP + VH + PADB;

@@ -41,9 +41,9 @@ function NavItemGate({
   return <>{children}</>;
 }
 import { type PulseItem } from "./data";
-import { fmt, sign, cls, arr, SemiGauge } from "./utils";
+import { fmt, sign, cls, arr, SemiGauge, CenterSpinner } from "./utils";
 import { useCollection } from "./hooks/useCollection";
-import { useCompany } from "./hooks/useCompany";
+import { useCompany, useCompanyState } from "./hooks/useCompany";
 import { NotificationBell } from "./notification-bell";
 import { useTickerSearch } from "./hooks/useTickerSearch";
 import { applyTape, buildTapeStrip, type IndexDoc } from "./live-market-indices";
@@ -148,9 +148,10 @@ function NavIcon({ slug }: { slug: string }) {
 // ---- Drawers ----
 function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   const { openStockFull, openSector } = useIQActions();
-  // Live `companies/{ticker}` doc only — a ticker outside the synced universe
-  // shows "—" / an honest note, never fabricated sample figures.
-  const company = useCompany(sym);
+  // Live `companies/{ticker}` doc only — first visit to a ticker triggers the
+  // on-demand backend fetch; a spinner shows while it lands (bounded), then
+  // "—" / an honest note. Never fabricated sample figures.
+  const { company, loading: companyLoading } = useCompanyState(sym);
   const isLive = !!company && company.price != null;
 
   const name   = company?.name ?? sym;
@@ -200,6 +201,10 @@ function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
         </div>
 
         <div className="drawer-b">
+          {companyLoading && !company ? (
+            <CenterSpinner label={`Loading ${sym}…`} minHeight="220px" />
+          ) : (
+          <>
           {/* Pills */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, alignItems: "center" }}>
             {c != null && <span className={`pill ${c >= 0 ? "up" : "dn"}`}>{arr(c)} {sign(c)} today</span>}
@@ -258,6 +263,8 @@ function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
               Open full stock page →
             </button>
           </div>
+          </>
+          )}
         </div>
       </div>
     </>

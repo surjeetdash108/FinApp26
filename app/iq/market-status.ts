@@ -64,8 +64,8 @@ export function getMarketStatus(now: Date = new Date()): MarketStatus {
   return { phase: "closed", label: "Markets Closed" };
 }
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? "http://localhost:4100";
+import { API_BASE } from "./backend";
+const BACKEND_URL = API_BASE;
 
 /**
  * Session state from the exchange feed via our backend

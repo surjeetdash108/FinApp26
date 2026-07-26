@@ -132,7 +132,7 @@ function ChartCardExpanded({
   return (
     <div>
       <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
-        {(["1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
+        {(["1H","1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
           <button key={r} className={`rng tfbtn${tf === r ? " on" : ""}`} onClick={() => setTf(r)}>{r}</button>
         ))}
         <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
@@ -204,7 +204,7 @@ export function ChartCard({
       {sym ? (
         <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
           <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
-            {(["1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
+            {(["1H","1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
               <button key={r} className={`rng tfbtn${tf === r ? " on" : ""}`} onClick={() => setTf(r)}>{r}</button>
             ))}
             <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />

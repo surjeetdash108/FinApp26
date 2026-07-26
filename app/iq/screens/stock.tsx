@@ -3,12 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { type StockInfo } from "../data";
-import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart } from "../utils";
+import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, CenterSpinner } from "../utils";
 import { collection, addDoc, getDocs, query, where, orderBy, Timestamp, deleteDoc, doc } from "firebase/firestore";
 import { firebaseDb, firebaseAuth } from "../../firebase";
 import { useCollection } from "../hooks/useCollection";
 import { useChartBars } from "../hooks/useChartBars";
-import { useCompany } from "../hooks/useCompany";
+import { useCompany, useCompanyState } from "../hooks/useCompany";
 import { useDividendHistory, quarterLabel, shortDate, daysUntil } from "../hooks/useDividendHistory";
 import { useSplits, splitRatio, splitsSince } from "../hooks/useSplits";
 import { trackFeatureOpen } from "../feature-adoption";
@@ -360,7 +360,7 @@ function StockChartExpanded({
   return (
     <div>
       <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
-        {(["1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
+        {(["1H","1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
           <button key={r} className={`rng tfbtn${tf === r ? " on" : ""}`} onClick={() => setTf(r)}>{r}</button>
         ))}
         <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
@@ -515,7 +515,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             .map(s => ({ ticker: s, name: null }))
         : []);
 
-  const liveCompany = companies.find(c => c.ticker === sym);
+  // On-demand (2026-07-26): the single-doc listener is BOTH the trigger (a
+  // missing doc pokes /live/company, which fetches + writes it) and the fast
+  // path (the cached companies list refreshes on a 5-min cadence; the doc
+  // listener fires the moment the backend writes). The list entry, when
+  // present, is the same doc — prefer it for referential stability.
+  const { company: odCompany, loading: companyLoading } = useCompanyState(sym);
+  const fromList = companies.find(c => c.ticker === sym);
+  const liveCompany = fromList ?? (odCompany as typeof fromList);
   const isLiveStock = !!liveCompany && liveCompany.price != null;
 
   // Base is built from the live `companies/{ticker}` doc only — no mock. A
@@ -782,6 +789,13 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     });
   }
 
+  // One spinner for the whole stock page while the on-demand company fetch is
+  // in flight (first visit to a ticker after the empty-DB redesign). Bounded by
+  // the hook's grace period, after which the honest "—" states render.
+  if (companyLoading && !liveCompany) {
+    return <CenterSpinner label={`Loading ${sym}…`} minHeight="60vh" />;
+  }
+
   return (
     <>
       {/* Symbol bar — search left, chips right */}
@@ -866,7 +880,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {/* Chart card */}
           <div className="card">
             <div className="chart-toolbar">
-              {["1D","1W","1M","3M","6M","1Y","5Y"].map(r => (
+              {["1H","1D","1W","1M","3M","6M","1Y","5Y"].map(r => (
                 <button key={r} className={`rng tfbtn${tfActive === r ? " on" : ""}`} onClick={() => { trackFeatureOpen(["1D","1W","1M"].includes(r) ? "chart.timeframe.intraday" : ["1Y","5Y"].includes(r) ? "chart.timeframe.long" : "chart.type"); setTfActive(r); }}>{r}</button>
               ))}
               <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
