@@ -9,14 +9,25 @@ import {
   GoogleAuthProvider,
 } from "firebase/auth";
 
+// Env-driven so each branch/environment authenticates against its OWN Firebase
+// project (its own Auth users, its own Firestore). Previously this object was
+// hardcoded to the prod project unconditionally, so a staging build still
+// signed users into market-catalyst-502415 — the stage site had no Firebase
+// project of its own from the browser's point of view, no matter which
+// backend or domain it was deployed under.
+//
+// Falls back to the prod project's values so any branch/build that hasn't set
+// these NEXT_PUBLIC_FIREBASE_* vars behaves exactly as before (zero regression
+// risk) — but every environment should set its own via .env.production, the
+// same per-branch pattern already used for NEXT_PUBLIC_BACKEND_URL.
 const firebaseConfig = {
-  apiKey: "AIzaSyDVjZmJ11qzbPIvruwOHiTiMWvjTcUmhuk",
-  authDomain: "market-catalyst-502415.firebaseapp.com",
-  projectId: "market-catalyst-502415",
-  storageBucket: "market-catalyst-502415.firebasestorage.app",
-  messagingSenderId: "741318166823",
-  appId: "1:741318166823:web:e7bdefb314ecd446494102",
-  measurementId: "G-NFPTC0K6Z0",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "AIzaSyDVjZmJ11qzbPIvruwOHiTiMWvjTcUmhuk",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "market-catalyst-502415.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "market-catalyst-502415",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? "market-catalyst-502415.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? "741318166823",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "1:741318166823:web:e7bdefb314ecd446494102",
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID ?? "G-NFPTC0K6Z0",
 };
 
 export const firebaseApp = getApps().length

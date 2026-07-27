@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "marketcatalyst",
+    "site": "market-catalyst-stage",
     "public": "out",
     "ignore": [
       "firebase.json",
