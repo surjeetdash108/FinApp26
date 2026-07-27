@@ -9,8 +9,8 @@ import {
   signInWithRedirect,
   updateProfile,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { firebaseAuth, firebaseDb, googleAuthProvider } from "../../firebase";
+import { firebaseAuth, googleAuthProvider } from "../../firebase";
+import { apiPatch } from "../../iq/backend";
 import {
   InvestorProfile,
   ProfileFields,
@@ -80,13 +80,10 @@ export function SignupForm() {
       }
       const cred = await createUserWithEmailAndPassword(firebaseAuth, profile.email, password);
       await updateProfile(cred.user, { displayName: profile.name });
-      await setDoc(doc(firebaseDb, "users", cred.user.uid), {
+      await apiPatch("/api/profile", {
         ...profile,
-        uid: cred.user.uid,
         email: cred.user.email ?? profile.email,
         tier: "free",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
       // Same persisted-session wait as the login path — a bare
       // window.location.href races the IndexedDB write on mobile. Signup already

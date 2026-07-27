@@ -1,7 +1,7 @@
 "use client";
 
 // iq.css is imported globally via app/layout.tsx
-import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -12,45 +12,18 @@ const StockScreenEmbed = dynamic<{ initialSym?: string }>(
   { ssr: false, loading: () => <div style={{ padding: 40, textAlign: "center", color: "var(--text-dim-solid)" }}>Loading…</div> }
 );
 import { signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { firebaseAuth, firebaseDb } from "../firebase";
-import { usePresence, recordLogout } from "./presence";
-import { ScreenErrorBoundary } from "./error-boundary";
+import { firebaseAuth } from "../firebase";
+import { apiGet, apiPatch } from "./backend";
 import { useAppSelector } from "../store/hooks";
 import { AuthGuard } from "../dashboard/auth-guard";
 import { menuItems } from "../dashboard/menu-items";
-import { FeatureFlagProvider, useFlag, type FlagKey } from "./feature-flags";
-import { EntitlementProvider } from "./entitlements";
-import { LivePricesProvider, useLivePrices } from "./live-prices";
-
-/**
- * Hides a nav item when its release flag is off. A `null` flag is always shown.
- * Split into its own component because the nav is rendered inside a .map(), and
- * a hook (useFlag) cannot be called inside a callback.
- */
-function NavItemGate({
-  flag, slug, children,
-}: { flag: FlagKey | null; slug: string; children: React.ReactNode }) {
-  const on = useFlag((flag ?? "FF_DASHBOARD") as FlagKey);
-  const entitled = useSlugEntitled(slug);
-  // Hidden when unreleased OR outside the plan. A locked screen is not
-  // advertised in the nav — the upsell belongs on the pricing page, not as a
-  // row of dead links. Reaching it by URL still shows PlanGate's upgrade
-  // message, so the feature is discoverable without being noise.
-  if (flag && !on) return null;
-  if (!entitled) return null;
-  return <>{children}</>;
-}
-import { type PulseItem } from "./data";
-import { fmt, sign, cls, arr, SemiGauge, CenterSpinner } from "./utils";
-import { useCollection } from "./hooks/useCollection";
-import { useCompany, useCompanyState } from "./hooks/useCompany";
+import { pulse, sectorList, sectorByName, funds, fundDetail, folio, earnings as earningsData, movers, screenerStocks, type SectorRow, type Fund, type FundDetail, type PulseItem } from "./data";
+import { fmt, sign, cls, arr, SemiGauge } from "./utils";
 import { NotificationBell } from "./notification-bell";
 import { useTickerSearch } from "./hooks/useTickerSearch";
-import { applyTape, buildTapeStrip, type IndexDoc } from "./live-market-indices";
-import { useMarketTape } from "./hooks/useMarketTape";
-import { getMarketStatus, fetchMarketStatus, type MarketStatus } from "./market-status";
-import { useSlugEntitled } from "./entitlement-gate";
+import { useTapeStream } from "./hooks/useTapeStream";
+import { useBackendMarketStatus } from "./hooks/useBackendMarketStatus";
+import { mergePulse, tapeItemsToIndexDocs } from "./live-market-indices";
 
 // ---- Route helpers ----
 function slugToHref(slug: string): string {
@@ -67,6 +40,7 @@ interface IQActions {
   openMoverModal: (sym: string) => void;
   openEarnings: (sym: string) => void;
   openSector: (name: string) => void;
+  openFund: (idx: number) => void;
   openIndex: (i: number) => void;
   openFearGreed: () => void;
   setCopilot: (open: boolean) => void;
@@ -82,6 +56,7 @@ export const IQActionsContext = createContext<IQActions>({
   openMoverModal: () => {},
   openEarnings: () => {},
   openSector: () => {},
+  openFund: () => {},
   openIndex: () => {},
   openFearGreed: () => {},
   setCopilot: () => {},
@@ -92,16 +67,6 @@ export const IQActionsContext = createContext<IQActions>({
   setFont: () => {},
 });
 export function useIQActions() { return useContext(IQActionsContext); }
-
-/**
- * The single live-merged index pulse (nine tiles), computed once in the shell
- * from the SSE tape + market_indices and shared to every screen. The Dashboard's
- * Market Pulse boxes read this so they agree with the ticker tape and the index
- * drawer — all three now show the same live value instead of the boxes showing
- * yesterday's close.
- */
-export const LivePulseContext = createContext<PulseItem[]>([]);
-export function useLivePulse() { return useContext(LivePulseContext); }
 
 export function ExpandBtn({ title, node }: { title: string; node: ReactNode }) {
   const { openChart } = useIQActions();
@@ -149,38 +114,36 @@ function NavIcon({ slug }: { slug: string }) {
 // ---- Drawers ----
 function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   const { openStockFull, openSector } = useIQActions();
-  // Live `companies/{ticker}` doc only — first visit to a ticker triggers the
-  // on-demand backend fetch; a spinner shows while it lands (bounded), then
-  // "—" / an honest note. Never fabricated sample figures.
-  const { company, loading: companyLoading } = useCompanyState(sym);
-  const isLive = !!company && company.price != null;
+  const mv  = movers.find(x => x.ticker === sym);
+  const scr = screenerStocks.find(x => x.ticker === sym);
 
-  const name   = company?.name ?? sym;
-  const sector = company?.sector ?? "—";
-  const p      = company?.price ?? null;
-  const c      = company?.pctChange ?? null;
-  const rvol   = company?.rvol ?? null;
-  const rs     = company?.rsRating ?? null;
-  const wk     = company?.week5ChangePct ?? null;
-  const mcB    = company?.marketCap != null ? company.marketCap / 1e9 : null;
-  const mcTxt  = mcB == null ? "—" : mcB >= 1000 ? `$${(mcB / 1000).toFixed(2)}T` : `$${Math.round(mcB)}B`;
-  // MA posture from real SMA flags.
-  const maPosture = (company?.aboveSma50 != null || company?.aboveSma200 != null)
-    ? `${company?.aboveSma50 ? "Above" : "Below"} 50-DMA, ${company?.aboveSma200 ? "Above" : "Below"} 200-DMA`
-    : "";
+  const name   = mv?.name      ?? scr?.name   ?? sym;
+  const sector = mv?.sector ?? scr?.sector ?? "—";
+  const p      = mv?.price   ?? 0;
+  const c      = mv?.pctChange   ?? 0;
+  const rvol   = mv?.rvolRatio ?? scr?.rvolRatio ?? 1;
+  const rs     = mv?.relativeStrength  ?? scr?.relativeStrength  ?? 50;
+  const wk     = mv?.weekPct  ?? 0;
+  const cat    = mv?.catalystLabel ?? "";
+  const ma     = mv?.maPosture  ?? "";
+  const tech   = mv?.techContext ?? "";
+  const news   = mv?.newsContext ?? "";
+  const mc     = scr?.marketCap ?? 0;
+  const mcTxt  = mc >= 1000 ? `$${(mc / 1000).toFixed(2)}T` : mc > 0 ? `$${mc}B` : mv?.cap ?? "—";
 
-  // Build "why it moved" narrative only from figures we actually hold.
-  let why = "";
-  if (c != null) {
-    why = `<b>${name}</b> is trading <b class="${cls(c)}">${sign(c)}</b> today`;
-    why += ` with no single company headline here — it is moving with its sector and the broad tape.`;
-    if (rvol != null) {
-      why += ` Volume is running <b>${rvol.toFixed(1)}×</b> its normal pace`;
-      why += rvol >= 2 ? ` — well above average, which confirms real participation behind the move.` : `.`;
-    }
-    if (maPosture && rs != null) why += ` Price is <b>${maPosture}</b> with a relative-strength rank of <b>${rs}/99</b>, so the underlying trend is ${c >= 0 ? "constructive" : "weak"}.`;
+  // Build "why it moved" narrative (HTML string — data is internal, never user input)
+  let why = `<b>${name}</b> is trading <b class="${cls(c)}">${sign(c)}</b> today`;
+  why += cat && cat !== "No known catalyst"
+    ? ` on <b style="color:var(--text-hi)">${cat.toLowerCase()}</b>.`
+    : ` with no single company headline — it is moving with its sector and the broad tape.`;
+  why += ` Volume is running <b>${rvol.toFixed(1)}×</b> its normal pace`;
+  why += rvol >= 2 ? ` — well above average, which confirms real participation behind the move.` : `.`;
+  if (ma) why += ` Price is <b>${ma}</b> with a relative-strength rank of <b>${rs}/99</b>, so the underlying trend is ${c >= 0 ? "constructive" : "weak"}.`;
+  const sec = sectorByName[sector] ?? null;
+  if (sec) {
+    why += ` Its group, <b>${sector}</b>, is ${sec.pctChange >= 0 ? "up" : "down"} <b class="${cls(sec.pctChange)}">${sign(sec.pctChange)}</b> today (${(sec.trend || "Flat").toLowerCase()}) — `;
+    why += (sec.pctChange >= 0) === (c >= 0) ? "in line with sector strength." : "bucking its sector today.";
   }
-  const hasSector = sector !== "—";
 
   return (
     <>
@@ -202,19 +165,18 @@ function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
         </div>
 
         <div className="drawer-b">
-          {companyLoading && !company ? (
-            <CenterSpinner label={`Loading ${sym}…`} minHeight="220px" />
-          ) : (
-          <>
           {/* Pills */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, alignItems: "center" }}>
-            {c != null && <span className={`pill ${c >= 0 ? "up" : "dn"}`}>{arr(c)} {sign(c)} today</span>}
-            {rvol != null && rvol >= 2 && <span className="pill amc">{rvol.toFixed(1)}× volume</span>}
-            {!isLive && <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Not in the synced universe yet</span>}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            <span className={`pill ${c >= 0 ? "up" : "dn"}`}>{arr(c)} {sign(c)} today</span>
+            {cat && cat !== "No known catalyst"
+              ? <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{cat}</span>
+              : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>No known catalyst</span>
+            }
+            {rvol >= 2 && <span className="pill amc">{rvol.toFixed(1)}× volume</span>}
           </div>
 
           {/* Why it moved */}
-          {why && (
+          {mv && (
             <div className="ai-block" style={{ marginBottom: 14 }}>
               <div className="card-h">
                 <h3 className="ai-c">◆ Why it moved</h3>
@@ -228,32 +190,37 @@ function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
 
           {/* Grid 1: Today · Rel. volume · 5-day */}
           <div className="metric-grid" style={{ marginBottom: 12 }}>
-            <div className="m"><div className="k">Today</div><div className={`v ${c != null ? cls(c) : ""}`}>{c != null ? sign(c) : "—"}</div></div>
-            <div className="m"><div className="k">Rel. volume</div><div className="v">{rvol != null ? `${rvol.toFixed(1)}×` : "—"}</div></div>
-            <div className="m"><div className="k">5-day</div><div className={`v ${wk != null ? cls(wk) : ""}`}>{wk != null ? sign(wk) : "—"}</div></div>
+            <div className="m"><div className="k">Today</div><div className={`v ${cls(c)}`}>{sign(c)}</div></div>
+            <div className="m"><div className="k">Rel. volume</div><div className="v">{rvol.toFixed(1)}×</div></div>
+            <div className="m"><div className="k">5-day</div><div className={`v ${cls(wk)}`}>{sign(wk)}</div></div>
           </div>
 
           {/* Grid 2: Last price · RS rank · Market cap */}
           <div className="metric-grid" style={{ marginBottom: 14 }}>
-            <div className="m"><div className="k">Last price</div><div className="v">{p != null ? `$${fmt(p)}` : "—"}</div></div>
-            <div className="m"><div className="k">RS rank</div><div className="v">{rs != null ? rs : "—"}</div></div>
+            <div className="m"><div className="k">Last price</div><div className="v">${fmt(p)}</div></div>
+            <div className="m"><div className="k">RS rank</div><div className="v">{rs}</div></div>
             <div className="m"><div className="k">Market cap</div><div className="v" style={{ fontSize: ".92rem" }}>{mcTxt}</div></div>
           </div>
 
-          {/* Technical posture — real MA/RSI, not the mock string */}
-          {(maPosture || company?.rsi14 != null) && (
+          {/* Technical posture */}
+          {tech && (
             <div className="ai-sec">
               <div className="h">Technical posture</div>
-              <p>
-                {maPosture}
-                {company?.rsi14 != null ? `${maPosture ? " · " : ""}RSI(14) ${Math.round(company.rsi14)}` : ""}
-              </p>
+              <p>{tech}</p>
+            </div>
+          )}
+
+          {/* News & catalyst */}
+          {news && (
+            <div className="ai-sec" style={{ marginTop: 10 }}>
+              <div className="h">News &amp; catalyst</div>
+              <p>{news}</p>
             </div>
           )}
 
           {/* CTA buttons */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
-            {hasSector && (
+            {sec && (
               <button className="btn" style={{ width: "100%" }}
                 onClick={() => { onClose(); openSector(sector); }}>
                 View {sector} in heatmap →
@@ -264,8 +231,6 @@ function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
               Open full stock page →
             </button>
           </div>
-          </>
-          )}
         </div>
       </div>
     </>
@@ -274,15 +239,14 @@ function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
 
 function EarningsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   const { openStockFull } = useIQActions();
-  const company = useCompany(sym);
-  const { data: earningsEvents } = useCollection<{ id: string; ticker: string; date?: string; epsEstimate: number | null; epsActual: number | null }>("earnings_events");
-  const e = earningsEvents.find(x => x.ticker === sym);
-  const posted = !!e && e.epsActual != null;
+  const e = earningsData.find(x => x.ticker ===sym);
+  const posted = e && e.epsActual != null;
   const epsBeat = e && e.epsActual != null && e.epsEstimate != null && e.epsEstimate !== 0
     ? ((e.epsActual - e.epsEstimate) / Math.abs(e.epsEstimate) * 100)
     : null;
-  const name = company?.name ?? sym;
-  const sector = company?.sector ?? "—";
+  const revBeat = e && e.revenueActual != null && e.revenueEstimate != null && e.revenueEstimate !== 0
+    ? ((e.revenueActual - e.revenueEstimate) / Math.abs(e.revenueEstimate) * 100)
+    : null;
 
   return (
     <>
@@ -295,45 +259,107 @@ function EarningsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) 
           <div style={{ flex: 1 }}>
             <div className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)" }}>{sym}</div>
             <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
-              {name} · {sector}
+              {e?.name ?? sym} · {e?.sector ?? "—"} ·{" "}
+              <span className={`pill ${e?.session === "Before open" ? "bmo" : "amc"}`}>{e?.session ?? "—"}</span>
             </div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
         </div>
 
         <div className="drawer-b">
-          {e ? (
-            <div className="metric-grid">
-              <div className="m">
-                <div className="k">EPS estimate</div>
-                <div className="v">{e.epsEstimate != null ? `$${e.epsEstimate}` : "—"}</div>
-              </div>
-              <div className="m">
-                <div className="k">EPS actual</div>
-                <div className="v">{e.epsActual != null ? `$${e.epsActual}` : "—"}</div>
-                {posted && epsBeat != null && (
-                  <div className={`s ${epsBeat >= 0 ? "up" : "dn"}`}>{epsBeat > 0 ? "+" : ""}{epsBeat.toFixed(1)}% {epsBeat >= 0 ? "beat" : "miss"}</div>
-                )}
-              </div>
-              {e.date && (
+          {posted && e ? (
+            <>
+              <div className="metric-grid">
                 <div className="m">
-                  <div className="k">Report date</div>
-                  <div className="v" style={{ fontSize: ".95rem" }}>{e.date}</div>
+                  <div className="k">EPS · actual vs est</div>
+                  <div className="v">${e.epsActual}</div>
+                  <div className={`s ${(epsBeat ?? 0) >= 0 ? "up" : "dn"}`}>
+                    est {e.epsEstimate != null ? `$${e.epsEstimate}` : "—"} · {epsBeat != null ? `${epsBeat > 0 ? "+" : ""}${epsBeat.toFixed(1)}%` : ""}
+                  </div>
                 </div>
-              )}
-            </div>
+                <div className="m">
+                  <div className="k">Revenue</div>
+                  <div className="v">${e.revenueActual}B</div>
+                  <div className={`s ${(revBeat ?? 0) >= 0 ? "up" : "dn"}`}>
+                    est ${e.revenueEstimate}B{revBeat != null ? ` · ${revBeat > 0 ? "+" : ""}${revBeat.toFixed(1)}%` : ""}
+                  </div>
+                </div>
+                <div className="m">
+                  <div className="k">Guidance</div>
+                  <div className="v" style={{ color: e.guidanceStatus === "Raised" ? "var(--up)" : e.guidanceStatus === "Cut" ? "var(--down)" : "var(--text-hi)", fontSize: "1rem" }}>
+                    {e.guidanceStatus ?? "—"}
+                  </div>
+                </div>
+                <div className="m">
+                  <div className="k">Reaction</div>
+                  <div className={`v ${cls(e.priceReaction ?? 0)}`}>{sign(e.priceReaction ?? 0)}</div>
+                  <div className="s">after hours</div>
+                </div>
+              </div>
+
+              <div className="takeaway">
+                <span className="lbl">AI takeaway</span>
+                <span style={{ fontSize: ".8rem", color: "var(--text-dim-solid)" }}>
+                  {e.tags.includes("Beat") ? "Beat on top and bottom line — guidance the catalyst" : "Results mixed; reaction tells the story"}
+                </span>
+                <span className={`verdict ${(e.priceReaction ?? 0) >= 0 ? "up" : "dn"}`}>
+                  {(e.priceReaction ?? 0) >= 2 ? "Bullish" : (e.priceReaction ?? 0) >= 0 ? "Mild beat" : "Bearish"}
+                </span>
+              </div>
+
+              <div className="ai-block" style={{ marginBottom: 14 }}>
+                <div className="card-h">
+                  <h3 className="ai-c">◆ AI Earnings Summary</h3>
+                  <span className="pill ai">conf. 91%</span>
+                </div>
+                <div className="card-b">
+                  <div className="ai-sec">
+                    <div className="h">What happened</div>
+                    <p>{e.name} reported {(epsBeat ?? 0) >= 0 ? "above" : "below"}-consensus EPS of ${e.epsActual} vs. est ${e.epsEstimate}, with revenue of ${e.revenueActual}B. Stock reacted {sign(e.priceReaction ?? 0)} after hours.</p>
+                  </div>
+                  <div className="ai-sec">
+                    <div className="h">Bull case</div>
+                    <p>Beat on both lines with guidance {e.guidanceStatus === "Raised" ? "raised — management confidence is a strong signal" : "maintained — execution visible"}. {e.owned ? "Your position benefits directly." : ""}</p>
+                  </div>
+                  <div className="ai-sec">
+                    <div className="h">Bear case</div>
+                    <p>Much of the upside may be priced in. Implied move was {e.impliedMove != null ? `±${e.impliedMove}%` : "n/a"} — actual {Math.abs(e.priceReaction ?? 0).toFixed(1)}% {e.impliedMove != null && Math.abs(e.priceReaction ?? 0) > e.impliedMove ? "exceeded" : "was within"} expectations.</p>
+                  </div>
+                  <div className="ai-sec">
+                    <div className="h">Guidance detail</div>
+                    <p>Company {e.guidanceStatus === "Raised" ? "raised" : e.guidanceStatus === "In-line" ? "maintained" : "cut"} forward guidance. Watch next quarter&apos;s setup relative to current Street estimates.</p>
+                  </div>
+                  <div className="ai-sec">
+                    <div className="h">What to watch next</div>
+                    <p>Analyst PT revisions in the next 48 hours, conference call tone, and peer read-throughs from sector names reporting later this week.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card" style={{ marginBottom: 14 }}>
+                <div className="card-h"><h3>Peer reactions</h3></div>
+                <div className="card-b">
+                  {[{ s: "Sector index", c: parseFloat(((e.priceReaction ?? 0) * 0.3).toFixed(2)) }, { s: "Direct peers", c: parseFloat(((e.priceReaction ?? 0) * 0.5).toFixed(2)) }].map(p => (
+                    <div key={p.s} className="minirow">
+                      <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)" }}>{p.s}</span>
+                      <span className={`mono ${cls(p.c)}`} style={{ marginLeft: "auto" }}>{sign(p.c)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           ) : (
             <div style={{ padding: "20px 0", color: "var(--text-dim-solid)", fontSize: ".85rem" }}>
-              No earnings estimate / actual synced for {sym}.
+              {e
+                ? `${e.name} reports ${e.session.toLowerCase()}. Implied move: ±${e.impliedMove}%. Check back after results are posted.`
+                : `No earnings data available for ${sym}.`}
             </div>
           )}
 
-          <div style={{ fontSize: ".7rem", color: "var(--text-dim-solid)", marginTop: 12 }}>
-            Estimate and actual EPS only — session, guidance and price reaction aren&apos;t available on the current data plan. Full EPS &amp; sales history is on the stock page.
-          </div>
-
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
             <button className="btn primary" style={{ flex: 1 }} onClick={() => { onClose(); openStockFull(sym); }}>Open full stock page</button>
+            <button className="btn">Transcript</button>
+            <button className="btn ai">▶ Call audio</button>
           </div>
         </div>
       </div>
@@ -343,36 +369,8 @@ function EarningsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) 
 
 function SectorDrawer({ name, onClose }: { name: string; onClose: () => void }) {
   const { openStock } = useIQActions();
-  // Live overlays: real per-constituent price/%change/market cap from
-  // `companies`, and the real sector %change + rank from `sectors`. The drawer
-  // used to render the STATIC `sectorByName` — its per-ticker % changes were a
-  // hash of the ticker name (fabricated), its rank/trend fixed, and its "Big
-  // news" three hardcoded sentences. That is the "data not correct" on click.
-  const { data: companies } = useCollection<{ ticker: string; sector?: string | null; pctChange: number | null; marketCap: number | null }>("companies");
-  const { data: sectorsLive } = useCollection<{ id: string; sector: string; pctChange: number }>("sectors");
-
-  // Constituents are the live `companies` in this sector, sized by real market
-  // cap — no static membership list.
-  const constituents = companies
-    .filter(c => c.sector === name && c.marketCap != null)
-    .map(c => ({ sym: c.ticker, mc: c.marketCap! / 1e9, pc: c.pctChange ?? 0 }))
-    .sort((a, b) => b.mc - a.mc);
-
-  // Sector %change: the vendor `sectors` %change when the group matches, else a
-  // cap-weighted average of the real constituents. No fabricated baseline.
-  const liveSector = sectorsLive.find(s => s.sector === name);
-  let sectorPct: number;
-  if (liveSector) {
-    sectorPct = liveSector.pctChange;
-  } else {
-    let w = 0, wc = 0;
-    for (const c of constituents) { w += c.mc; wc += c.mc * c.pc; }
-    sectorPct = w > 0 ? wc / w : 0;
-  }
-  const rank = liveSector
-    ? [...sectorsLive].sort((a, b) => b.pctChange - a.pctChange).findIndex(s => s.sector === name) + 1
-    : null;
-  const trend = sectorPct > 0.5 ? "Improving" : sectorPct < -0.5 ? "Deteriorating" : "Flat";
+  const sector: SectorRow | undefined = sectorByName[name];
+  const sorted = sector ? [...sector.items].sort((a, b) => b[1] - a[1]) : [];
 
   return (
     <>
@@ -385,28 +383,33 @@ function SectorDrawer({ name, onClose }: { name: string; onClose: () => void }) 
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{name}</div>
             <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
-              {rank != null ? `Group rank #${rank} · ` : ""}
-              <span className={cls(sectorPct)}>{sign(sectorPct)} today</span>
-              {" "}· <span className="pill" style={{ marginLeft: 2 }}>{trend}</span>
+              {sector ? `Group rank #${sector.rank} · ` : ""}
+              <span className={cls(sector?.pctChange ?? 0)}>{sign(sector?.pctChange ?? 0)} today</span>
+              {sector && <> · <span className="pill" style={{ marginLeft: 2 }}>{sector.trend}</span></>}
             </div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
         </div>
 
         <div className="drawer-b">
-          <div className="ai-sec">
-            <div className="h">
-              Constituents · by market cap
-            </div>
-          </div>
-          {constituents.length === 0 && (
-            <div style={{ padding: "10px 0", fontSize: ".8rem", color: "var(--text-dim-solid)" }}>No constituents listed for this group.</div>
-          )}
-          {constituents.map(({ sym, mc, pc }) => (
+          <div className="ai-sec"><div className="h">Constituents · by market cap</div></div>
+          {sorted.map(([sym, mc, chg]) => (
             <div key={sym} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); openStock(sym); }}>
               <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)", minWidth: 52 }}>{sym}</span>
-              <span style={{ fontSize: ".75rem", color: "var(--text-dim-solid)", flex: 1, marginLeft: 8 }}>${mc >= 1000 ? `${(mc / 1000).toFixed(2)}T` : `${Math.round(mc)}B`}</span>
-              <span className={`mono ${cls(pc)}`} style={{ fontSize: ".82rem" }}>{sign(pc)}</span>
+              <span style={{ fontSize: ".75rem", color: "var(--text-dim-solid)", flex: 1, marginLeft: 8 }}>${mc}B</span>
+              <span className={`mono ${cls(chg)}`} style={{ fontSize: ".82rem" }}>{sign(chg)}</span>
+            </div>
+          ))}
+
+          <div className="ai-sec" style={{ marginTop: 14 }}><div className="h">Big news across the sector</div></div>
+          {[
+            { t: `Rotation into ${name} continues as valuations stay supported`, dt: "Today" },
+            { t: `Sector sees notable inflows amid broad risk-on positioning`, dt: "Yesterday" },
+            { t: `Analyst consensus turns constructive — multiple PT upgrades`, dt: "2 days ago" },
+          ].map((item, i) => (
+            <div key={i} style={{ padding: "8px 0", borderBottom: i < 2 ? "1px solid var(--border-soft)" : "none" }}>
+              <div style={{ fontSize: ".82rem", color: "var(--text-hi)", lineHeight: 1.4 }}>{item.t}</div>
+              <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginTop: 2 }}>{item.dt}</div>
             </div>
           ))}
 
@@ -417,26 +420,126 @@ function SectorDrawer({ name, onClose }: { name: string; onClose: () => void }) 
   );
 }
 
+function FundDrawer({ idx, onClose }: { idx: number; onClose: () => void }) {
+  const { openStock } = useIQActions();
+  const fund: Fund | undefined = funds[idx];
+  const dt: FundDetail | undefined = fund ? fundDetail[fund.fundName] : undefined;
+
+  return (
+    <>
+      <div className="scrim" onClick={onClose} />
+      <div className="drawer open">
+        <div className="drawer-h">
+          <div className="sd-logo" style={{ background: "linear-gradient(135deg,#3a2f6b,#241c44)", color: "var(--brand-2)", fontSize: ".78rem" }}>
+            {fund?.avatar ?? "—"}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{fund?.fundName ?? "Fund"}</div>
+            <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
+              {fund?.managerName} · 13F AUM {fund?.aum} · {fund?.totalPositions} positions · {fund?.quarter}
+            </div>
+          </div>
+          <button className="closebtn" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="drawer-b">
+          {fund && (
+            <>
+              <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                <span className="pill up">{fund.newPositions} new</span>
+                <span className="pill dn">{fund.exitCount} exits</span>
+                <span className="src-chip">{fund.quarter} 13F-HR</span>
+              </div>
+
+              {dt && (
+                <>
+                  <div className="ai-sec"><div className="h">Top 10 holdings · % of portfolio</div></div>
+                  <div className="tbl-wrap" style={{ marginBottom: 14 }}>
+                    <table className="tbl">
+                      <thead>
+                        <tr><th>Ticker</th><th className="num">% wt</th><th>Change</th></tr>
+                      </thead>
+                      <tbody>
+                        {dt.holdings.map(([sym, pct, chg]) => (
+                          <tr key={sym} style={{ cursor: "pointer" }} onClick={() => { onClose(); openStock(sym); }}>
+                            <td className="mono" style={{ fontWeight: 700, color: "var(--text-hi)" }}>{sym}</td>
+                            <td className="num">{pct}%</td>
+                            <td>
+                              <span className={`pill ${chg === "new" ? "up" : chg === "reduced" ? "dn" : ""}`} style={{ fontSize: ".68rem" }}>
+                                {chg}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="dash">
+                    <div className="col-6">
+                      <div className="ai-sec"><div className="h" style={{ color: "var(--up)" }}>Biggest buys / adds</div></div>
+                      {dt.buys.map(([sym, desc]) => (
+                        <div key={sym} className="minirow" style={{ cursor: "pointer", flexDirection: "column", alignItems: "flex-start", gap: 2, marginBottom: 6 }} onClick={() => { onClose(); openStock(sym); }}>
+                          <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)" }}>{sym}</span>
+                          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{desc}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="col-6">
+                      <div className="ai-sec"><div className="h" style={{ color: "var(--down)" }}>Biggest exits / trims</div></div>
+                      {dt.exits.map(([sym, desc]) => (
+                        <div key={sym} className="minirow" style={{ cursor: "pointer", flexDirection: "column", alignItems: "flex-start", gap: 2, marginBottom: 6 }} onClick={() => { onClose(); openStock(sym); }}>
+                          <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)" }}>{sym}</span>
+                          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{desc}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="ai-block" style={{ marginTop: 14, marginBottom: 14 }}>
+                    <div className="card-h"><h3 className="ai-c">◆ AI read on the quarter</h3></div>
+                    <div className="card-b">
+                      <div className="ai-sec">
+                        <div className="h">Theme shift</div>
+                        <p style={{ fontSize: ".82rem", lineHeight: 1.6 }}>{dt.theme}</p>
+                      </div>
+                      <div className="ai-sec">
+                        <div className="h">Concentration</div>
+                        <p style={{ fontSize: ".82rem", lineHeight: 1.6 }}>{dt.conc}</p>
+                      </div>
+                      <div className="ai-sec">
+                        <div className="h">Overlap with your portfolio</div>
+                        <p style={{ fontSize: ".82rem", lineHeight: 1.6 }}>
+                          {dt.holdings.filter(([sym]) => folio.some(f => f.ticker ===sym)).length} of {dt.holdings.length} top holdings overlap with your portfolio. Review position sizing for shared names.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <button className="btn primary" style={{ width: "100%" }} onClick={onClose}>Back to 13F overview</button>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ---- Index drawer (openIndex) ----
 function IndexDrawer({ idx, pulse: livePulse, onClose }: { idx: number; pulse: PulseItem[]; onClose: () => void }) {
-  // Real leading/lagging sectors from the live `sectors` collection — the
-  // drawer used to sort a static mock (sectorList), so "Semiconductors +3.10%"
-  // was the same hardcoded row for every index on every day.
-  const { data: sectorsLive } = useCollection<{ id: string; sector: string; pctChange: number }>("sectors");
   const x = livePulse[idx];
   if (!x) return null;
   const dec = x.value > 1000 ? 0 : 2;
   const dollar = x.value - x.prevClose;
   const c = x.change >= 0 ? "up" : "down";
-  // Real session low/high from the snapshot, when the tape supplied them. No
-  // fabricated × 0.997 multipliers, and NO 52-week range at all — the tape
-  // carries no 52-week data, so a fabricated one was pure invention.
-  const hasDayRange = x.dayLow != null && x.dayHigh != null;
-  const proxyNote = x.isProxy && x.proxyTicker ? `via ${x.proxyTicker} (ETF proxy)` : null;
+  const dayLow = Math.min(x.open, x.prevClose, x.value) * 0.997;
+  const dayHigh = Math.max(x.open, x.prevClose, x.value) * 1.003;
+  const y52lo = x.value * 0.82, y52hi = x.value * 1.06;
   const eq = ["S&P 500", "Nasdaq", "Dow", "Russell 2K"].includes(x.label);
-  const sortedSectors = [...sectorsLive].sort((a, b) => b.pctChange - a.pctChange);
-  const lead = sortedSectors.slice(0, 3);
-  const lag = sortedSectors.slice(-3).reverse();
+  const lead = [...sectorList].sort((a, b) => b.pctChange - a.pctChange).slice(0, 3);
+  const lag = [...sectorList].sort((a, b) => b.pctChange - a.pctChange).slice(-3).reverse();
   const note = x.label === "VIX" ? "Volatility is low and falling — a calm, risk-on tape with cheap hedging."
     : x.label.includes("Yield") ? "Yields easing — supportive for long-duration growth and rate-sensitive sectors."
     : x.label === "WTI Crude" ? "Crude softer — pressures energy names, eases input-cost worries elsewhere."
@@ -450,7 +553,7 @@ function IndexDrawer({ idx, pulse: livePulse, onClose }: { idx: number; pulse: P
       <div className="side-drawer">
         <div className="drawer-h">
           <div className="sd-logo" style={{ background: "linear-gradient(135deg,#1f4d6b,#0e2233)", color: "#7fd0ff" }}>{x.label[0]}</div>
-          <div><div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{x.label}</div><div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>{sub}{proxyNote ? ` · ${proxyNote}` : ""} · delayed ~15m</div></div>
+          <div><div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{x.label}</div><div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>{sub} · delayed ≤15s</div></div>
           <button className="closebtn" onClick={onClose}>✕</button>
         </div>
         <div className="drawer-b">
@@ -461,25 +564,26 @@ function IndexDrawer({ idx, pulse: livePulse, onClose }: { idx: number; pulse: P
           <div className="metric-grid">
             <div className="m"><div className="k">Open</div><div className="v">{fmt(x.open, dec)}</div></div>
             <div className="m"><div className="k">Prev close</div><div className="v">{fmt(x.prevClose, dec)}</div></div>
-            <div className="m"><div className="k">Day range</div><div className="v" style={{ fontSize: ".92rem" }}>{hasDayRange ? `${fmt(x.dayLow as number, dec)} – ${fmt(x.dayHigh as number, dec)}` : "—"}</div></div>
+            <div className="m"><div className="k">Day range</div><div className="v" style={{ fontSize: ".92rem" }}>{fmt(dayLow, dec)} – {fmt(dayHigh, dec)}</div></div>
+            <div className="m"><div className="k">52-wk range</div><div className="v" style={{ fontSize: ".92rem" }}>{fmt(y52lo, dec)} – {fmt(y52hi, dec)}</div></div>
           </div>
           <div className="note" style={{ marginTop: 14 }}><b style={{ color: "var(--text-hi)" }}>AI read:</b> {note}</div>
-          {eq && sortedSectors.length > 0 && (
+          {eq && (
             <>
               <div className="ai-sec" style={{ marginTop: 16 }}><div className="h">Leading sectors today</div></div>
               {lead.map(g => (
-                <div key={g.sector} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
-                  <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.sector}</span>
+                <div key={g.name} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
+                  <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.name}</span>
                   <span className="mid" />
-                  <span className={`r ${cls(g.pctChange)}`}>{sign(g.pctChange)}</span>
+                  <span className="r up">{sign(g.pctChange)}</span>
                 </div>
               ))}
               <div className="ai-sec" style={{ marginTop: 12 }}><div className="h">Lagging sectors today</div></div>
               {lag.map(g => (
-                <div key={g.sector} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
-                  <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.sector}</span>
+                <div key={g.name} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
+                  <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.name}</span>
                   <span className="mid" />
-                  <span className={`r ${cls(g.pctChange)}`}>{sign(g.pctChange)}</span>
+                  <span className="r down">{sign(g.pctChange)}</span>
                 </div>
               ))}
             </>
@@ -672,58 +776,19 @@ const SEARCHABLE_STOCKS: Array<{ sym: string; name: string }> = [
 
 // ---- Main IQ Shell ----
 export function IQShell({ children }: { children: React.ReactNode }) {
-  // Mount the app-wide live-price subscription above the shell body so the
-  // search palette (in this component) and every screen share one poll of the
-  // signed-in user's portfolio + watchlist + viewed tickers.
-  return (
-    <LivePricesProvider>
-      <IQShellInner>{children}</IQShellInner>
-    </LivePricesProvider>
-  );
-}
-
-function IQShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAppSelector(state => state.auth);
   const { data: profile } = useAppSelector(state => state.profile);
 
-  // Records login snapshot (IP / device / provider / …) + online presence and
-  // heartbeats while this tab is visible. Logout is recorded in handleSignOut.
-  usePresence();
-
-  // Three sources, most-live wins: the streamed SSE tape (intraday) over the
-  // Firestore `market_indices` docs (written once a day at 18:05 ET) over the
-  // static mock. Each layer is a fallback for the one above it, so losing the
-  // backend degrades the strip to yesterday's real closes rather than blanking
-  // it. `livePulse` still feeds the Dashboard widget and the index drawer, so
-  // all three stay in agreement.
-  const { data: liveIndices } = useCollection<IndexDoc>("market_indices");
-  const tape = useMarketTape();
-  const livePulse = useMemo(
-    () => {
-      // Base layer is the live `market_indices` docs mapped to pulse tiles — no
-      // static mock. The SSE tape (applyTape) then overlays intraday values.
-      const base: PulseItem[] = liveIndices.map(l => ({
-        label: l.label, value: l.value, change: l.change,
-        open: l.open ?? l.value, prevClose: l.prevClose ?? l.value,
-        proxyTicker: l.proxyTicker, isProxy: l.isProxy, note: l.note,
-      }));
-      return applyTape(base, tape.items);
-    },
-    [liveIndices, tape.items],
-  );
-  const stripTiles = useMemo(
-    () => buildTapeStrip(livePulse, tape.items),
-    [livePulse, tape.items],
-  );
-  // Duplicated because the marquee keyframe scrolls to translateX(-50%) — the
-  // second copy is what makes the wrap seamless.
-  const tickerItems = useMemo(() => [...stripTiles, ...stripTiles], [stripTiles]);
-  // The strip is ~2.3x longer than the nine tiles the 35s keyframe was tuned
-  // for. Scaling the duration with the tile count keeps the scroll SPEED
-  // constant instead of whipping the longer tape past unreadably fast.
-  const tickerDuration = Math.max(35, Math.round(stripTiles.length * 4));
+  // Same live merge Dashboard's Market Pulse widget uses — keeps the top
+  // ticker strip and the index drawer it opens in sync with each other.
+  // Backed by the backend's ticker-tape SSE broadcast, not a direct Firestore
+  // listener — one shared upstream Polygon call for every connected browser.
+  const { frame: tapeFrame } = useTapeStream();
+  const liveIndices = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items) : [];
+  const livePulse = mergePulse(pulse, liveIndices);
+  const tickerItems = [...livePulse, ...livePulse];
 
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
@@ -739,7 +804,9 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
     const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     return { day, time };
   });
-  const [mkt, setMkt] = useState<MarketStatus>(() => getMarketStatus());
+  // GET /live/market-status (vendor session state), not the local ET-clock
+  // computation — falls back to that computation internally on a fetch failure.
+  const mkt = useBackendMarketStatus();
 
   useEffect(() => {
     const tick = () => {
@@ -748,11 +815,6 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
         day: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
         time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
       });
-      // Local clock first so the pill is never empty, then let the vendor's
-      // answer overwrite it — it knows about halts and early closes that the
-      // hardcoded holiday list cannot.
-      setMkt(prev => (prev.fromVendor ? prev : getMarketStatus(d)));
-      void fetchMarketStatus().then(v => { if (v) setMkt(v); });
     };
     tick(); // correct any build-time (static-export) value right after hydration
     const id = setInterval(tick, 60_000);
@@ -796,13 +858,6 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
         ];
       })()
     : SEARCHABLE_STOCKS.map(s => ({ sym: s.sym, name: s.name, price: null, pctChange: null }));
-  // Live delayed prices for the search results, polled only while the palette is
-  // open. Overlays the once-a-day EOD price the search index carries.
-  const searchSnaps = useLivePrices(searchOpen ? searchMatches.map(m => m.sym) : []);
-  const searchMatchesLive = searchMatches.map(m => {
-    const q = searchSnaps.get(m.sym.toUpperCase());
-    return q?.price != null ? { ...m, price: q.price, pctChange: q.changePct ?? m.pctChange } : m;
-  });
   const cmdRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLElement>(null);
   const [drawer, setDrawer] = useState<
@@ -810,6 +865,7 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
     | { type: "mover-modal"; sym: string }
     | { type: "earnings"; sym: string }
     | { type: "sector"; name: string }
+    | { type: "fund"; idx: number }
     | { type: "index"; idx: number }
     | { type: "feargreed" }
     | null
@@ -817,24 +873,20 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
 
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load saved theme + font from Firestore on mount
+  // Load saved theme + font from the backend on mount
   useEffect(() => {
     if (!user?.uid) return;
-    const uid = user.uid;
     void (async () => {
       try {
-        const snap = await getDoc(doc(firebaseDb, "settings", uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          if (typeof data.darkMode === "boolean") {
-            const resolved = data.darkMode ? "dark" : "light";
-            localStorage.setItem("iq-theme", resolved);
-            setTheme(resolved);
-          }
-          if (typeof data.font === "string") {
-            localStorage.setItem("iq-font", data.font);
-            setFont(data.font as FontKey);
-          }
+        const data = await apiGet<{ darkMode?: boolean; font?: string }>("/api/settings");
+        if (typeof data.darkMode === "boolean") {
+          const resolved = data.darkMode ? "dark" : "light";
+          localStorage.setItem("iq-theme", resolved);
+          setTheme(resolved);
+        }
+        if (typeof data.font === "string") {
+          localStorage.setItem("iq-font", data.font);
+          setFont(data.font as FontKey);
         }
       } catch { /* keep defaults on error */ }
     })();
@@ -897,6 +949,7 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
     }, [router]),
     openEarnings: useCallback((sym) => setDrawer({ type: "earnings", sym }), []),
     openSector: useCallback((name) => setDrawer({ type: "sector", name }), []),
+    openFund: useCallback((idx) => setDrawer({ type: "fund", idx }), []),
     openIndex: useCallback((idx) => setDrawer({ type: "index", idx }), []),
     openFearGreed: useCallback(() => setDrawer({ type: "feargreed" }), []),
     openChart: useCallback((title: string, node: ReactNode) => setExpandedChart({ title, node }), []),
@@ -922,18 +975,12 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
     (profile.preferredAssetClasses?.length ?? 0) === 0;
 
   async function handleSignOut() {
-    // Mark offline + close the session doc WHILE still authenticated — after
-    // signOut the client can no longer write to its own user doc.
-    const uid = firebaseAuth.currentUser?.uid;
-    if (uid) await recordLogout(uid).catch(() => {});
     await signOut(firebaseAuth);
     window.location.href = "/";
   }
 
   return (
     <AuthGuard>
-      <FeatureFlagProvider>
-      <EntitlementProvider>
       <IQActionsContext.Provider value={actions}>
         <div className="iq-root" data-theme={theme} data-font={font}>
           <div className={`app${navCollapsed ? " nav-collapsed" : ""}`}>
@@ -1003,7 +1050,7 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
                 </div>
                 {searchOpen && (
                   <div className="cmd-dropdown">
-                    {searchMatchesLive.map(m => (
+                    {searchMatches.map(m => (
                       <div key={m.sym} className="palette-item"
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => { localStorage.setItem("iq-stock", m.sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }}
@@ -1046,7 +1093,7 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
                   localStorage.setItem("iq-theme", next);
                   setTheme(next);
                   if (user?.uid) {
-                    void setDoc(doc(firebaseDb, "settings", user.uid), { darkMode: next === "dark" }, { merge: true });
+                    void apiPatch("/api/settings", { darkMode: next === "dark" });
                   }
                 }}
               >
@@ -1105,36 +1152,15 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
 
             {/* Ticker */}
             <div className="ticker">
-              <div className="ticker-track" style={{ animationDuration: `${tickerDuration}s` }}>
+              <div className="ticker-track">
                 {tickerItems.map((x, i) => (
-                  <button
-                    key={`${x.key}-${i}`}
-                    type="button"
-                    className="tk"
-                    title={x.kind === "stock" ? `${x.label} — open details` : `${x.label} — open index detail`}
-                    onClick={() =>
-                      x.kind === "stock" && x.sym
-                        ? setDrawer({ type: "stock", sym: x.sym })
-                        : x.pulseIdx !== undefined && setDrawer({ type: "index", idx: x.pulseIdx })
-                    }
-                  >
+                  <div key={i} className="tk">
                     <span className="lbl">{x.label}</span>
                     <span className="val">{fmt(x.value, x.value > 1000 ? 0 : 2)}</span>
-                    {/* The rate tile's move is in percentage POINTS (a 2bp move
-                        is 0.02), so it must not carry a "%" suffix the way the
-                        price tiles do. */}
-                    <span className={`chg ${cls(x.change)}`}>
-                      {arr(x.change)} {Math.abs(x.change).toFixed(2)}{x.kind === "rate" ? "" : "%"}
-                    </span>
-                  </button>
+                    <span className={`chg ${cls(x.change)}`}>{arr(x.change)} {Math.abs(x.change).toFixed(2)}%</span>
+                  </div>
                 ))}
               </div>
-              {/* An honest label for a feed that is ~15 minutes behind, and a
-                  visible signal when the stream drops — a silently frozen tape
-                  is worse than one that admits it is frozen. */}
-              <span className={`tk-status${tape.connected && !tape.stale ? " live" : ""}`}>
-                {!tape.connected ? "reconnecting…" : tape.stale ? "stale" : "delayed ~15m"}
-              </span>
             </div>
 
             {/* Mobile nav scrim — inside .app so it shares .app's stacking context with the rail */}
@@ -1159,8 +1185,8 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
                     const href = slugToHref(item.slug);
                     const isActive = pathname === href;
                     return (
-                      <NavItemGate key={item.slug} flag={item.flag as FlagKey | null} slug={item.slug}>
                       <Link
+                          key={item.slug}
                           href={href}
                           className={`navitem${isActive ? " active" : ""}`}
                           onMouseEnter={e => {
@@ -1174,7 +1200,6 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
                         <span className="nav-label">{item.label}</span>
                         {item.badge && <span className="nav-tag">{item.badge}</span>}
                       </Link>
-                      </NavItemGate>
                     );
                   })}
                 </div>
@@ -1189,7 +1214,7 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
 
             {/* Main content */}
             <main className="main">
-              <LivePulseContext.Provider value={livePulse}><ScreenErrorBoundary>{children}</ScreenErrorBoundary></LivePulseContext.Provider>
+              {children}
               <footer className="disclaimer-bar">
                 MarketCatalyst LLC is not a registered investment advisor and does not manage client assets. Information and tools on this platform are for informational and educational purposes only and do not constitute investment advice. MarketCatalyst is a data provider, not a stock-picks or alert service. Trading stocks and options carries risk — consult your own financial advisor.
               </footer>
@@ -1208,6 +1233,9 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
           )}
           {drawer?.type === "sector" && (
             <SectorDrawer name={drawer.name} onClose={() => setDrawer(null)} />
+          )}
+          {drawer?.type === "fund" && (
+            <FundDrawer idx={drawer.idx} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "index" && (
             <IndexDrawer idx={drawer.idx} pulse={livePulse} onClose={() => setDrawer(null)} />
@@ -1241,8 +1269,6 @@ function IQShellInner({ children }: { children: React.ReactNode }) {
 
         </div>
       </IQActionsContext.Provider>
-      </EntitlementProvider>
-      </FeatureFlagProvider>
     </AuthGuard>
   );
 }

@@ -1,48 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { screenerPresets } from "../data";
-import { useCollection } from "../hooks/useCollection";
+import { screenerStocks, screenerPresets, watch as watchData, movers as moversData, type ScreenerStock } from "../data";
+import { useApiList } from "../hooks/useApiList";
+import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
-interface CompanyDoc {
-  id: string; ticker: string; name: string | null;
-  marketCap: number | null; peRatio: number | null; price: number | null; pctChange: number | null;
-  rsRating: number | null;
-  // Computed by the backend score jobs (technical-indicators / tech-rating /
-  // fundamentals-growth) from real ohlcv_bars + Polygon financials.
-  techRating: number | null;      // 1-99 composite
-  rvol: number | null;            // relative-volume ratio
-  revenueGrowthYoY: number | null; // decimal (0.064 = 6.4%)
-  epsGrowthYoY: number | null;     // decimal
-  grossMargin: number | null;      // decimal (0.469 = 46.9%)
-  sma50: number | null;
-  sma200: number | null;
-  rsi14: number | null;
-}
-
-/** A screener row — built entirely from a live `companies` doc. Every metric is
- *  nullable: a company whose score job hasn't run yet reads "—" and is excluded
- *  from any filter that depends on that metric, never passed on a faked value. */
-interface ScreenerRow {
-  ticker: string;
-  name: string;
-  relativeStrength: number | null;
-  salesGrowth: number | null;   // %
-  epsGrowth: number | null;     // %
-  grossMargin: number | null;   // %
-  rvolRatio: number | null;
-  marketCap: number | null;     // $B
-  peRatio: number | null;
-  techRating: string | null;    // label from the numeric composite
-  price: number | null;
-  sma50: number | null;
-  sma200: number | null;
-  rsi14: number | null;
-}
-
-// Maps the numeric 1-99 tech rating onto the string categories the rating
-// filter uses (Strong Buy / Buy / Neutral / Sell / Strong Sell).
+// Maps the numeric 1-99 tech rating onto the mock's string categories so the
+// existing rating filter (Strong Buy / Buy / Neutral / Sell / Strong Sell)
+// keeps working unchanged.
 function ratingLabel(n: number): string {
   if (n >= 90) return "Strong Buy";
   if (n >= 70) return "Buy";
@@ -51,26 +17,31 @@ function ratingLabel(n: number): string {
   return "Strong Sell";
 }
 
-// The screener universe is the LIVE `companies` collection — no curated/mock
-// base. Growth/margin are stored as decimals and scaled to percent here;
-// techRating is mapped to its label. Anything not yet computed stays null.
-function buildScreenerUniverse(companies: CompanyDoc[]): ScreenerRow[] {
-  return companies.map(c => ({
-    ticker: c.ticker,
-    name: c.name ?? c.ticker,
-    relativeStrength: c.rsRating,
-    salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : null,
-    epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : null,
-    grossMargin: c.grossMargin != null ? c.grossMargin * 100 : null,
-    rvolRatio: c.rvol,
-    marketCap: c.marketCap != null ? c.marketCap / 1e9 : null,
-    peRatio: c.peRatio,
-    techRating: c.techRating != null ? ratingLabel(c.techRating) : null,
-    price: c.price,
-    sma50: c.sma50,
-    sma200: c.sma200,
-    rsi14: c.rsi14,
-  }));
+// Live companies data now covers marketCap/peRatio/price, relativeStrength
+// (rsRating), AND the previously-illustrative proprietary scores — techRating,
+// RVOL, sales/EPS growth, and gross margin — all computed by the backend score
+// jobs from real ohlcv_bars + Polygon financials. Each falls back to the mock
+// value until its job has run. Growth/margin are stored as decimals and scaled
+// to the mock's percentage units here; techRating is mapped to its label.
+function mergeScreenerStocks(mock: ScreenerStock[], byTicker: Map<string, CompanyDoc>): (ScreenerStock & { live: boolean })[] {
+  return mock.map(s => {
+    const c = byTicker.get(s.ticker);
+    if (!c) return { ...s, live: false };
+    return {
+      ...s,
+      marketCap: c.marketCap != null ? c.marketCap / 1e9 : s.marketCap,
+      peRatio: c.peRatio ?? s.peRatio,
+      relativeStrength: c.rsRating ?? s.relativeStrength,
+      techRating: c.techRating != null ? ratingLabel(c.techRating) : s.techRating,
+      rvolRatio: c.rvol ?? s.rvolRatio,
+      salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : s.salesGrowth,
+      epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : s.epsGrowth,
+      grossMargin: c.grossMargin != null ? c.grossMargin * 100 : s.grossMargin,
+      live:
+        c.marketCap != null || c.peRatio != null || c.rsRating != null ||
+        c.techRating != null || c.rvol != null || c.revenueGrowthYoY != null,
+    };
+  });
 }
 
 function CheckOpt({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
@@ -90,8 +61,10 @@ function CheckOpt({ label, on, onToggle }: { label: string; on: boolean; onToggl
 }
 
 export function ScreenerScreen() {
-  const { data: companies, loading } = useCollection<CompanyDoc>("companies");
-  const universe = buildScreenerUniverse(companies);
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const byTicker = new Map(companies.map(c => [c.ticker, c]));
+  const universe = mergeScreenerStocks(screenerStocks, byTicker);
+  const liveCount = universe.filter(s => s.live).length;
 
   /* ── Preset multi-select ── */
   const [activePresets, setActivePresets] = useState<Set<number>>(new Set());
@@ -106,9 +79,6 @@ export function ScreenerScreen() {
   const [ratingBuy,  setRatingBuy]  = useState(false);
   const [mcGt10,     setMcGt10]     = useState(true);
   const [rvolGt15,   setRvolGt15]   = useState(false);
-  const [aboveDma,   setAboveDma]   = useState(false); // price > SMA50 && SMA200
-  const [rsi4070,    setRsi4070]    = useState(false); // RSI(14) in 40–70
-  const [priceGt5,   setPriceGt5]   = useState(false); // price > $5
 
   /* ── Save / restore the current screen (filter set) to localStorage ── */
   const [saved, setSaved] = useState(false);
@@ -121,11 +91,10 @@ export function ScreenerScreen() {
       setRs90(!!s.rs90); setRs7090(!!s.rs7090); setRsLt40(!!s.rsLt40);
       setSalesGt20(!!s.salesGt20); setEpsGt25(!!s.epsGt25); setMarginPos(!!s.marginPos);
       setRatingBuy(!!s.ratingBuy); setMcGt10(s.mcGt10 ?? true); setRvolGt15(!!s.rvolGt15);
-      setAboveDma(!!s.aboveDma); setRsi4070(!!s.rsi4070); setPriceGt5(!!s.priceGt5);
     } catch { /* ignore malformed saved filters */ }
   }, []);
   function saveScreen() {
-    const state = { activePresets: [...activePresets], rs90, rs7090, rsLt40, salesGt20, epsGt25, marginPos, ratingBuy, mcGt10, rvolGt15, aboveDma, rsi4070, priceGt5 };
+    const state = { activePresets: [...activePresets], rs90, rs7090, rsLt40, salesGt20, epsGt25, marginPos, ratingBuy, mcGt10, rvolGt15 };
     try { localStorage.setItem("iq-screener-filters", JSON.stringify(state)); } catch { /* storage full/blocked */ }
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
@@ -162,48 +131,45 @@ export function ScreenerScreen() {
     setRs90(false); setRs7090(false); setRsLt40(false);
     setSalesGt20(false); setEpsGt25(false); setMarginPos(false);
     setRatingBuy(false); setMcGt10(false); setRvolGt15(false);
-    setAboveDma(false); setRsi4070(false); setPriceGt5(false);
   }
 
   /* ── Filtered results ── */
-  // Every filter requires the underlying metric to be present — a row whose
-  // score hasn't computed is excluded from that filter, never passed on a
-  // fabricated value.
   const filtered = universe.filter(s => {
     // Preset filters — stock must pass at least one selected preset (OR logic)
     if (activePresets.size > 0) {
       const passesAny = [...activePresets].some(idx => {
         const pf = screenerPresets[idx].f;
-        if (pf.relativeStrength_min !== undefined && !(s.relativeStrength != null && s.relativeStrength >= pf.relativeStrength_min)) return false;
-        if (pf.salesGrowth_min      !== undefined && !(s.salesGrowth      != null && s.salesGrowth      >= pf.salesGrowth_min))      return false;
-        if (pf.epsGrowth_min        !== undefined && !(s.epsGrowth        != null && s.epsGrowth        >= pf.epsGrowth_min))        return false;
-        if (pf.rvolRatio_min        !== undefined && !(s.rvolRatio        != null && s.rvolRatio        >= pf.rvolRatio_min))        return false;
-        if (pf.marketCap_min        !== undefined && !(s.marketCap        != null && s.marketCap        >= pf.marketCap_min))        return false;
-        if (pf.techRating           !== undefined && !(s.techRating       != null && pf.techRating.includes(s.techRating)))          return false;
+        if (pf.relativeStrength_min !== undefined && s.relativeStrength < pf.relativeStrength_min) return false;
+        if (pf.salesGrowth_min      !== undefined && s.salesGrowth      < pf.salesGrowth_min)      return false;
+        if (pf.epsGrowth_min        !== undefined && s.epsGrowth        < pf.epsGrowth_min)        return false;
+        if (pf.rvolRatio_min        !== undefined && s.rvolRatio        < pf.rvolRatio_min)        return false;
+        if (pf.marketCap_min        !== undefined && s.marketCap        < pf.marketCap_min)        return false;
+        if (pf.techRating           !== undefined && !pf.techRating.includes(s.techRating))        return false;
         return true;
       });
       if (!passesAny) return false;
     }
     // Manual filters — all must pass (AND logic)
-    if (rs90      && !(s.relativeStrength != null && s.relativeStrength >= 90))                      return false;
-    if (rs7090    && !(s.relativeStrength != null && s.relativeStrength >= 70 && s.relativeStrength < 90)) return false;
-    if (rsLt40    && !(s.relativeStrength != null && s.relativeStrength < 40))                       return false;
-    if (salesGt20 && !(s.salesGrowth != null && s.salesGrowth > 20))                                 return false;
-    if (epsGt25   && !(s.epsGrowth   != null && s.epsGrowth   > 25))                                 return false;
-    if (marginPos && !(s.grossMargin != null && s.grossMargin > 10))                                 return false;
-    if (ratingBuy && !(s.techRating != null && ["Strong Buy", "Buy"].includes(s.techRating)))        return false;
-    if (mcGt10    && !(s.marketCap != null && s.marketCap >= 10))                                    return false;
-    if (rvolGt15  && !(s.rvolRatio != null && s.rvolRatio >= 1.5))                                   return false;
-    if (aboveDma  && !(s.price != null && s.sma50 != null && s.sma200 != null && s.price > s.sma50 && s.price > s.sma200)) return false;
-    if (rsi4070   && !(s.rsi14 != null && s.rsi14 >= 40 && s.rsi14 <= 70))                           return false;
-    if (priceGt5  && !(s.price != null && s.price > 5))                                              return false;
+    if (rs90      && s.relativeStrength < 90)                                 return false;
+    if (rs7090    && (s.relativeStrength < 70 || s.relativeStrength >= 90))   return false;
+    if (rsLt40    && s.relativeStrength >= 40)                                return false;
+    if (salesGt20 && s.salesGrowth < 20)                                      return false;
+    if (epsGt25   && s.epsGrowth   < 25)                                      return false;
+    if (marginPos && s.grossMargin <= 10)                                      return false;
+    if (ratingBuy && !["Strong Buy", "Buy"].includes(s.techRating))           return false;
+    if (mcGt10    && s.marketCap < 10)                                        return false;
+    if (rvolGt15  && s.rvolRatio < 1.5)                                       return false;
     return true;
   });
 
   /* selected stock — fall back to first result if current sel drops out */
   const selStock = filtered.find(s => s.ticker === scrSel) ?? filtered[0] ?? null;
   const selSym   = selStock?.ticker ?? "";
-  const selPx    = selStock?.price ?? 0;
+
+  /* price for CandleChart */
+  const selWatch = watchData.find(w => w.ticker === selSym);
+  const selMover = moversData.find(m => m.ticker === selSym);
+  const selPx    = selWatch?.price ?? selMover?.price ?? 0;
 
   /* how many "More" presets (index >= 4) are active */
   const moreActiveCount = [...activePresets].filter(i => i >= 4).length;
@@ -213,7 +179,7 @@ export function ScreenerScreen() {
       <div className="page-head">
         <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
           {filtered.length} match{filtered.length !== 1 ? "es" : ""}
-          {universe.length > 0 && <> · <span style={{ color: "var(--text-dim-solid)" }}>{universe.length} companies scanned</span></>}
+          {liveCount > 0 && <> · <span style={{ color: "var(--up)" }}>{liveCount} live cap/PE</span></>}
         </span>
         <button className="btn primary" onClick={saveScreen}>
           <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
@@ -320,14 +286,14 @@ export function ScreenerScreen() {
             <div className="fgroup" style={{ flex: 1, borderBottom: "none", borderRight: "1px solid var(--border-soft)" }}>
               <div className="fl">Technical rating</div>
               <CheckOpt label="Strong Buy / Buy"   on={ratingBuy} onToggle={() => setRatingBuy(o => !o)} />
-              <CheckOpt label="Above 50 & 200-DMA" on={aboveDma}  onToggle={() => setAboveDma(o => !o)} />
-              <CheckOpt label="RSI 40–70"          on={rsi4070}   onToggle={() => setRsi4070(o => !o)} />
+              <CheckOpt label="Above 50 & 200-DMA" on={false}     onToggle={() => {}} />
+              <CheckOpt label="RSI 40–70"          on={false}     onToggle={() => {}} />
             </div>
             <div className="fgroup" style={{ flex: 1, borderBottom: "none" }}>
               <div className="fl">Liquidity &amp; cap</div>
               <CheckOpt label="Market cap > $10B"  on={mcGt10}   onToggle={() => setMcGt10(o => !o)} />
               <CheckOpt label="RVOL > 1.5×"        on={rvolGt15} onToggle={() => setRvolGt15(o => !o)} />
-              <CheckOpt label="Price > $5"          on={priceGt5} onToggle={() => setPriceGt5(o => !o)} />
+              <CheckOpt label="Price > $5"          on={false}    onToggle={() => {}} />
             </div>
           </div>
 
@@ -343,11 +309,7 @@ export function ScreenerScreen() {
               title="Results"
               headerRight={<span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{filtered.length} matches</span>}
               isEmpty={filtered.length === 0}
-              emptyMessage={
-                universe.length === 0
-                  ? (loading ? "Loading companies…" : "No company data has synced yet.")
-                  : "No matches — try relaxing filters."
-              }
+              emptyMessage="No matches — try relaxing filters."
               maxListHeight={414}
             >
               {filtered.map((s, i) => (
@@ -356,12 +318,12 @@ export function ScreenerScreen() {
                   sym={s.ticker}
                   name={s.name}
                   seed={i + 11}
-                  sparkUp={(s.relativeStrength ?? 0) >= 60}
+                  sparkUp={s.relativeStrength >= 60}
                   isSelected={selSym === s.ticker}
                   onClick={() => setScrSel(s.ticker)}
-                  valueTop={s.relativeStrength == null ? "RS —" : `RS ${s.relativeStrength}`}
-                  valueBottom={s.techRating ?? "—"}
-                  valueBottomClass={s.techRating == null ? "" : s.techRating.includes("Buy") ? "up" : s.techRating.includes("Sell") ? "down" : ""}
+                  valueTop={`RS ${s.relativeStrength}`}
+                  valueBottom={s.techRating}
+                  valueBottomClass={s.techRating.includes("Buy") ? "up" : s.techRating.includes("Sell") ? "down" : ""}
                 />
               ))}
             </StockListCard>

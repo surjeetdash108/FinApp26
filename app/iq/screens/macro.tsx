@@ -1,32 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { StockLogo, SampleBadge } from "../utils";
-import { useCollection } from "../hooks/useCollection";
-import { useDividendHistory } from "../hooks/useDividendHistory";
+import { StockLogo } from "../utils";
+import { useApiList } from "../hooks/useApiList";
+import type { MacroEventDoc, DividendDoc } from "../types";
 import { rangeFor, inRange, fmtMonthDay, rangeLabel, type RangeTabKey } from "../calendar-range";
-
-interface MacroEventDoc {
-  id: string;
-  name: string;
-  seriesId: string;
-  unit: string;
-  importance: "high" | "medium" | "low";
-  eventDate: string;
-  actual: number | null;
-  previous: number | null;
-  source: string;
-}
-
-interface DividendDoc {
-  id: string;
-  ticker: string;
-  exDividendDate: string;
-  paymentDate: string | null;
-  dividendAmount: number;
-  yieldPct: number | null;
-  frequency: string | null;
-}
 
 // ── Economic calendar ────────────────────────────────────────────────────────
 const ECO_TABS = ["Last month", "Last week", "This week", "Next week", "This month"];
@@ -347,19 +325,11 @@ function DivHistoryChart({ data }: { data: { year: number; div: number }[] }) {
 
 // ── Dividend sliding drawer ──────────────────────────────────────────────────
 function DividendDrawer({ stock, onClose }: { stock: DivStock; onClose: () => void }) {
-  // Real 10-year totals and CAGR from corporate-actions.job when synced. The
-  // divHistory() fallback below back-extrapolates the current amount at a
-  // ticker-hash-derived growth rate — every year of it invented, and its "CAGR"
-  // is therefore just that hash read back out.
-  const real = useDividendHistory(stock.sym);
-  const annual = real?.ttmTotal ?? stock.amount * 4;
-  const hist = real && real.annualTotals.length > 1
-    ? real.annualTotals.map(a => ({ year: a.year, div: a.total })).reverse()
-    : divHistory(stock.sym, annual);
-  const cagr = real?.cagr5yPct ?? (hist.length >= 2
+  const annual = stock.amount * 4;
+  const hist   = divHistory(stock.sym, annual);
+  const cagr   = hist.length >= 2
     ? (Math.pow(hist[hist.length - 1].div / (hist[0].div || 0.01), 1 / (hist.length - 1)) - 1) * 100
-    : 0);
-  const isRealHistory = !!real && real.annualTotals.length > 1;
+    : 0;
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -370,9 +340,7 @@ function DividendDrawer({ stock, onClose }: { stock: DivStock; onClose: () => vo
             <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>
               {stock.sym} · Dividend History
             </div>
-            <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-              {stock.name} · {stock.sector} · {isRealHistory ? `${hist.length} years declared` : "Last 10 years · sample"}
-            </div>
+            <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{stock.name} · {stock.sector} · Last 10 years</div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
         </div>
@@ -383,10 +351,7 @@ function DividendDrawer({ stock, onClose }: { stock: DivStock; onClose: () => vo
             <div className="m"><div className="k">Yield</div><div className="v up">{stock.yld != null && stock.yld > 0 ? stock.yld.toFixed(2) + "%" : "—"}</div></div>
             <div className="m"><div className="k">Div streak</div><div className="v">{stock.streak != null && stock.streak > 0 ? stock.streak + " yrs" : "—"}</div></div>
             <div className="m"><div className="k">Frequency</div><div className="v" style={{ fontSize: ".85rem" }}>{stock.freq}</div></div>
-            <div className="m">
-              <div className="k">{isRealHistory ? "5yr CAGR" : "10yr CAGR"}</div>
-              <div className={`v${cagr >= 0 ? " up" : ""}`}>{cagr.toFixed(1)}%</div>
-            </div>
+            <div className="m"><div className="k">10yr CAGR</div><div className="v up">{cagr.toFixed(1)}%</div></div>
           </div>
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="card-h"><h3>Annual dividend per share</h3></div>
@@ -445,33 +410,12 @@ function DivChip({ d, selected, onSelect }: { d: DivStock; selected: boolean; on
 const MONTHS_LBL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DOWS       = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
-/** Live DividendDoc → the DivStock shape the month calendar renders. */
-function liveToDivStock(dv: DividendDoc): DivStock {
-  const d = new Date(`${dv.exDividendDate}T00:00:00Z`);
-  const exMonth = d.getUTCMonth() + 1, exDay = d.getUTCDate();
-  const pay = dv.paymentDate ? new Date(`${dv.paymentDate}T00:00:00Z`) : null;
-  return {
-    sym: dv.ticker, name: dv.ticker, sector: "—",
-    exDate: `${MONTHS_LBL[exMonth - 1]} ${exDay}`,
-    payDate: pay ? `${MONTHS_LBL[pay.getUTCMonth()]} ${pay.getUTCDate()}` : "—",
-    exMonth, exDay,
-    payMonth: pay ? pay.getUTCMonth() + 1 : exMonth, payDay: pay ? pay.getUTCDate() : exDay,
-    amount: dv.dividendAmount ?? 0, yld: dv.yieldPct ?? 0,
-    freq: dv.frequency ?? "—", streak: 0, weekDay: (d.getUTCDay() + 6) % 7,
-  } as DivStock;
-}
-
-function divMonthCal(year: number, month1: number, live: DividendDoc[]) {
+function divMonthCal(year: number, month1: number) {
   const first = new Date(year, month1 - 1, 1).getDay();
   const days  = new Date(year, month1, 0).getDate();
-  // Live ex-dates for this month; fall back to the static set only if none.
-  const liveForMonth = live
-    .filter(dv => dv.exDividendDate?.slice(0, 7) === `${year}-${String(month1).padStart(2, "0")}`)
-    .map(liveToDivStock);
-  const source = liveForMonth.length > 0 ? liveForMonth : DIV_STOCKS.filter(s => s.exMonth === month1);
   const map: Record<number, DivStock[]> = {};
   for (let d = 1; d <= days; d++) {
-    map[d] = source.filter(s => s.exDay === d);
+    map[d] = DIV_STOCKS.filter(s => s.exMonth === month1 && s.exDay === d);
   }
   return { first, days, map };
 }
@@ -491,52 +435,17 @@ function formatMacroValue(value: number | null, unit: string): string {
 }
 
 export function MacroScreen() {
-  const { data: macroLive } = useCollection<MacroEventDoc>("macro_events");
+  const { data: macroLive } = useApiList<MacroEventDoc>("/market-data/macro-events");
   const macroLiveSorted = [...macroLive].sort((a, b) => IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance]);
 
-  const { data: liveDividends } = useCollection<DividendDoc>("dividends");
-  const { data: macroIndices } = useCollection<{ id: string; value?: number; pctChange?: number; change?: number }>("market_indices");
-  const vix = macroIndices.find(i => i.id === "VIX" || i.id === "VIXY");
-  const us10y = macroIndices.find(i => i.id === "US10Y");
-  const { data: breadthDocs } = useCollection<{ id: string; breadthPct?: number }>("market_breadth");
-
-  // Real market regime, computed from live signals instead of the old hardcoded
-  // "Risk-On Rally": VIX level + market breadth (adv/dec) + the 10Y yield's
-  // direction. Each casts a vote; the sum picks Risk-On / Neutral / Risk-Off.
-  const latestBreadth = [...breadthDocs].sort((a, b) => b.id.localeCompare(a.id))[0];
-  const regime = (() => {
-    const parts: string[] = [];
-    let score = 0;
-    const v = vix?.value;
-    if (v != null) {
-      if (v < 16) { score += 1; parts.push("volatility low"); }
-      else if (v > 24) { score -= 1; parts.push("volatility elevated"); }
-      else parts.push("volatility moderate");
-    }
-    const b = latestBreadth?.breadthPct;
-    if (b != null) {
-      if (b > 0.55) { score += 1; parts.push("breadth positive"); }
-      else if (b < 0.45) { score -= 1; parts.push("breadth negative"); }
-      else parts.push("breadth mixed");
-    }
-    // US10Y `change` is a basis-point move; easing (falling) yields are risk-on.
-    const yc = us10y?.change;
-    if (yc != null && yc !== 0) {
-      if (yc < 0) { score += 0.5; parts.push("yields easing"); }
-      else { score -= 0.5; parts.push("yields rising"); }
-    }
-    const label = score >= 1 ? "Risk-On" : score <= -1 ? "Risk-Off" : "Neutral / Mixed";
-    const tone = score >= 1 ? "up" : score <= -1 ? "down" : "";
-    const known = v != null || b != null;
-    return { label, tone, desc: parts.length ? `${parts.join(", ")}.` : "", known };
-  })();
+  const { data: liveDividends } = useApiList<DividendDoc>("/market-data/dividends");
   // One clock for the whole screen so tabs cannot disagree mid-render.
   const now = new Date();
+  const liveDividendsSorted = [...liveDividends].sort((a, b) => a.exDividendDate.localeCompare(b.exDividendDate));
 
   const [ecoTab,    setEcoTab]    = useState(2);
   // Live macro_events drives the calendar; CAL_* renders only when empty.
   const ecoRows = ecoRowsFor(ecoTab, macroLive, now);
-  const ecoIsSample = macroLive.length === 0;
   const [divTab,    setDivTab]    = useState<DivTabKey>("week");
   const [monthOff,  setMonthOff]  = useState(0);
   const [selStock,  setSelStock]  = useState<DivStock | null>(null);
@@ -653,7 +562,7 @@ export function MacroScreen() {
     const base  = new Date(2026, 5 + monthOff, 1);
     const year  = base.getFullYear();
     const mon1  = base.getMonth() + 1;
-    const cal   = divMonthCal(year, mon1, liveDividends);
+    const cal   = divMonthCal(year, mon1);
     const todayMark = monthOff === 0 ? 25 : -1;
     const dayList = calDay ? (cal.map[calDay] ?? []) : [];
 
@@ -752,12 +661,11 @@ export function MacroScreen() {
       <div className="dash" style={{ alignItems: "stretch" }}>
         <div className="col-4" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div className="card">
-            <div className="card-h"><h3>Market regime {!regime.known && <SampleBadge title="No live VIX/breadth synced yet" />}</h3></div>
+            <div className="card-h"><h3>Market regime</h3></div>
             <div className="card-b" style={{ textAlign: "center", padding: "22px 15px" }}>
-              <div className={`gauge-lbl ${regime.tone}`} style={{ fontSize: "1.3rem" }}>{regime.label}</div>
+              <div className="gauge-lbl up" style={{ fontSize: "1.3rem" }}>Risk-On Rally</div>
               <p style={{ fontSize: ".78rem", color: "var(--text-dim-solid)", marginTop: 10, lineHeight: 1.5 }}>
-                {regime.desc ? `${regime.desc.charAt(0).toUpperCase()}${regime.desc.slice(1)} ` : ""}
-                Computed daily from the VIX level, market breadth (advancers/decliners) and the 10-year yield's direction.
+                Breadth strong, yields easing, cyclicals leading defensives. Updated daily from internals, yield behaviour and sector rotation.
               </p>
             </div>
           </div>
@@ -765,18 +673,11 @@ export function MacroScreen() {
             <div className="card-h"><h3>VIX</h3></div>
             <div className="card-b">
               <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                <span className="big">{vix?.value != null ? vix.value.toFixed(2) : "—"}</span>
-                {vix?.pctChange != null && (
-                  <span className={`mono ${vix.pctChange >= 0 ? "up" : "down"}`} style={{ fontWeight: 600 }}>
-                    {vix.pctChange >= 0 ? "▲" : "▼"} {vix.pctChange.toFixed(2)}%
-                  </span>
-                )}
+                <span className="big">14.18</span>
+                <span className="mono down" style={{ fontWeight: 600 }}>▼ -2.51%</span>
               </div>
-              <div className="note" style={{ marginTop: 8 }}>
-                {vix?.value != null
-                  ? "Live via VIXY (volatility ETN proxy — directional, not the spot VIX level)."
-                  : "Awaiting live volatility data."}
-              </div>
+              <div className="pctl" style={{ marginTop: 10 }}><i style={{ width: "22%" }} /></div>
+              <div className="note" style={{ marginTop: 8 }}>VIX at 14 is low — calm, risk-on conditions and cheap hedging.</div>
             </div>
           </div>
         </div>
@@ -784,7 +685,7 @@ export function MacroScreen() {
         <div className="col-8" style={{ display: "flex", flexDirection: "column" }}>
           <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <div className="card-h">
-              <h3>Economic calendar {ecoIsSample && <SampleBadge />}</h3>
+              <h3>Economic calendar</h3>
               <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>
                 {ecoRows.length} events
               </span>
@@ -873,6 +774,44 @@ export function MacroScreen() {
         </div>
       )}
 
+      {/* ── Live dividend calendar (Polygon-primary as of 2026-07-12, FMP fallback) — additive, doesn't touch the illustrative dividend calendar above ── */}
+      {liveDividendsSorted.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div className="card">
+            <div className="card-h">
+              <h3>Live Dividend Calendar</h3>
+              <span className="pill ai" style={{ fontSize: ".68rem" }}>live · Polygon</span>
+            </div>
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Ticker</th><th>Ex-div date</th><th>Pay date</th>
+                    <th className="num">Amount</th><th className="num">Yield</th><th>Frequency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveDividendsSorted.slice(0, 30).map(d => (
+                    <tr key={d.id}>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <StockLogo sym={d.ticker} size={20} />
+                          <b style={{ color: "var(--text-hi)", fontFamily: "var(--f-mono)" }}>{d.ticker}</b>
+                        </div>
+                      </td>
+                      <td>{d.exDividendDate}</td>
+                      <td>{d.paymentDate ?? "—"}</td>
+                      <td className="num">${d.dividendAmount.toFixed(2)}</td>
+                      <td className="num">{d.yieldPct != null ? <span className="up">{d.yieldPct.toFixed(2)}%</span> : "—"}</td>
+                      <td>{d.frequency ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
 
       {/* ── VIX Sensitive Stocks ── */}

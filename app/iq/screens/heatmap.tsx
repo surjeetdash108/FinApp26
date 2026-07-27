@@ -2,17 +2,12 @@
 
 import { useRef, useState } from "react";
 import { useIQActions } from "../shell";
-import { sign, heatCol, fmt, cls, StockLogo, DataState, isEmptyState } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { sectorList, movers, screenerStocks, type SectorRow } from "../data";
+import { sign, heatCol, fmt, cls, StockLogo } from "../utils";
+import { useApiList } from "../hooks/useApiList";
+import type { CompanyDoc, SectorApiDoc } from "../types";
 
-/** Treemap sector grouping — built live from the `companies` collection. */
-interface SectorRow {
-  name: string;
-  pctChange: number;
-  items: [string, number, number][]; // [ticker, marketCap($B), change%]
-}
-
-const TABS = ["Day %", "Week %"];
+const TABS = ["Stocks", "S&P 500"];
 const HEADER_H = 24;
 const APPROX_W = 1100;
 const APPROX_H = 620;
@@ -54,86 +49,39 @@ interface HoverStock {
   peers: [string, number, number][];
 }
 
-interface CompanyDoc {
-  id: string; ticker: string; price: number | null; pctChange: number | null; marketCap: number | null;
-  sector?: string | null;
-  // Live technicals (technical-indicators.job / rs-rating.job) — power the
-  // hover tooltip and the Day/Week heat toggle, replacing static data.ts reads.
-  rvol?: number | null; rsRating?: number | null;
-  aboveSma50?: boolean | null; aboveSma200?: boolean | null;
-  week5ChangePct?: number | null;
-}
-interface SectorApiDoc {
-  id: string; sector: string; pctChange: number;
-}
-
-type HeatMode = "day" | "week";
-
-/** MA status label from the live price-vs-SMA flags. */
-function maStatusFrom(c: CompanyDoc | undefined): string | null {
-  if (!c || (c.aboveSma50 == null && c.aboveSma200 == null)) return null;
-  const a50 = c.aboveSma50, a200 = c.aboveSma200;
-  if (a50 == null || a200 == null) return (a50 ?? a200) ? "Above key MA" : "Below key MA";
-  if (a50 && a200) return "Above 50 & 200";
-  if (!a50 && !a200) return "Below 50 & 200";
-  return a50 ? "Above 50, below 200" : "Below 50, above 200";
-}
-
 /**
- * Builds the treemap entirely from LIVE data: groups the `companies` collection
- * by each company's real `sector` (derived from its SIC code by companies.job),
- * sizes tiles by real `marketCap`, and colours by the real day / 5-day change.
- *
- * No curated/static structure — a company with no sector or no market cap is
- * simply omitted. When nothing has synced, the caller renders an empty state
- * instead of fabricated tiles.
+ * Merges live company price/%change/marketCap and live sector %change into
+ * the original curated sectorList — never drops a sector or stock, only
+ * overrides values where real data exists.
  */
-function buildSectorList(
-  companies: CompanyDoc[],
-  sectorsLive: SectorApiDoc[],
-  mode: HeatMode,
-): SectorRow[] {
+function mergeSectorList(base: SectorRow[], companies: CompanyDoc[], sectorsLive: SectorApiDoc[]): SectorRow[] {
+  const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
   const sectorPctByName = new Map(sectorsLive.map(s => [s.sector, s.pctChange]));
 
-  const bySector = new Map<string, [string, number, number][]>();
-  for (const c of companies) {
-    const sec = c.sector;
-    if (!sec || c.marketCap == null) continue; // skip unclassified / uncapitalised
-    const mcap = c.marketCap / 1e9;             // $ → $B
-    const chg = mode === "week"
-      ? (c.week5ChangePct ?? c.pctChange ?? 0)
-      : (c.pctChange ?? 0);
-    const arr = bySector.get(sec) ?? [];
-    arr.push([c.ticker, mcap, chg]);
-    bySector.set(sec, arr);
-  }
-
-  const capWeighted = (items: [string, number, number][]): number => {
-    let wSum = 0, wcSum = 0;
-    for (const [, m, ch] of items) { wSum += m; wcSum += m * ch; }
-    return wSum > 0 ? wcSum / wSum : 0;
-  };
-
-  const rows: SectorRow[] = [];
-  for (const [name, items] of bySector) {
-    // Day: the vendor sector %change when the group matches a live sector doc,
-    // else a cap-weighted average of members. Week: cap-weighted only (no
-    // vendor 5-day sector series exists).
-    const live = mode === "day" ? sectorPctByName.get(name) : undefined;
-    rows.push({ name, pctChange: live ?? capWeighted(items), items });
-  }
-  return rows;
+  return base.map(row => {
+    const liveSectorPct = sectorPctByName.get(row.name);
+    const items: [string, number, number][] = row.items.map(([sym, mcap, chg]) => {
+      const c = companyByTicker.get(sym);
+      if (!c) return [sym, mcap, chg];
+      const liveMcap = c.marketCap != null ? c.marketCap / 1e9 : mcap; // stored in $, sectorList uses $B
+      const liveChg = c.pctChange ?? chg;
+      return [sym, liveMcap, liveChg];
+    });
+    return {
+      ...row,
+      pctChange: liveSectorPct ?? row.pctChange,
+      items,
+    };
+  });
 }
 
 export function HeatmapScreen() {
   const { openSector, openStockFull } = useIQActions();
-  const { data: companies, loading, error } = useCollection<CompanyDoc>("companies");
-  const { data: sectorsLive } = useCollection<SectorApiDoc>("sectors");
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const mergedSectorList = mergeSectorList(sectorList, companies, sectorsLive);
 
   const [tab, setTab]     = useState(0);
-  const heatMode: HeatMode = tab === 1 ? "week" : "day";
-  const mergedSectorList = buildSectorList(companies, sectorsLive, heatMode);
-  const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
   const [hover, setHover] = useState<HoverStock | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -168,7 +116,7 @@ export function HeatmapScreen() {
       </div>
 
       <div className="fbar">
-        <button className="chip on">Color: {heatMode === "week" ? "5-day" : "day"} % change</button>
+        <button className="chip on">Color: % change</button>
         <div className="spacer" />
         <div className="legend" style={{ gap: 4 }}>
           <span style={{ fontSize: ".66rem", color: "var(--down)" }}>−3%</span>
@@ -180,16 +128,6 @@ export function HeatmapScreen() {
       </div>
 
       {/* ── Treemap ── */}
-      {mergedSectorList.length === 0 ? (
-        <DataState
-          loading={loading}
-          error={error}
-          empty={isEmptyState(loading, error, mergedSectorList.length)}
-          label="sector heatmap data"
-          emptyMsg="No live company data has synced yet."
-          subMsg="Company profiles refresh on a rolling nightly schedule — the heatmap fills in as they arrive."
-        />
-      ) : (
       <div style={{
         position: "relative", width: "100%",
         height: "calc(100vh - 220px)", minHeight: 520,
@@ -292,13 +230,11 @@ export function HeatmapScreen() {
           );
         })}
       </div>
-      )}
 
       {/* ── Hover tooltip ── */}
       {hover && (() => {
-        // Live company doc (price/RVOL/RS/MA) — was static movers/screenerStocks.
-        const c = companyByTicker.get(hover.sym);
-        const maStatus = maStatusFrom(c);
+        const mv  = movers.find(m => m.ticker === hover.sym);
+        const scr = screenerStocks.find(s => s.ticker === hover.sym);
         return (
           <div className="dash-pop"
             style={{ left: hover.x, top: hover.y, cursor: "default", width: 310, maxHeight: `${window.innerHeight - hover.y - 8}px`, overflowY: "auto" }}
@@ -312,10 +248,10 @@ export function HeatmapScreen() {
               <span className={`pill ${hover.chg >= 0 ? "up" : "dn"}`}>{sign(hover.chg)}</span>
             </div>
             <div className="dp-row"><span>Mkt Cap</span><b>{capFmt(hover.mcap)}</b></div>
-            {c?.price != null && <div className="dp-row"><span>Price</span><b>${fmt(c.price)}</b></div>}
-            {c?.rvol != null && <div className="dp-row"><span>RVOL</span><b className={c.rvol >= 2 ? "up" : ""}>{c.rvol.toFixed(2)}×</b></div>}
-            {c?.rsRating != null && <div className="dp-row"><span>RS Rating</span><b>{Math.round(c.rsRating)}/99</b></div>}
-            {maStatus && <div className="dp-row"><span>MA Status</span><b className={cls(hover.chg)}>{maStatus}</b></div>}
+            {mv  && <div className="dp-row"><span>Price</span><b>${fmt(mv.price)}</b></div>}
+            {mv  && <div className="dp-row"><span>RVOL</span><b className={mv.rvolRatio >= 2 ? "up" : ""}>{mv.rvolRatio}×</b></div>}
+            {scr && <div className="dp-row"><span>RS Rating</span><b>{scr.relativeStrength}/99</b></div>}
+            {mv?.maPosture && <div className="dp-row"><span>MA Status</span><b className={cls(mv.pctChange)}>{mv.maPosture}</b></div>}
 
             {/* Same-sector stock list */}
             {hover.peers.length > 0 && (

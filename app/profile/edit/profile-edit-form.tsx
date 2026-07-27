@@ -2,10 +2,10 @@
 
 import { FirebaseError } from "firebase/app";
 import { updateProfile } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { firebaseAuth, firebaseDb } from "../../firebase";
+import { firebaseAuth } from "../../firebase";
+import { apiPatch } from "../../iq/backend";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { updateProfileData } from "../../store/profile-slice";
 import { InvestorProfile, ProfileFields, emptyInvestorProfile } from "../profile-fields";
@@ -66,7 +66,7 @@ export function ProfileEditForm() {
       if (firebaseAuth.currentUser) {
         await updateProfile(firebaseAuth.currentUser, { displayName: profile.name });
       }
-      await setDoc(doc(firebaseDb, "users", user.uid), { ...profile, updatedAt: serverTimestamp() }, { merge: true });
+      await apiPatch("/api/profile", profile);
       dispatch(updateProfileData({ ...profile, uid: user.uid, tier: savedProfile?.tier ?? "free" }));
       setSuccess("Profile updated successfully.");
       if (isOnboarding) {

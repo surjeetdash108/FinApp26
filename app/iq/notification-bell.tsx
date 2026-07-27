@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useCollection } from "./hooks/useCollection";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { firebaseAuth } from "../firebase";
+import { apiGet, apiPost } from "./backend";
 
 /**
  * Written server-side by news.job.ts when scoreImportance() flags an article.
- * Read-only for clients (see firestore.rules).
+ * Read/mark-as-read via GET/POST /api/notifications (src/user-data/notifications.controller.ts).
  */
 export interface NotificationDoc {
   id: string;
@@ -21,6 +21,7 @@ export interface NotificationDoc {
   url: string | null;
   publishedAt: string;
   reasons: string[];
+  read: boolean;
 }
 
 /** "20h ago" / "3d ago" — matches the relative style used elsewhere in the app. */
@@ -36,33 +37,29 @@ function timeAgo(iso: string): string {
   return `${d}d ago`;
 }
 
-/** localStorage key holding the ISO timestamp of the newest item already seen. */
-const SEEN_KEY = "mc:notifications:lastSeen";
-
 export function NotificationBell() {
   // Per-user subcollection: the backend only writes a notification to a user
   // whose watchlist or portfolio contains one of the story's tickers, so there
-  // is nothing to filter client-side. Firestore rules scope users/{uid}/** to
-  // the owner, so one user can never read another's alerts.
+  // is nothing to filter client-side.
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  // Signed-out renders resolve to a path that cannot exist, so the subscription
-  // yields an empty list rather than erroring. In practice the bell only mounts
-  // inside the authenticated shell.
-  const { data: notifications, error } = useCollection<NotificationDoc>(
-    uid ? `users/${uid}/notifications` : "users/__anonymous__/notifications",
-  );
+  const [notifications, setNotifications] = useState<NotificationDoc[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [lastSeen, setLastSeen] = useState<string>("");
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Read-state is per-browser. Each notification doc now DOES belong to a single
-  // user and carries a `read` field, so per-user read state is possible — but
-  // writing it requires a rules change (users/{uid}/notifications is currently
-  // server-write-only), so the badge uses localStorage until then.
-  useEffect(() => {
-    try { setLastSeen(localStorage.getItem(SEEN_KEY) ?? ""); } catch { /* private mode */ }
-  }, []);
+  const refresh = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const rows = await apiGet<NotificationDoc[]>("/api/notifications");
+      setNotifications(rows);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [uid]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {
     if (!open) return;
@@ -81,15 +78,15 @@ export function NotificationBell() {
   const sorted = [...notifications].sort((a, b) =>
     (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
   );
-  const unread = sorted.filter(n => (n.publishedAt ?? "") > lastSeen).length;
+  const unread = sorted.filter(n => !n.read).length;
 
   function toggleOpen() {
     const next = !open;
     setOpen(next);
-    if (next && sorted[0]?.publishedAt) {
-      // Mark everything currently visible as seen.
-      setLastSeen(sorted[0].publishedAt);
-      try { localStorage.setItem(SEEN_KEY, sorted[0].publishedAt); } catch { /* ignore */ }
+    if (next && unread > 0) {
+      // Mark everything currently visible as read, same trigger point as before.
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      void apiPost("/api/notifications/mark-all-read").catch(() => { /* best-effort */ });
     }
   }
 

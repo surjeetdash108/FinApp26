@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { type Mover } from "../data";
-import { fmt, sign, cls, arr, Spark, StockLogo, DataState, isEmptyState } from "../utils";
-import { useCollection } from "../hooks/useCollection";
+import { movers as mockMovers, analyst, earnings, watch, folio, type Mover } from "../data";
+import { fmt, sign, cls, arr, Spark, StockLogo } from "../utils";
+import { useApiList } from "../hooks/useApiList";
+import type { LiveMoverDoc, CompanyDoc } from "../types";
 
 const StockScreenEmbed = dynamic<{ initialSym?: string }>(
   () => import("./stock").then(m => ({ default: m.StockScreen })),
@@ -20,120 +21,85 @@ const TABS = [
 type TabKey = "win" | "lose" | "vol" | "week";
 const CAPS = ["All", "Mega", "Large", "Mid", "Small"];
 
-interface LiveMoverDoc {
-  id: string; ticker: string; name: string | null; price: number; pctChange: number;
-  volume: number; sector: string | null; cap: string | null; direction: "gainer" | "loser"; asOfDate: string;
-}
-
-/** Technical fields from technical-indicators.job / tech-rating.job. */
-interface CompanyTech {
-  id: string; ticker: string;
-  rvol: number | null;
-  sma50: number | null; sma200: number | null;
-  aboveSma50: boolean | null; aboveSma200: boolean | null;
-  week5ChangePct: number | null;
-  rsi14: number | null; macd: number | null;
-  rsRating: number | null;
-}
-
-/** Real MA posture from price-vs-SMA flags (was faked from the day's sign). */
-function maPostureFrom(t: CompanyTech | undefined, fallback: string): string {
-  if (!t || (t.aboveSma50 == null && t.aboveSma200 == null)) return fallback;
-  const a50 = t.aboveSma50, a200 = t.aboveSma200;
-  if (a50 == null || a200 == null) {
-    const one = a50 ?? a200;
-    return one ? "Above key MA" : "Below key MA";
-  }
-  if (a50 && a200) return "Above 50 & 200";
-  if (!a50 && !a200) return "Below 50 & 200";
-  return a50 ? "Above 50, below 200" : "Below 50, above 200";
-}
-
-/** Real technical context string from live indicators. */
-function techContextFrom(t: CompanyTech | undefined, asOf: string): string {
-  if (!t) return `Live EOD data as of ${asOf}.`;
-  const bits: string[] = [];
-  if (t.rsi14 != null) bits.push(`RSI ${t.rsi14.toFixed(0)}`);
-  if (t.macd != null) bits.push(`MACD ${t.macd >= 0 ? "bullish" : "bearish"}`);
-  if (t.rsRating != null) bits.push(`RS ${Math.round(t.rsRating)}`);
-  if (t.rvol != null) bits.push(`RVOL ${t.rvol.toFixed(2)}×`);
-  return bits.length ? bits.join(" · ") : `Live EOD data as of ${asOf}.`;
-}
-
 /**
- * Builds the movers list entirely from the LIVE `market_movers` collection —
- * no mock base, so no fabricated tickers are ever shown. Each row's core
- * (ticker/price/%change/sector/cap) is real; technicals (RVOL/RS/MA/week)
- * come from the `companies` doc when the compute job has reached that ticker,
- * otherwise they read as pending rather than being invented.
+ * Merges live Firestore market_movers data into the original mock list —
+ * never removes a mock row. Matching tickers get real price/%change/sector/
+ * cap; live-only tickers (not in the original mock set) are appended with
+ * neutral placeholders for fields that have no real data source yet (RVOL,
+ * catalyst, weekly change, technical/news context).
  */
-function buildMovers(
+function mergeMovers(
+  mock: Mover[],
   live: LiveMoverDoc[],
-  companyTech: Map<string, CompanyTech>,
-  tickersInNews: Set<string>,
-): Mover[] {
-  return live.map(l => {
-    const t = companyTech.get(l.ticker);
-    const inNews = tickersInNews.has(l.ticker);
+  companyRvol: Map<string, number | null>,
+): { list: Mover[]; liveCount: number } {
+  const liveByTicker = new Map(live.map(l => [l.ticker, l]));
+  let liveCount = 0;
+  // Real relative volume from technical-indicators.job (companies.rvol), when
+  // available — otherwise keep the row's existing (mock/placeholder) value.
+  const rv = (ticker: string, fallback: number) => companyRvol.get(ticker) ?? fallback;
+
+  const merged = mock.map(m => {
+    const l = liveByTicker.get(m.ticker);
+    if (!l) return { ...m, rvolRatio: rv(m.ticker, m.rvolRatio) };
+    liveByTicker.delete(m.ticker);
+    liveCount++;
     return {
+      ...m,
+      price: l.price,
+      pctChange: l.pctChange,
+      name: l.name ?? m.name,
+      sector: l.sector ?? m.sector,
+      cap: (l.cap as Mover["cap"]) ?? m.cap,
+      rvolRatio: rv(m.ticker, m.rvolRatio),
+    };
+  });
+
+  for (const l of liveByTicker.values()) {
+    liveCount++;
+    merged.push({
       ticker: l.ticker,
       name: l.name ?? l.ticker,
       price: l.price,
       pctChange: l.pctChange,
-      rvolRatio: t?.rvol ?? 1,
-      relativeStrength: t?.rsRating ?? 50,
-      catalystLabel: inNews ? "Recent news" : "No known catalyst",
-      // Real MA posture when technicals exist; "MA data pending" while the
-      // compute job hasn't reached this ticker (honest, not fabricated).
-      maPosture: maPostureFrom(t, "MA data pending"),
+      rvolRatio: rv(l.ticker, 1),
+      relativeStrength: 50,
+      catalystLabel: "No known catalyst",
+      maPosture: l.pctChange >= 0 ? "Above 50/200" : "Below 50/200",
       owned: false,
       sector: l.sector ?? "Unclassified",
       cap: (l.cap as Mover["cap"]) ?? "Mid",
-      weekPct: t?.week5ChangePct ?? l.pctChange,
-      techContext: techContextFrom(t, l.asOfDate),
-      newsContext: inNews
-        ? "Recent synced headlines exist for this ticker — see Commentary."
-        : "No recent synced news for this ticker.",
-    };
-  });
+      weekPct: l.pctChange,
+      techContext: `Live EOD data as of ${l.asOfDate}. RVOL/technical context not available for this synced name yet.`,
+      newsContext: "Live market data — catalyst not yet available from a connected news source.",
+    });
+  }
+
+  return { list: merged, liveCount };
 }
 
-/**
- * "Trending across reports" — tickers that appear in 2+ of today's live
- * sources (movers, analyst actions, earnings events). Driven entirely by real
- * collections; was previously computed from mock analyst/earnings/watch/folio.
- */
-function computeTrending(
-  moverTickers: string[],
-  analystTickers: string[],
-  earningsTickers: string[],
-) {
+function computeTrending(movers: Mover[]) {
   const srcs: Record<string, Set<string>> = {};
   const add = (s: string, src: string) => {
-    if (!s) return;
     if (!srcs[s]) srcs[s] = new Set();
     srcs[s].add(src);
   };
-  moverTickers.forEach(s   => add(s, "Movers"));
-  analystTickers.forEach(s => add(s, "Analyst"));
-  earningsTickers.forEach(s => add(s, "Earnings"));
+  movers.forEach(m  => add(m.ticker, "Movers"));
+  analyst.forEach(a => add(a.ticker, "Analyst"));
+  earnings.forEach(e => add(e.ticker, "Earnings"));
+  watch.forEach(w   => add(w.ticker, "Watchlist"));
+  folio.forEach(f   => add(f.ticker, "Portfolio"));
   return Object.entries(srcs)
-    .map(([s, set]) => ({ s, n: set.size, srcs: [...set] }))
+    .map(([s, set]) => ({ s, n: set.size, srcs: [...set], days: 2 + (s.charCodeAt(0) % 4) }))
     .filter(o => o.n >= 2)
-    .sort((a, b) => b.n - a.n);
+    .sort((a, b) => b.n - a.n || b.days - a.days);
 }
 
 export function MoversScreen() {
-  const { data: liveMovers, loading, error } = useCollection<LiveMoverDoc>("market_movers");
-  const { data: techCompanies } = useCollection<CompanyTech>("companies");
-  const { data: liveNews } = useCollection<{ id: string; ticker: string }>("news");
-  const { data: liveAnalyst } = useCollection<{ id: string; ticker: string }>("analyst_actions");
-  const { data: liveEarnings } = useCollection<{ id: string; ticker: string }>("earnings_events");
-  const companyTech = new Map(techCompanies.map(c => [c.ticker, c]));
-  // Tickers with at least one recent synced article — a light, honest catalyst
-  // signal (was hardcoded "No known catalyst" for every live row).
-  const tickersInNews = new Set(liveNews.map(a => a.ticker).filter(Boolean));
-  const movers = buildMovers(liveMovers, companyTech, tickersInNews);
+  const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
+  const { data: rvolCompanies } = useApiList<CompanyDoc>("/market-data/companies");
+  const companyRvol = new Map(rvolCompanies.map(c => [c.ticker, c.rvol ?? null]));
+  const { list: movers, liveCount } = mergeMovers(mockMovers, liveMovers, companyRvol);
 
   const [tab,          setTab]          = useState<TabKey>("win");
   const [sector,       setSector]       = useState("All");
@@ -162,22 +128,23 @@ export function MoversScreen() {
   filtered.forEach(m => { tally[m.sector] = (tally[m.sector] || 0) + 1; });
   const sectorTally = Object.entries(tally).sort((a, b) => b[1] - a[1]);
 
-  const trending = computeTrending(
-    movers.map(m => m.ticker),
-    liveAnalyst.map(a => a.ticker).filter(Boolean),
-    liveEarnings.map(e => e.ticker).filter(Boolean),
-  );
+  const trending = computeTrending(movers);
   const val = (m: Mover) => tab === "week" ? m.weekPct : m.pctChange;
 
   return (
     <>
-      {movers.length > 0 && (
-        <div className="page-head">
-          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {movers.length} live movers · EOD data
-          </span>
+      <div className="page-head">
+        <div className="tabs">
+          {TABS.map(([k, l]) => (
+            <button key={k} className={`tab${k === tab ? " on" : ""}`} onClick={() => setTab(k as TabKey)}>{l}</button>
+          ))}
         </div>
-      )}
+        {liveCount > 0 && (
+          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+            {liveCount} names backed by live EOD data
+          </span>
+        )}
+      </div>
 
       {/* Trending across reports */}
       {trending.length > 0 && (
@@ -196,7 +163,7 @@ export function MoversScreen() {
                 <button key={o.s} className="tr-pill" onClick={() => setSelectedSym(o.s)}>
                   <StockLogo sym={o.s} size={18} />
                   <span className="tr-tk">{o.s}</span>
-                  <span className="tr-mt">{o.n} reports</span>
+                  <span className="tr-mt">{o.n} reports · {o.days}d</span>
                   <Spark seed={o.s.charCodeAt(0)} up={isUp} w={52} h={16} />
                 </button>
               );
@@ -204,13 +171,6 @@ export function MoversScreen() {
           </div>
         </div>
       )}
-
-      {/* Movers tabs — below the Trending card */}
-      <div className="tabs" style={{ marginBottom: 12 }}>
-        {TABS.map(([k, l]) => (
-          <button key={k} className={`tab${k === tab ? " on" : ""}`} onClick={() => setTab(k as TabKey)}>{l}</button>
-        ))}
-      </div>
 
       {/* Filter bar */}
       <div className="fbar">
@@ -251,20 +211,7 @@ export function MoversScreen() {
             </tr>
           </thead>
           <tbody>
-            {movers.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ padding: 0 }}>
-                  <DataState
-                    loading={loading}
-                    error={error}
-                    empty={isEmptyState(loading, error, movers.length)}
-                    label="market movers"
-                    emptyMsg="No movers have synced yet."
-                    subMsg="Top gainers/losers refresh after each market session."
-                  />
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No stocks match these filters.</td>
               </tr>

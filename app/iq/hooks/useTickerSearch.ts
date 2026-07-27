@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiGet } from "../backend";
 
 export interface TickerSearchResult {
   ticker: string;
@@ -9,24 +10,24 @@ export interface TickerSearchResult {
   pctChange: number | null;
 }
 
-/**
- * Ticker/company-name search — ON-DEMAND redesign (2026-07-24).
- *
- * Queries `GET /live/search?q=` — an in-memory index over the full ~10k-ticker
- * Polygon reference universe held by the backend, refreshed daily. This
- * replaced the Firestore `tickers` collection (10k docs synced nightly, three
- * range queries per keystroke per user): search now costs ZERO Firestore reads
- * and even matches mid-word substrings ("oogle" → Alphabet), which Firestore
- * prefix ranges never could.
- *
- * Prices are not part of the search response — the dropdown overlays live
- * delayed prices via useLivePrices exactly as before.
- */
+interface SearchResponse {
+  q: string;
+  results: Array<{ ticker: string; name: string | null }>;
+}
 
 const DEBOUNCE_MS = 200;
-import { API_BASE } from "../backend";
-const BACKEND = API_BASE;
 
+/**
+ * On-demand ticker search via GET /live/search — an in-memory ~10,000-ticker
+ * universe (src/live/ticker-search.service.ts), zero Firestore reads.
+ * Replaces three parallel Firestore prefix-range queries against the
+ * `tickers` collection (ticker prefix, nameLower prefix, searchTokens
+ * array-contains).
+ *
+ * The backend's in-memory universe carries no live quote, so `price`/
+ * `pctChange` are always null here — callers already handle that gracefully
+ * (shell.tsx's curated fallback list has never had a price either).
+ */
 export function useTickerSearch(rawQuery: string): TickerSearchResult[] {
   const [results, setResults] = useState<TickerSearchResult[]>([]);
 
@@ -36,29 +37,23 @@ export function useTickerSearch(rawQuery: string): TickerSearchResult[] {
       setResults([]);
       return;
     }
-    let alive = true;
+    let cancelled = false;
+
     const handle = setTimeout(() => {
-      fetch(`${BACKEND}/live/search?q=${encodeURIComponent(trimmed)}`)
-        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-        .then((body: { results?: Array<{ ticker: string; name: string | null }> }) => {
-          if (!alive) return;
-          setResults(
-            (body.results ?? []).map((r) => ({
-              ticker: r.ticker,
-              name: r.name,
-              price: null,
-              pctChange: null,
-            })),
-          );
+      apiGet<SearchResponse>(`/live/search?q=${encodeURIComponent(trimmed)}`)
+        .then((data) => {
+          if (cancelled) return;
+          setResults(data.results.map((r) => ({ ticker: r.ticker, name: r.name, price: null, pctChange: null })));
         })
         .catch((err) => {
+          if (cancelled) return;
           console.error(`Ticker search failed for "${trimmed}":`, err);
-          if (alive) setResults([]);
+          setResults([]);
         });
     }, DEBOUNCE_MS);
 
     return () => {
-      alive = false;
+      cancelled = true;
       clearTimeout(handle);
     };
   }, [rawQuery]);

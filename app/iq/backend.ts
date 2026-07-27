@@ -1,31 +1,74 @@
-"use client";
+import { firebaseAuth } from "../firebase";
 
 /**
- * Backend base URLs — Firebase Hosting CDN routing (2026-07-26).
- *
- * firebase.json rewrites `/live/**` on the Hosting origin to the
- * `market-catalyst-live` Cloud Run service. Requests made SAME-ORIGIN
- * therefore pass through Firebase Hosting's global CDN, which caches each
- * response per the backend's own Cache-Control/s-maxage headers — identical
- * polls from many users collapse to ~1 origin request per interval per edge,
- * for free. (Per-user responses like /live/whoami are `no-store`, so the CDN
- * never caches them.)
- *
- * API_BASE  — cacheable JSON GETs (bars, company, search, collections,
- *             snapshot, market-status, whoami): same-origin on a Hosting
- *             domain (→ CDN), the direct Cloud Run URL everywhere else
- *             (local dev, previews).
- * SSE_BASE  — EventSource streams (tape): ALWAYS the direct Cloud Run URL.
- *             Hosting rewrites buffer responses and time out long streams, so
- *             SSE must bypass the proxy.
+ * Base URL for the MarketCatalystBackEnd REST/SSE/WS surface. Set
+ * NEXT_PUBLIC_BACKEND_URL to override (e.g. a Cloud Run URL); defaults to the
+ * local dev backend.
  */
+const BASE_URL = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:4100").replace(/\/$/, "");
 
-export const DIRECT_BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? "http://localhost:4100";
+export class BackendApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "BackendApiError";
+  }
+}
 
-const onHostingOrigin =
-  typeof window !== "undefined" &&
-  /(\.web\.app|\.firebaseapp\.com)$/.test(window.location.hostname);
+/** Attaches the current Firebase ID token, if any. Anonymous/public GETs get no header at all. */
+async function authHeaders(): Promise<Record<string, string>> {
+  const user = firebaseAuth.currentUser;
+  if (!user) return {};
+  const token = await user.getIdToken();
+  return { Authorization: `Bearer ${token}` };
+}
 
-export const API_BASE = onHostingOrigin ? "" : DIRECT_BACKEND;
-export const SSE_BASE = DIRECT_BACKEND;
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = { ...(await authHeaders()), ...(init.headers ?? {}) };
+  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new BackendApiError(res.status, body || res.statusText);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+export function apiGet<T>(path: string): Promise<T> {
+  return request<T>(path);
+}
+
+export function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+export function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+export function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+export function apiDelete<T>(path: string): Promise<T> {
+  return request<T>(path, { method: "DELETE" });
+}
+
+/** Absolute backend URL for a path — for EventSource/WebSocket construction, which can't go through fetch. */
+export function backendUrl(path: string): string {
+  return `${BASE_URL}${path}`;
+}

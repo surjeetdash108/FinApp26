@@ -3,23 +3,8 @@
 import { useState } from "react";
 import { useIQActions } from "../shell";
 import { cls, sign, StockLogo } from "../utils";
-import { useCollection } from "../hooks/useCollection";
-
-interface IpoEventDoc {
-  id: string;
-  date: string;
-  symbol: string | null;
-  name: string;
-  exchange: string | null;
-  priceLow: number | null;
-  priceHigh: number | null;
-  status: "expected" | "priced" | "filed" | "withdrawn";
-  // Aftermarket pricing (ipos.job enrichment) — real, when the IPO has listed.
-  offerPrice?: number | null;
-  currentPrice?: number | null;
-  day1Close?: number | null;
-  returnSinceIpoPct?: number | null;
-}
+import { useApiList } from "../hooks/useApiList";
+import type { IpoEventDoc } from "../types";
 
 function formatIpoPrice(low: number | null, high: number | null): string {
   if (low == null && high == null) return "—";
@@ -62,7 +47,7 @@ const SECTOR_OPTIONS = [
 export function IPOsScreen() {
   const { openStock } = useIQActions();
   const [sector, setSector] = useState("All");
-  const { data: liveIpos } = useCollection<IpoEventDoc>("ipos");
+  const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   const liveIposSorted = [...liveIpos].sort((a, b) => b.date.localeCompare(a.date));
 
   // Live ipos docs carry the offering, not its aftermarket performance, so
@@ -72,9 +57,9 @@ export function IPOsScreen() {
     s: e.symbol ?? "—",
     n: e.name,
     date: e.date,
-    offer: e.offerPrice ?? (e.priceLow != null && e.priceHigh != null ? (e.priceLow + e.priceHigh) / 2 : e.priceLow ?? e.priceHigh),
-    cur: e.currentPrice ?? null,
-    day1: e.day1Close ?? null,
+    offer: e.priceLow != null && e.priceHigh != null ? (e.priceLow + e.priceHigh) / 2 : e.priceLow ?? e.priceHigh,
+    cur: null,
+    day1: null,
     sec: e.exchange ?? "—",
     live: true,
   }));
