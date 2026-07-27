@@ -2,6 +2,21 @@
 
 System Architecture Document \| v1.1 \| June 2026
 
+> **⚠ Implementation status (updated 2026-07-27) — CURRENT, supersedes the
+> notes below.** Two changes since the older banners: (1) **The frontend now
+> talks to the backend via REST/SSE**, not Firestore directly. The UI resolves
+> its backend base URL at runtime (`app/iq/backend.ts`): `localhost:4100` in
+> dev, **same-origin** when deployed on Firebase Hosting, with `firebase.json`
+> rewriting `/api`, `/market-data` and `/live` to the public
+> `market-catalyst-live` Cloud Run service. (2) **There are two isolated
+> environments**: prod (`market-catalyst-502415`) and stage
+> (`market-catalyst-stage`) — separate Firebase projects with their own
+> Firestore/Auth/rules/service-account (stage seeded with a full copy of prod
+> data). Firebase config is env-driven: the UI reads `NEXT_PUBLIC_FIREBASE_*`
+> (stage build via `.env.production`); the backend reads `FIREBASE_PROJECT_ID`.
+> Both repos work on the `stage` branch. See the backend repo's
+> `Doc/02_Architecture_Document_Tracker.md` (top block) for the full topology.
+>
 > **⚠ Implementation status (updated 2026-07-09, first noted 2026-07-05):**
 > This document describes the originally proposed 5-layer architecture (ECS
 > workers, ClickHouse, Redis, BullMQ, Fastify REST + WebSocket gateway). The

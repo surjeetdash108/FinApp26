@@ -50,9 +50,26 @@ async function authHeaders(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}` };
 }
 
+/** Requests abort after this long so a stalled mobile connection can't hang forever. */
+const REQUEST_TIMEOUT_MS = 20_000;
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = { ...(await authHeaders()), ...(init.headers ?? {}) };
-  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+  // Without this a stalled connection (common on flaky mobile networks) leaves
+  // the fetch pending indefinitely. Callers that await it — e.g. the auth
+  // listener's profile fetch — would then never settle.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal ?? controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new BackendApiError(res.status, body || res.statusText);
