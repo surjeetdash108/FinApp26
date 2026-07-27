@@ -1,11 +1,36 @@
 import { firebaseAuth } from "../firebase";
 
 /**
- * Base URL for the MarketCatalystBackEnd REST/SSE/WS surface. Set
- * NEXT_PUBLIC_BACKEND_URL to override (e.g. a Cloud Run URL); defaults to the
- * local dev backend.
+ * Base URL for the MarketCatalystBackEnd REST/SSE surface, resolved at RUNTIME
+ * so a single static build works in every environment without a rebuild:
+ *
+ *   - Local dev (localhost / 127.0.0.1) -> http://localhost:4100 (local backend)
+ *   - Firebase Hosting (deployed)        -> same-origin, i.e. the Firebase base
+ *     URL. firebase.json rewrites /api, /market-data and /live to the backend
+ *     Cloud Run service, so there is no CORS and responses are CDN-cacheable.
+ *
+ * NEXT_PUBLIC_BACKEND_URL is honoured only as an explicit REMOTE override (e.g.
+ * pointing a local UI at a deployed backend). A localhost value is ignored once
+ * the page itself is served from a real host, so a dev env baked into a
+ * production build can never misroute deployed traffic back to localhost.
  */
-const BASE_URL = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:4100").replace(/\/$/, "");
+function resolveBackendBaseUrl(): string {
+  const override = process.env.NEXT_PUBLIC_BACKEND_URL?.trim().replace(/\/$/, "");
+  const isRemoteOverride = !!override && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(override);
+
+  // SSR / static-generation has no window; no client API calls happen there.
+  if (typeof window === "undefined") return override || "http://localhost:4100";
+
+  if (isRemoteOverride) return override as string;
+
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return "http://localhost:4100";
+
+  // Deployed on Firebase Hosting -> talk to our own origin (proxied to backend).
+  return window.location.origin;
+}
+
+const BASE_URL = resolveBackendBaseUrl();
 
 export class BackendApiError extends Error {
   constructor(
