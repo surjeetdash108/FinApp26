@@ -19,12 +19,12 @@ function resolveBackendBaseUrl(): string {
   const isRemoteOverride = !!override && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(override);
 
   // SSR / static-generation has no window; no client API calls happen there.
-  if (typeof window === "undefined") return override || "http://localhost:4100";
+  if (typeof window === "undefined") return override || "http://localhost:4400";
 
   if (isRemoteOverride) return override as string;
 
   const host = window.location.hostname;
-  if (host === "localhost" || host === "127.0.0.1") return "http://localhost:4100";
+  if (host === "localhost" || host === "127.0.0.1") return "http://localhost:4400";
 
   // Deployed on Firebase Hosting -> talk to our own origin (proxied to backend).
   return window.location.origin;
