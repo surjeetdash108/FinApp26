@@ -10,16 +10,16 @@ import {
 } from "firebase/auth";
 
 // Env-driven so each branch/environment authenticates against its OWN Firebase
-// project (its own Auth users, its own Firestore) instead of every build
-// unconditionally signing users into this hardcoded prod project — which is
-// exactly what staging was doing before this fix (confirmed via a screenshot:
-// staging's Google sign-in popup showed 'to continue to
-// market-catalyst-502415.firebaseapp.com').
+// project (its own Auth users, its own Firestore). Previously this object was
+// hardcoded to the prod project unconditionally, so a staging build still
+// signed users into market-catalyst-502415 — the stage site had no Firebase
+// project of its own from the browser's point of view, no matter which
+// backend or domain it was deployed under.
 //
-// Falls back to these same prod values, so this branch's behavior is
-// unchanged whether or not the NEXT_PUBLIC_FIREBASE_* vars below are set in
-// .env.production — they're set explicitly there anyway, for the same
-// per-branch-env-file pattern used for NEXT_PUBLIC_BACKEND_URL.
+// Falls back to the prod project's values so any branch/build that hasn't set
+// these NEXT_PUBLIC_FIREBASE_* vars behaves exactly as before (zero regression
+// risk) — but every environment should set its own via .env.production, the
+// same per-branch pattern already used for NEXT_PUBLIC_BACKEND_URL.
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "AIzaSyDVjZmJ11qzbPIvruwOHiTiMWvjTcUmhuk",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "market-catalyst-502415.firebaseapp.com",

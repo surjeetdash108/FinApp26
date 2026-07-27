@@ -33,6 +33,15 @@ export function FirebaseListener() {
             }),
           );
 
+          // Auth is ready the moment we know who the user is — mark it BEFORE
+          // fetching the profile. Previously setAuthReady() ran only after
+          // `await apiGet("/api/profile")`, so on a slow/flaky mobile network a
+          // hung profile fetch (or the token refresh inside it) left status
+          // stuck on "loading" and the dashboard stuck on its spinner — i.e.
+          // login succeeded but the app never "went inside". The profile now
+          // loads in the background and does not gate entry.
+          if (!cancelled) dispatch(setAuthReady());
+
           dispatch(setProfileLoading());
           try {
             const raw = await apiGet<Record<string, unknown> | null>("/api/profile");
@@ -43,9 +52,8 @@ export function FirebaseListener() {
         } else {
           dispatch(setUser(null));
           dispatch(setProfile(null));
+          if (!cancelled) dispatch(setAuthReady());
         }
-
-        if (!cancelled) dispatch(setAuthReady());
       });
     });
 
