@@ -9,18 +9,6 @@
     ],
     "rewrites": [
       {
-        "source": "/api/**",
-        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
-      },
-      {
-        "source": "/market-data/**",
-        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
-      },
-      {
-        "source": "/live/**",
-        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }
