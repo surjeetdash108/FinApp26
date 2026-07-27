@@ -226,6 +226,14 @@
    topbar, dwarfing the controls beside it. */
 .cmd-wrap {
   position: relative; flex: 1; max-width: 30rem;   /* was 960px, halved; rem so it tracks the type scale */
+  /* Without this, the search input's intrinsic ~170px width becomes an
+     un-shrinkable floor for this flex:1 item (default min-width:auto), so on a
+     narrow viewport the topbar overflows and pushes the right-side controls —
+     including the avatar whose dropdown holds Logout — off the right edge. On a
+     375px screen the avatar landed 76px off-screen, and the mobile nav rail has
+     no Logout, so there was no way to sign out at all. min-width:0 lets the
+     search shrink instead. */
+  min-width: 0;
 }
 .cmd {
   display: flex; align-items: center; gap: 8px;
@@ -240,7 +248,7 @@
 }
 .cmd:hover, .cmd.cmd-active { border-color: var(--brand); background: var(--brand-dim); }
 .cmd-input {
-  flex: 1; background: none; border: none; outline: none;
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
   font-size: 0.75rem; color: var(--text-hi); font-family: var(--f-body);
 }
 .cmd-input::placeholder { color: var(--text-dim-solid); }
@@ -2130,6 +2138,64 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 
   /* ---- Ticker: tighter items ---- */
   .tk { padding: 0 10px; }
+}
+
+/* Mobile content fixes (footer, headers, cards, wide tables) — kept in a
+   separate 767px block so it reads as one unit and layers over the shell rules
+   above. */
+@media (max-width: 767px) {
+
+  /* FOOTER — was the worst offender. `.disclaimer-bar` is position:fixed with
+     `left: var(--rail-w)`, which offsets it by the 218px sidebar. On mobile the
+     rail becomes a hidden slide-in drawer, but nothing reset that offset, so on
+     a 375px screen the footer started at x=245 and rendered just 130px wide —
+     35% of the viewport, jammed into the right-hand third. Measured, not
+     guessed. */
+  .disclaimer-bar {
+    left: 0;
+    padding: 6px 12px;
+    font-size: .6rem;
+    line-height: 1.45;
+  }
+
+  /* The fixed footer overlaps the end of scrollable content; .main's 40px is
+     not enough once the bar wraps to two lines at this width. */
+  .main { padding-bottom: 64px; }
+
+  /* HEADER — reclaim horizontal space; 18px side padding is a lot of a 375px
+     screen, and the sticky head competes with the topbar and ticker. */
+  .page-head { padding: 11px 12px; }
+  .page-title { font-size: 1.0625rem; }
+  .page-sub { font-size: .7rem; }
+
+  /* CONTENT — cards and grids */
+  .card-h { padding: 10px 11px; }
+  .card-b { padding: 10px 11px; }
+  .dash, .dgrid { gap: 10px; }
+
+  /* Market pulse: 3 columns is still cramped on a phone. */
+  .pulse { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  /* Any wide table must scroll inside its own box rather than pushing the
+     page sideways. */
+  .tbl-wrap, .opt-chain-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* OPTIONS CHAIN — this table went from 6 to 12 columns when per-contract
+     OHLCV was wired up, against a 760px min-width. On a phone that is a
+     horizontal scroll nobody can read, so the secondary price columns are
+     dropped and the identifying ones kept: type, strike, expiry, last, volume.
+     Columns are 4 Open, 5 High, 6 Low, 8 VWAP, 9 Range, 11 Trades, 12 As-of. */
+  .opt-chain { min-width: 0; font-size: .7rem; }
+  .opt-chain th:nth-child(4),  .opt-chain td:nth-child(4),
+  .opt-chain th:nth-child(5),  .opt-chain td:nth-child(5),
+  .opt-chain th:nth-child(6),  .opt-chain td:nth-child(6),
+  .opt-chain th:nth-child(8),  .opt-chain td:nth-child(8),
+  .opt-chain th:nth-child(9),  .opt-chain td:nth-child(9),
+  .opt-chain th:nth-child(11), .opt-chain td:nth-child(11),
+  .opt-chain th:nth-child(12), .opt-chain td:nth-child(12) { display: none; }
+
+  /* Nothing may make the page itself scroll sideways. */
+  body { overflow-x: hidden; }
 }
 /* Tablet (768–860px): options sidebar stacks above chain; sidebar still visible */
 @media (max-width: 860px) {
