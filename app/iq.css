@@ -1579,6 +1579,130 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ec-det summary::before { content: "▸ "; }
 .ec-det[open] summary::before { content: "▾ "; }
 
+/* ── Earnings calendar toolbar (Before Open / After Close / Both, Day/Week) ── */
+
+.ecal { display: flex; flex-direction: column; gap: 12px; }
+
+.ecal-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.ecal-nav { display: flex; align-items: center; gap: 10px; margin: 0 auto; }
+.ecal-arrow {
+  width: 30px; height: 30px; border-radius: 8px; flex: none;
+  background: transparent; border: 1px solid var(--border-soft);
+  color: var(--text-dim-solid); font-size: 1.1rem; line-height: 1; cursor: pointer;
+  transition: background .13s, color .13s, border-color .13s;
+}
+.ecal-arrow:hover { background: var(--surface-3); color: var(--text-hi); border-color: var(--border); }
+.ecal-arrow:disabled { opacity: .5; cursor: default; }
+.ecal-date {
+  font-family: var(--f-display); font-weight: 700; font-size: 1.05rem;
+  color: var(--text-hi); white-space: nowrap; min-width: 12rem; text-align: center;
+}
+
+.ecal-seg {
+  display: flex; gap: 2px; padding: 3px; flex: none;
+  background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 9px;
+}
+.ecal-segbtn {
+  padding: 5px 14px; border-radius: 6px; border: none; background: transparent;
+  color: var(--text-dim-solid); font-size: .8rem; font-weight: 600; cursor: pointer;
+  transition: background .13s, color .13s;
+}
+.ecal-segbtn.on { background: var(--surface-3); color: var(--text-hi); }
+
+/* Filter bar */
+.ecal-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ecal-pick { position: relative; }
+.ecal-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 8px;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  color: var(--text-dim-solid); font-size: .8rem; cursor: pointer;
+  transition: background .13s, color .13s, border-color .13s;
+}
+.ecal-chip b { color: var(--text-hi); font-weight: 600; }
+.ecal-chip:hover, .ecal-chip.on { border-color: var(--border); background: var(--surface-3); }
+.ecal-toggle.on { border-color: var(--brand); color: var(--text-hi); }
+.ecal-caret { font-size: .6rem; opacity: .7; }
+
+/* The click-away layer sits under the menu but over the page, so one click both
+   dismisses the menu and is swallowed (no accidental row selection beneath). */
+.ecal-away { position: fixed; inset: 0; z-index: 40; }
+.ecal-menu {
+  position: absolute; top: calc(100% + 5px); left: 0; z-index: 41;
+  min-width: 9rem; padding: 5px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 26px rgba(0,0,0,.4);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.ecal-opt {
+  text-align: left; padding: 7px 10px; border-radius: 6px; border: none;
+  background: transparent; color: var(--text); font-size: .8rem; cursor: pointer;
+}
+.ecal-opt:hover { background: var(--surface-3); }
+.ecal-opt.on { color: var(--brand-2); font-weight: 700; }
+
+/* Shared table */
+.ecal-tablewrap { overflow-x: auto; }
+.ecal-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.ecal-table th {
+  text-align: left; padding: 9px 12px; white-space: nowrap;
+  font-size: .68rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-dim-solid); border-bottom: 1px solid var(--border-soft);
+}
+.ecal-table td {
+  padding: 9px 12px; border-bottom: 1px solid var(--border-soft);
+  color: var(--text); white-space: nowrap;
+}
+.ecal-table th.r, .ecal-table td.r { text-align: right; }
+.ecal-table tbody tr { cursor: pointer; transition: background .1s; }
+.ecal-table tbody tr:hover { background: var(--surface-2); }
+.ecal-table tbody tr.on { background: var(--surface-3); }
+.ecal-num { font-family: var(--f-mono); }
+.ecal-table .up { color: var(--up); }
+.ecal-table .dn { color: var(--down); }
+
+.ecal-symcell { display: flex; align-items: center; gap: 9px; }
+.ecal-sym { font-weight: 700; color: var(--text-hi); }
+.ecal-name {
+  font-size: .7rem; color: var(--text-dim-solid);
+  max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Day view */
+.ecal-day {
+  background: var(--surface-1); border: 1px solid var(--border-soft); border-radius: 12px;
+  overflow: hidden;
+}
+.ecal-day-h {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 14px; border-bottom: 1px solid var(--border-soft);
+}
+.ecal-day-t { font-weight: 700; color: var(--text-hi); font-size: .9rem; }
+.ecal-day-n { font-size: .74rem; color: var(--text-dim-solid); }
+
+.ecal-empty {
+  padding: 34px 16px; text-align: center; color: var(--text-dim-solid); font-size: .84rem;
+  background: var(--surface-1); border: 1px solid var(--border-soft); border-radius: 12px;
+}
+.ecal-empty-h { font-weight: 700; color: var(--text-hi); margin-bottom: 5px; font-size: .9rem; }
+
+/* IPO block */
+.ecal-ipo {
+  background: var(--surface-1); border: 1px solid var(--border-soft); border-radius: 12px;
+  overflow: hidden;
+}
+.ecal-ipo-h {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 10px 14px; background: transparent; border: none; cursor: pointer;
+  color: var(--text-hi); font-size: .84rem; font-weight: 700;
+}
+.ecal-ipo-icon { color: var(--brand-2); font-size: .7rem; }
+.ecal-ipo-n { color: var(--text-dim-solid); font-weight: 600; }
+.ecal-ipo-chev { margin-left: auto; color: var(--text-dim-solid); font-size: .7rem; }
+
 /* ===== Watchlist — Google Finance two-panel layout ===== */
 .wl-layout {
   display: flex;
