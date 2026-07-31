@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { firebaseAuth } from "../../firebase";
-import { watch as watchData } from "../data";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc, WatchlistDoc } from "../types";
-import { arr, sign } from "../utils";
+import { arr, sign, DataState } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
 export function WatchlistScreen() {
@@ -14,50 +13,48 @@ export function WatchlistScreen() {
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
-  const [items, setItems]                 = useState<string[]>(() => watchData.map(w => w.ticker));
-  const [sel, setSel]                     = useState<string | null>(() => watchData[0]?.ticker ?? null);
+  const [items, setItems]                 = useState<string[]>([]);
+  const [sel, setSel]                     = useState<string | null>(null);
   const [addOpen, setAddOpen]             = useState(false);
   const [newSym, setNewSym]               = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  // Backend persistence layered on top of the demo watchlist: once signed in,
-  // a saved list (if any) takes over; an empty/missing doc keeps the demo names.
   const refreshWatchlist = useCallback(async () => {
     if (!uid) return;
     try {
       const { tickers } = await apiGet<WatchlistDoc>("/api/watchlist");
-      if (tickers.length > 0) {
-        setItems(tickers);
-        setSel(prev => prev ?? tickers[0] ?? null);
-      }
-    } catch { /* stay on demo data */ }
+      setItems(tickers);
+      setSel(prev => prev ?? tickers[0] ?? null);
+    } catch { /* leave watchlist empty */ }
   }, [uid]);
 
   useEffect(() => { void refreshWatchlist(); }, [refreshWatchlist]);
 
+  // Price/change always come from the live companies collection — a watched
+  // ticker with no live match still lists (it's the user's watchlist), but
+  // renders "not available" rather than a stale/fabricated price.
   const list = items.map(sym => {
-    const w = watchData.find(x => x.ticker === sym);
     const c = byTicker.get(sym);
-    const live = c?.price != null;
+    const hasLive = c?.price != null;
     return {
       ticker: sym,
-      name: c?.name ?? w?.name ?? sym,
-      price: c?.price ?? w?.price ?? 0,
-      pctChange: c?.pctChange ?? w?.pctChange ?? 0,
-      live,
+      name: c?.name ?? sym,
+      price: hasLive ? c!.price! : null,
+      pctChange: hasLive ? (c!.pctChange ?? 0) : null,
+      live: hasLive,
     };
   });
-  const liveCount = list.filter(w => w.live).length;
-  const up   = list.filter(w => w.pctChange > 0).length;
-  const dn   = list.filter(w => w.pctChange < 0).length;
-  const best  = [...list].sort((a, b) => b.pctChange - a.pctChange)[0];
-  const worst = [...list].sort((a, b) => a.pctChange - b.pctChange)[0];
+  const priced = list.filter((w): w is typeof w & { price: number; pctChange: number } => w.price != null);
+  const up   = priced.filter(w => w.pctChange > 0).length;
+  const dn   = priced.filter(w => w.pctChange < 0).length;
+  const best  = priced.length ? [...priced].sort((a, b) => b.pctChange - a.pctChange)[0] : null;
+  const worst = priced.length ? [...priced].sort((a, b) => a.pctChange - b.pctChange)[0] : null;
 
-  const sumTxt =
-    `Your ${list.length} watched names finished <b class="up">${up} up</b> / <b class="down">${dn} down</b> today.` +
+  const sumTxt = priced.length === 0 ? null :
+    `Your ${priced.length} priced watched names finished <b class="up">${up} up</b> / <b class="down">${dn} down</b> today.` +
     (best  ? ` <b>${best.ticker}</b> led (${sign(best.pctChange)})` : "") +
     (worst && worst.ticker !== best?.ticker ? `, <b>${worst.ticker}</b> lagged (${sign(worst.pctChange)})` : "") +
-    `. Broad market: Nasdaq <b class="up">+1.02%</b>, S&P 500 <b class="up">+0.73%</b>.`;
+    `.`;
 
   async function addStock() {
     const s = newSym.trim().toUpperCase();
@@ -94,7 +91,7 @@ export function WatchlistScreen() {
     <>
       <div className="page-head">
         <div>
-          <div className="page-sub">{items.length} stocks watching · {up} up / {dn} down today</div>
+          <div className="page-sub">{items.length} stocks watching{priced.length > 0 && <> · {up} up / {dn} down today</>}</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn primary" onClick={() => setAddOpen(true)}>
@@ -114,15 +111,18 @@ export function WatchlistScreen() {
             <span className="pill ai">leaders · laggards · alerts</span>
           </div>
           <div className="card-b">
-            <p dangerouslySetInnerHTML={{ __html: sumTxt }}
-              style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }} />
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <span className="src-chip">Up {up}/{list.length}</span>
-              <span className="src-chip">Nasdaq +1.02%</span>
-              <span className="src-chip">S&amp;P +0.73%</span>
-              {liveCount > 0 && <span className="src-chip">{liveCount}/{list.length} live</span>}
-              {uid && <span className="src-chip">Synced to your account</span>}
-            </div>
+            {sumTxt == null ? (
+              <DataState label="No live price data for any watched ticker yet." />
+            ) : (
+              <>
+                <p dangerouslySetInnerHTML={{ __html: sumTxt }}
+                  style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }} />
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span className="src-chip">Up {up}/{priced.length}</span>
+                  {uid && <span className="src-chip">Synced to your account</span>}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -144,13 +144,13 @@ export function WatchlistScreen() {
                   sym={w.ticker}
                   name={w.name}
                   seed={i + 3}
-                  sparkUp={w.pctChange >= 0}
+                  sparkUp={(w.pctChange ?? 0) >= 0}
                   isSelected={sel === w.ticker}
                   onClick={() => setSel(w.ticker)}
                   onDelete={() => setConfirmDelete(w.ticker)}
-                  valueTop={w.price >= 1000 ? `$${(w.price / 1000).toFixed(2)}K` : `$${w.price.toFixed(2)}`}
-                  valueBottom={`${arr(w.pctChange)} ${sign(w.pctChange)}`}
-                  valueBottomClass={w.pctChange >= 0 ? "up" : "down"}
+                  valueTop={w.price == null ? "—" : w.price >= 1000 ? `$${(w.price / 1000).toFixed(2)}K` : `$${w.price.toFixed(2)}`}
+                  valueBottom={w.pctChange == null ? "—" : `${arr(w.pctChange)} ${sign(w.pctChange)}`}
+                  valueBottomClass={w.pctChange == null ? "" : w.pctChange >= 0 ? "up" : "down"}
                 />
               ))}
             </StockListCard>

@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { screenerStocks, screenerPresets, watch as watchData, movers as moversData, type ScreenerStock } from "../data";
+import { screenerPresets, type ScreenerStock } from "../data";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
-// Maps the numeric 1-99 tech rating onto the mock's string categories so the
-// existing rating filter (Strong Buy / Buy / Neutral / Sell / Strong Sell)
-// keeps working unchanged.
-function ratingLabel(n: number): string {
+// Maps the numeric 1-99 tech rating onto the filter's string categories
+// (Strong Buy / Buy / Neutral / Sell / Strong Sell).
+function ratingLabel(n: number | null): string {
+  if (n == null) return "Neutral";
   if (n >= 90) return "Strong Buy";
   if (n >= 70) return "Buy";
   if (n >= 40) return "Neutral";
@@ -17,31 +17,28 @@ function ratingLabel(n: number): string {
   return "Strong Sell";
 }
 
-// Live companies data now covers marketCap/peRatio/price, relativeStrength
-// (rsRating), AND the previously-illustrative proprietary scores — techRating,
-// RVOL, sales/EPS growth, and gross margin — all computed by the backend score
-// jobs from real ohlcv_bars + Polygon financials. Each falls back to the mock
-// value until its job has run. Growth/margin are stored as decimals and scaled
-// to the mock's percentage units here; techRating is mapped to its label.
-function mergeScreenerStocks(mock: ScreenerStock[], byTicker: Map<string, CompanyDoc>): (ScreenerStock & { live: boolean })[] {
-  return mock.map(s => {
-    const c = byTicker.get(s.ticker);
-    if (!c) return { ...s, live: false };
-    return {
-      ...s,
-      marketCap: c.marketCap != null ? c.marketCap / 1e9 : s.marketCap,
-      peRatio: c.peRatio ?? s.peRatio,
-      relativeStrength: c.rsRating ?? s.relativeStrength,
-      techRating: c.techRating != null ? ratingLabel(c.techRating) : s.techRating,
-      rvolRatio: c.rvol ?? s.rvolRatio,
-      salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : s.salesGrowth,
-      epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : s.epsGrowth,
-      grossMargin: c.grossMargin != null ? c.grossMargin * 100 : s.grossMargin,
-      live:
-        c.marketCap != null || c.peRatio != null || c.rsRating != null ||
-        c.techRating != null || c.rvol != null || c.revenueGrowthYoY != null,
-    };
-  });
+/**
+ * Live-only universe: a ticker appears here only if `companies` has a doc for
+ * it (i.e. it has actually been synced — the on-demand redesign retired the
+ * fixed 241-ticker mock catalog in favor of this dynamic, usage-driven set).
+ * Individual score fields render a neutral 0/"Neutral" only when that
+ * specific compute job hasn't reached this ticker yet, never a mock number.
+ */
+function companiesToScreenerStocks(companies: CompanyDoc[]): (ScreenerStock & { live: boolean })[] {
+  return companies.map(c => ({
+    ticker: c.ticker,
+    name: c.name ?? c.ticker,
+    sector: c.sector ?? "—",
+    marketCap: c.marketCap != null ? c.marketCap / 1e9 : 0,
+    peRatio: c.peRatio ?? 0,
+    relativeStrength: c.rsRating ?? 0,
+    salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : 0,
+    epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : 0,
+    grossMargin: c.grossMargin != null ? c.grossMargin * 100 : 0,
+    rvolRatio: c.rvol ?? 0,
+    techRating: ratingLabel(c.techRating),
+    live: c.marketCap != null || c.peRatio != null || c.rsRating != null || c.techRating != null,
+  }));
 }
 
 function CheckOpt({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
@@ -63,7 +60,7 @@ function CheckOpt({ label, on, onToggle }: { label: string; on: boolean; onToggl
 export function ScreenerScreen() {
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
-  const universe = mergeScreenerStocks(screenerStocks, byTicker);
+  const universe = companiesToScreenerStocks(companies);
   const liveCount = universe.filter(s => s.live).length;
 
   /* ── Preset multi-select ── */
@@ -167,9 +164,7 @@ export function ScreenerScreen() {
   const selSym   = selStock?.ticker ?? "";
 
   /* price for CandleChart */
-  const selWatch = watchData.find(w => w.ticker === selSym);
-  const selMover = moversData.find(m => m.ticker === selSym);
-  const selPx    = selWatch?.price ?? selMover?.price ?? 0;
+  const selPx = byTicker.get(selSym)?.price ?? 0;
 
   /* how many "More" presets (index >= 4) are active */
   const moreActiveCount = [...activePresets].filter(i => i >= 4).length;

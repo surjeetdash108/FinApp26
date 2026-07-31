@@ -2453,3 +2453,27 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
   from { opacity: 0; transform: translateY(-50%) translateX(-3px); }
   to   { opacity: 1; transform: translateY(-50%) translateX(0); }
 }
+
+/* ── "Not available" / loading placeholders (replaces silent mock fallback) ── */
+
+.not-avail {
+  color: var(--text-dim-solid);
+  font-style: italic;
+  font-size: .92em;
+  cursor: help;
+}
+
+.data-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 28px 16px; text-align: center;
+  color: var(--text-dim-solid); font-size: .82rem;
+  min-height: 100px;
+  background: var(--surface-1); border: 1px dashed var(--border-soft); border-radius: 12px;
+}
+.data-state-spinner {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--border-soft); border-top-color: var(--brand-2);
+  animation: data-state-spin .8s linear infinite;
+}
+.data-state-icon { font-size: 1.3rem; opacity: .5; }
+@keyframes data-state-spin { to { transform: rotate(360deg); } }

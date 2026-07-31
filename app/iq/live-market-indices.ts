@@ -37,24 +37,26 @@ export function tapeItemsToIndexDocs(items: TapeItem[]): IndexDoc[] {
     }));
 }
 
-/** Shared by Dashboard's Market Pulse widget and the shell's top ticker strip — keeps both merges identical instead of drifting apart. */
+/**
+ * Shared by Dashboard's Market Pulse widget and the shell's top ticker strip
+ * — keeps both merges identical instead of drifting apart.
+ *
+ * `mock` supplies only the STRUCTURE (which 9 indices exist and their
+ * display labels — fixed configuration, not market data). Every numeric
+ * field (value/change/open/prevClose) must come from a live match; an index
+ * with no live doc yet is dropped from the result rather than rendered with
+ * its old static price, which used to render as if it were a real quote.
+ */
 export function mergePulse(mock: PulseItem[], live: IndexDoc[]): PulseItem[] {
   const liveById = new Map(live.map(l => [l.id, l]));
-  return mock.map(p => {
+  const merged: PulseItem[] = [];
+  for (const p of mock) {
     const id = PULSE_LABEL_TO_INDEX_ID[p.label];
     const l = id ? liveById.get(id) : undefined;
-    if (!l) return p;
-    // open/prevClose now come from the live doc. They used to be re-assigned
-    // from the mock (`open: p.open`) because IndexDoc never declared these
-    // fields — so a fabricated "O … · PC …" rendered directly beside a real
-    // price. The mock value remains only as a last-resort fallback for a doc
-    // written before those fields existed.
-    return {
-      ...p,
-      value: l.value,
-      change: l.pctChange,
-      open: l.open ?? p.open,
-      prevClose: l.prevClose ?? p.prevClose,
-    };
-  });
+    if (!l) continue;
+    // open/prevClose aren't always on the live doc yet; fall back to the
+    // current value (reads as "flat"), never to the old mock's number.
+    merged.push({ ...p, value: l.value, change: l.pctChange, open: l.open ?? l.value, prevClose: l.prevClose ?? l.value });
+  }
+  return merged;
 }

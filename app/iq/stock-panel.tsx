@@ -2,9 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { CandleChart, RsiPane, earnHistory, Spark } from "./utils";
-import { stockInfo, watch as watchData, screenerStocks } from "./data";
+import { CandleChart, RsiPane, DataState, Spark, type EarnQ } from "./utils";
 import { ExpandBtn } from "./shell";
+import { useApiList } from "./hooks/useApiList";
+import { useApiResource } from "./hooks/useApiResource";
+import { useBackendBars } from "./hooks/useBackendBars";
+import type { LiveEarningsDoc, CompanyDoc } from "./types";
 
 /* ── Shared dynamic embed — one definition for all screens ── */
 export const StockScreenEmbed = dynamic<{ initialSym?: string; hideHeader?: boolean; hideChart?: boolean }>(
@@ -25,9 +28,11 @@ function TrashIcon() {
   );
 }
 
-/* ── EPS surprise bars (mirrored from stock.tsx) ── */
-function EarnPane({ sym, base }: { sym: string; base: number }) {
-  const hist = earnHistory(sym, Math.max(0.5, base)).slice(0, 8).reverse();
+/* ── EPS surprise bars — real surprise % from the live earnings feed ── */
+function EarnPane({ hist }: { hist: EarnQ[] }) {
+  if (hist.length === 0) {
+    return <DataState label="No live earnings-surprise history synced for this ticker yet." height={80} />;
+  }
   const W = 720, H = 80, PADL = 40, PADR = 20, PADT = 10, PADB = 18;
   const iw = W - PADL - PADR;
   const ih = H - PADT - PADB;
@@ -139,16 +144,41 @@ export function StockListCard({
   );
 }
 
+/**
+ * Real 10-quarter-style EPS-surprise history + next earnings date, built from
+ * the live earnings feed for one ticker — same pattern stock.tsx uses for its
+ * own hist10, shared here so the two never drift onto different data.
+ */
+function useLiveEarningsForSym(sym: string): { hist: EarnQ[]; erDate: string } {
+  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const symEvents = liveEarnings.filter(e => e.ticker === sym).sort((a, b) => a.date.localeCompare(b.date));
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const erDate = symEvents.find(e => e.date >= todayStr)?.date ?? symEvents[symEvents.length - 1]?.date ?? "—";
+  const hist: EarnQ[] = symEvents
+    .filter(e => e.epsEstimate != null && e.epsActual != null)
+    .slice(-8)
+    .reverse()
+    .map(e => {
+      const est = e.epsEstimate as number, act = e.epsActual as number;
+      const surp = est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
+      return {
+        q: new Date(e.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        e: est, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
+      };
+    });
+  return { hist, erDate };
+}
+
 /* ── Expanded chart rendered inside the modal opened by ExpandBtn ── */
 function ChartCardExpanded({
   sym, px, initialTf, initialChartType, initialMaStep, initialEmaStep,
-  initialShowVol, initialShowRsi, initialShowEarnings, eps, rs, erDate,
+  initialShowVol, initialShowRsi, initialShowEarnings, rsi, hist, erDate,
 }: {
   sym: string; px: number; initialTf: string;
   initialChartType: "Candles" | "Hollow" | "Bars" | "Line" | "Area";
   initialMaStep: number; initialEmaStep: number;
   initialShowVol: boolean; initialShowRsi: boolean; initialShowEarnings: boolean;
-  eps: number; rs: number; erDate: string;
+  rsi: number | null; hist: EarnQ[]; erDate: string;
 }) {
   const [tf, setTf] = useState(initialTf);
   const [chartType, setChartType] = useState(initialChartType);
@@ -157,7 +187,7 @@ function ChartCardExpanded({
   const [showVol, setShowVol] = useState(initialShowVol);
   const [showRsi, setShowRsi] = useState(initialShowRsi);
   const [showEarnings, setShowEarnings] = useState(initialShowEarnings);
-  const rsiVal = Math.round(38 + rs * 0.36);
+  const realBars = useBackendBars(sym, tf);
   return (
     <div>
       <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
@@ -179,14 +209,16 @@ function ChartCardExpanded({
         <button className={`rng indbtn${showRsi ? " on" : ""}`} onClick={() => setShowRsi(v => !v)}>RSI</button>
         <button className={`rng indbtn${showEarnings ? " on" : ""}`} onClick={() => setShowEarnings(v => !v)}>Earnings</button>
       </div>
-      <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} />
+      <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars} />
       {showRsi && (
         <div style={{ marginTop: 4 }}>
           <div style={{ padding: "4px 0", fontSize: ".66rem", color: "var(--text-dim-solid)", display: "flex", justifyContent: "space-between" }}>
             <span>RSI (14)</span>
-            <span className="mono" style={{ color: "var(--warn)" }}>{rsiVal} · {rsiVal > 70 ? "overbought" : rsiVal < 40 ? "weak" : "neutral-to-strong"}</span>
+            <span className="mono" style={{ color: "var(--warn)" }}>
+              {rsi != null ? `${Math.round(rsi)} · ${rsi > 70 ? "overbought" : rsi < 40 ? "weak" : "neutral-to-strong"}` : "not available"}
+            </span>
           </div>
-          <RsiPane sym={sym} tf={tf} />
+          <RsiPane rsi14={rsi} />
         </div>
       )}
       {showEarnings && (
@@ -195,7 +227,7 @@ function ChartCardExpanded({
             <span>Earnings · EPS Surprise</span>
             <span className="mono" style={{ color: "var(--warn)", fontWeight: 600 }}>Next: {erDate}</span>
           </div>
-          <EarnPane sym={sym} base={eps} />
+          <EarnPane hist={hist} />
         </div>
       )}
     </div>
@@ -219,10 +251,10 @@ export function ChartCard({
   const [showRsi, setShowRsi] = useState(false);
   const [showEarnings, setShowEarnings] = useState(false);
 
-  const erDate = watchData.find(w => w.ticker === sym)?.nextEarningsDate ?? "—";
-  const eps = stockInfo[sym]?.eps ?? 1;
-  const rs = screenerStocks.find(s => s.ticker === sym)?.relativeStrength ?? 50;
-  const rsiVal = Math.round(38 + rs * 0.36);
+  const realBars = useBackendBars(sym, tf);
+  const { data: liveCompany } = useApiResource<CompanyDoc>(sym ? `/live/company?ticker=${encodeURIComponent(sym)}` : null);
+  const rsi = liveCompany?.rsi14 ?? null;
+  const { hist, erDate } = useLiveEarningsForSym(sym);
 
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -264,23 +296,23 @@ export function ChartCard({
                   initialMaStep={maStep} initialEmaStep={emaStep}
                   initialShowVol={showVol} initialShowRsi={showRsi}
                   initialShowEarnings={showEarnings}
-                  eps={eps} rs={rs} erDate={erDate}
+                  rsi={rsi} hist={hist} erDate={erDate}
                 />
               }
             />
           </div>
           <div style={{ padding: "0 14px 0" }}>
-            <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} />
+            <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars} />
           </div>
           {showRsi && (
             <div style={{ padding: "0 14px 4px" }}>
               <div style={{ padding: "4px 0", fontSize: ".66rem", color: "var(--text-dim-solid)", display: "flex", justifyContent: "space-between" }}>
                 <span>RSI (14)</span>
                 <span className="mono" style={{ color: "var(--warn)" }}>
-                  {rsiVal} · {rsiVal > 70 ? "overbought" : rsiVal < 40 ? "weak" : "neutral-to-strong"}
+                  {rsi != null ? `${Math.round(rsi)} · ${rsi > 70 ? "overbought" : rsi < 40 ? "weak" : "neutral-to-strong"}` : "not available"}
                 </span>
               </div>
-              <RsiPane sym={sym} tf={tf} />
+              <RsiPane rsi14={rsi} />
             </div>
           )}
           {showEarnings && (
@@ -289,7 +321,7 @@ export function ChartCard({
                 <span>Earnings · EPS Surprise</span>
                 <span className="mono" style={{ color: "var(--warn)", fontWeight: 600 }}>Next: {erDate}</span>
               </div>
-              <EarnPane sym={sym} base={eps} />
+              <EarnPane hist={hist} />
             </div>
           )}
         </div>

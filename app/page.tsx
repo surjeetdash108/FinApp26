@@ -74,11 +74,11 @@ function GaugeSVG({ val }: { val: number }) {
 function DashThumb() {
   const hmMini = sectorList.slice(0, 8).map(sd => {
     const tot = sd.items.reduce((s, i) => s + i[1], 0);
-    const { bg, fg } = heatCol(sd.pctChange);
+    const { bg, fg } = heatCol(sd.pctChange!);
     return (
       <div key={sd.name} style={{ background: bg, borderRadius: 7, padding: "8px 9px", flex: `${Math.max(1, tot / 1400)} 1 70px` }}>
         <div style={{ fontSize: ".6rem", fontWeight: 700, color: fg, lineHeight: 1.1 }}>{sd.name.replace("Mega-Cap ", "").replace("Cloud ", "")}</div>
-        <div style={{ fontFamily: "var(--f-mono)", fontSize: ".64rem", color: fg, opacity: 0.88, marginTop: 2 }}>{sign(sd.pctChange)}</div>
+        <div style={{ fontFamily: "var(--f-mono)", fontSize: ".64rem", color: fg, opacity: 0.88, marginTop: 2 }}>{sign(sd.pctChange!)}</div>
       </div>
     );
   });
@@ -190,11 +190,11 @@ function DashThumb() {
             <div className="card-b" style={{ paddingTop: 4 }}>
               <div style={{ fontSize: ".6rem", fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", margin: "0 0 4px", color: "var(--up)" }}>&#9650; Leaders</div>
               {sectorList.slice(0, 3).map(g => (
-                <div key={g.name} className="minirow"><span className="tkr">{g.name.split(" ")[0]}</span><span className="mid">RS {g.rank} &middot; {g.name.split(" ").slice(1).join(" ")}</span><span className={`r ${cls(g.pctChange)}`}>{sign(g.pctChange)}</span></div>
+                <div key={g.name} className="minirow"><span className="tkr">{g.name.split(" ")[0]}</span><span className="mid">RS {g.rank} &middot; {g.name.split(" ").slice(1).join(" ")}</span><span className={`r ${cls(g.pctChange!)}`}>{sign(g.pctChange!)}</span></div>
               ))}
               <div style={{ fontSize: ".6rem", fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", margin: "8px 0 4px", color: "var(--down)" }}>&#9660; Laggards</div>
               {sectorList.slice(-3).map(g => (
-                <div key={g.name} className="minirow"><span className="tkr">{g.name.split(" ")[0]}</span><span className="mid">RS {g.rank} &middot; {g.name.split(" ").slice(1).join(" ")}</span><span className={`r ${cls(g.pctChange)}`}>{sign(g.pctChange)}</span></div>
+                <div key={g.name} className="minirow"><span className="tkr">{g.name.split(" ")[0]}</span><span className="mid">RS {g.rank} &middot; {g.name.split(" ").slice(1).join(" ")}</span><span className={`r ${cls(g.pctChange!)}`}>{sign(g.pctChange!)}</span></div>
               ))}
             </div>
           </div>
@@ -581,7 +581,7 @@ function StockDetailContent() {
                 <div key={g.name} className="grouprow">
                   <span className="rk">{g.rank}</span><span className="gn">{g.name}</span>
                   <span className="bar"><i style={{ width: `${Math.max(8, 100 - g.rank * 1.6)}%` }} /></span>
-                  <span style={{ fontFamily: "var(--f-mono)", fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{sign(g.pctChange)}</span>
+                  <span style={{ fontFamily: "var(--f-mono)", fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{sign(g.pctChange!)}</span>
                 </div>
               ))}
               <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginTop: 8 }}>Semiconductors ranks <b style={{ color: "var(--up)" }}>#1 of {sectorList.length}</b> groups.</div>
@@ -670,7 +670,7 @@ function HeatmapThumb() {
                 return (
                   <div key={g.name} className="tm-sector" style={{ flex: `${Math.max(1, tot / 800)} 1 240px` }}>
                     <div className="sl" style={{ cursor: "pointer" }}>
-                      <span>{g.name} <span className={cls(g.pctChange)} style={{ fontFamily: "var(--f-mono)", fontWeight: 600 }}>{sign(g.pctChange)}</span></span>
+                      <span>{g.name} <span className={cls(g.pctChange!)} style={{ fontFamily: "var(--f-mono)", fontWeight: 600 }}>{sign(g.pctChange!)}</span></span>
                       <span style={{ color: "var(--brand-2)", fontWeight: 600 }}>View all →</span>
                     </div>
                     <div className="tm-cells">
@@ -1016,8 +1016,8 @@ function RecapsThumb() {
           <div className="card-b">
             <div className="heat">
               {sectorList.slice(0, 10).map(s => {
-                const hc = heatCol(s.pctChange);
-                return <div key={s.name} className="s" style={{ cursor: "pointer", background: hc.bg }}><div className="nm" style={{ color: hc.fg }}>{s.name}</div><div className="v" style={{ color: hc.fg }}>{sign(s.pctChange)}</div></div>;
+                const hc = heatCol(s.pctChange!);
+                return <div key={s.name} className="s" style={{ cursor: "pointer", background: hc.bg }}><div className="nm" style={{ color: hc.fg }}>{s.name}</div><div className="v" style={{ color: hc.fg }}>{sign(s.pctChange!)}</div></div>;
               })}
             </div>
           </div>

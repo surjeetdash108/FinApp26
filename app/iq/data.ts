@@ -61,7 +61,14 @@ export interface StockInfo {
   news: { headline: string; date: string; }[];
   insiderActivity: { name: string; action: string; date: string; }[];
 }
-export interface SectorRow { name: string; rank: number; trend: string; pctChange: number; items: [string, number, number][]; }
+/**
+ * name/items (sector taxonomy + ticker membership) are fixed structural
+ * config, same status as mergePulse's "which indices exist" — pctChange/trend
+ * are only ever real, computed by the merge functions in heatmap.tsx and
+ * dashboard.tsx from live sector/company data. This base array's own
+ * pctChange/trend values are merge-input placeholders, never rendered as-is.
+ */
+export interface SectorRow { name: string; rank: number; trend: string | null; pctChange: number | null; items: [string, number, number][]; }
 export interface ScreenerStock {
   ticker: string; name: string; sector: string;
   marketCap: number; peRatio: number;

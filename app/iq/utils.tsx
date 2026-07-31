@@ -2,6 +2,41 @@
 
 import { useState, useRef, useCallback, useMemo } from "react";
 
+// ---- "Not available" / loading placeholders ----
+// The single reusable primitive for "we removed the mock value here and there
+// is no live source yet" — used instead of either (a) silently rendering
+// nothing, which reads as broken, or (b) inventing a plausible-looking number.
+
+/** Inline placeholder for a single removed field (a table cell, a stat, a pill). */
+export function NotAvailable({ label = "N/A" }: { label?: string }) {
+  return (
+    <span className="not-avail" title="No live data source for this yet">
+      {label}
+    </span>
+  );
+}
+
+/** Block-level placeholder for an entire missing list/section/panel. */
+export function DataState({
+  loading, label, height,
+}: { loading?: boolean; label: string; height?: number | string }) {
+  return (
+    <div className="data-state" style={height != null ? { minHeight: height } : undefined}>
+      {loading ? (
+        <>
+          <span className="data-state-spinner" aria-hidden />
+          <span>Loading…</span>
+        </>
+      ) : (
+        <>
+          <span className="data-state-icon" aria-hidden>—</span>
+          <span>{label}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ---- Number formatting ----
 export function fmt(n: number, d = 2): string {
   if (n >= 1e12) return (n / 1e12).toFixed(1) + 'T';
@@ -177,25 +212,8 @@ export function hashStr(s: string): number {
   return Math.abs(h);
 }
 
-// ---- Shared 10-quarter earnings history (deterministic, seed = ticker symbol) ----
+// ---- Shared earnings-history row shape (real data — populated per-caller from live earnings_events) ----
 export interface EarnQ { q: string; e: number; a: number; surp: number; mv: number; }
-
-export function earnHistory(sym: string, base: number): EarnQ[] {
-  const qs = [
-    "Q2 25","Q1 25","Q4 24","Q3 24","Q2 24","Q1 24","Q4 23","Q3 23","Q2 23","Q1 23",
-    "Q4 22","Q3 22","Q2 22","Q1 22","Q4 21","Q3 21","Q2 21","Q1 21","Q4 20","Q3 20",
-    "Q2 20","Q1 20","Q4 19","Q3 19","Q2 19","Q1 19","Q4 18","Q3 18","Q2 18","Q1 18",
-    "Q4 17","Q3 17","Q2 17","Q1 17","Q4 16","Q3 16","Q2 16","Q1 16","Q4 15","Q3 15",
-  ];
-  return qs.map((q, i) => {
-    const r    = (Math.abs(sym.charCodeAt(0) * 31 + (sym.charCodeAt(1) || 7) * 17 + i * 13) % 97) / 97;
-    const e    = parseFloat((base * (1 - i * 0.03)).toFixed(2));
-    const surp = parseFloat(((r - 0.4) * 18).toFixed(1));
-    const a    = parseFloat((e * (1 + surp / 100)).toFixed(2));
-    const mv   = parseFloat(((r - 0.45) * 22).toFixed(1));
-    return { q, e, a, surp, mv };
-  });
-}
 
 export function EarningsGrowthChart({ hist }: { hist: EarnQ[] }) {
   const d = [...hist].slice(0, 12).reverse();
@@ -499,26 +517,33 @@ export function CandleChart({
   );
 }
 
-export function RsiPane({ sym, tf }: { sym: string; tf: string }) {
+/**
+ * technical-indicators.job only stores the latest RSI(14) reading per ticker
+ * (rsi14 on CompanyDoc) — no historical time series exists yet, so unlike the
+ * old version this never draws a fabricated 90-point line. It plots the one
+ * real value as a marker against the classic 70/30 zones and says so.
+ */
+export function RsiPane({ rsi14 }: { rsi14: number | null }) {
   const w = 720, h = 72;
-  const rnd = _seed(hashStr(sym + tf + "rsi"));
-  let v = 52;
-  const r: number[] = [];
-  for (let i = 0; i < 90; i++) {
-    v += Math.sin(i * 0.22) * 4 + (rnd() - 0.5) * 6 + (i > 72 ? 2.2 : 0);
-    v = Math.max(22, Math.min(86, v));
-    r.push(v);
+  if (rsi14 == null) {
+    return <DataState label="RSI (14) needs the technical-indicators job to have run for this ticker — not available yet." height={h} />;
   }
-  const X = (i: number) => 40 + i * ((w - 60) / 89);
   const Yp = (p: number) => 8 + (h - 16) * (1 - p / 100);
-  const line = r.map((p, i) => `${i ? "L" : "M"}${X(i).toFixed(1)} ${Yp(p).toFixed(1)}`).join(" ");
+  const v = Math.max(0, Math.min(100, rsi14));
+  const zoneColor = v > 70 ? "#FF5470" : v < 30 ? "#2FE6A6" : "#FFB547";
   return (
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", display: "block" }}>
       <line x1="40" x2={w - 20} y1={Yp(70)} y2={Yp(70)} stroke="#FF547055" strokeWidth="1" strokeDasharray="3 3" />
       <line x1="40" x2={w - 20} y1={Yp(30)} y2={Yp(30)} stroke="#2FE6A655" strokeWidth="1" strokeDasharray="3 3" />
       <text x={w - 16} y={Yp(70) + 3} fill="#69748680" fontSize="8" fontFamily="JetBrains Mono">70</text>
       <text x={w - 16} y={Yp(30) + 3} fill="#69748680" fontSize="8" fontFamily="JetBrains Mono">30</text>
-      <path d={line} fill="none" stroke="#FFB547" strokeWidth="1.6" />
+      <line x1="40" x2={w - 20} y1={Yp(v)} y2={Yp(v)} stroke={zoneColor} strokeWidth="2" />
+      <text x={44} y={Yp(v) - 5} fill={zoneColor} fontSize="9" fontFamily="JetBrains Mono" fontWeight={700}>
+        {v.toFixed(1)} · latest
+      </text>
+      <text x={44} y={h - 4} fill="#69748680" fontSize="7" fontFamily="JetBrains Mono">
+        Historical RSI line needs a time-series technicals feed — not available yet.
+      </text>
     </svg>
   );
 }

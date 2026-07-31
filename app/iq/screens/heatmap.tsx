@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useIQActions } from "../shell";
-import { sectorList, movers, screenerStocks, type SectorRow } from "../data";
-import { sign, heatCol, fmt, cls, StockLogo } from "../utils";
+import { sectorList, type SectorRow } from "../data";
+import { sign, heatCol, fmt, StockLogo, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc, SectorApiDoc } from "../types";
 
@@ -50,9 +50,17 @@ interface HoverStock {
 }
 
 /**
- * Merges live company price/%change/marketCap and live sector %change into
- * the original curated sectorList — never drops a sector or stock, only
- * overrides values where real data exists.
+ * Sector *membership* (which tickers belong to which sector) is fixed
+ * editorial grouping — same category as Themes' curated lists, not
+ * fabricated market data — so sectors/tickers are never dropped here. Every
+ * numeric field (price/%change/market cap) must be live or the ticker is
+ * excluded from the treemap, rather than rendered with a stale mock number.
+ */
+/**
+ * pctChange/trend are always real: a direct match from /market-data/sectors,
+ * or (when this finer-grained taxonomy has no such match) the average of
+ * this sector's own real per-company changes below — never the static base's
+ * placeholder number. null when neither real source is available.
  */
 function mergeSectorList(base: SectorRow[], companies: CompanyDoc[], sectorsLive: SectorApiDoc[]): SectorRow[] {
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
@@ -60,16 +68,19 @@ function mergeSectorList(base: SectorRow[], companies: CompanyDoc[], sectorsLive
 
   return base.map(row => {
     const liveSectorPct = sectorPctByName.get(row.name);
-    const items: [string, number, number][] = row.items.map(([sym, mcap, chg]) => {
-      const c = companyByTicker.get(sym);
-      if (!c) return [sym, mcap, chg];
-      const liveMcap = c.marketCap != null ? c.marketCap / 1e9 : mcap; // stored in $, sectorList uses $B
-      const liveChg = c.pctChange ?? chg;
-      return [sym, liveMcap, liveChg];
-    });
+    const items = row.items
+      .map(([sym]): [string, number, number] | null => {
+        const c = companyByTicker.get(sym);
+        if (!c || c.marketCap == null || c.pctChange == null) return null;
+        return [sym, c.marketCap / 1e9, c.pctChange];
+      })
+      .filter((x): x is [string, number, number] => x !== null);
+    const pctChange = liveSectorPct
+      ?? (items.length > 0 ? items.reduce((s, [, , c]) => s + c, 0) / items.length : null);
+    const trend = pctChange == null ? null : pctChange > 0.5 ? "Improving" : pctChange < -0.5 ? "Deteriorating" : "Flat";
     return {
       ...row,
-      pctChange: liveSectorPct ?? row.pctChange,
+      pctChange, trend,
       items,
     };
   });
@@ -170,8 +181,8 @@ export function HeatmapScreen() {
                   }}>{g.name}</span>
                   <span style={{
                     fontSize: ".62rem", fontFamily: "var(--f-mono)", fontWeight: 700,
-                    color: g.pctChange >= 0 ? "var(--up)" : "var(--down)", flexShrink: 0,
-                  }}>{sign(g.pctChange)}</span>
+                    color: g.pctChange == null ? "var(--text-dim-solid)" : g.pctChange >= 0 ? "var(--up)" : "var(--down)", flexShrink: 0,
+                  }}>{g.pctChange == null ? <NotAvailable /> : sign(g.pctChange)}</span>
                 </div>
 
                 {/* Stock cells */}
@@ -233,8 +244,7 @@ export function HeatmapScreen() {
 
       {/* ── Hover tooltip ── */}
       {hover && (() => {
-        const mv  = movers.find(m => m.ticker === hover.sym);
-        const scr = screenerStocks.find(s => s.ticker === hover.sym);
+        const c = companies.find(x => x.ticker === hover.sym);
         return (
           <div className="dash-pop"
             style={{ left: hover.x, top: hover.y, cursor: "default", width: 310, maxHeight: `${window.innerHeight - hover.y - 8}px`, overflowY: "auto" }}
@@ -248,10 +258,9 @@ export function HeatmapScreen() {
               <span className={`pill ${hover.chg >= 0 ? "up" : "dn"}`}>{sign(hover.chg)}</span>
             </div>
             <div className="dp-row"><span>Mkt Cap</span><b>{capFmt(hover.mcap)}</b></div>
-            {mv  && <div className="dp-row"><span>Price</span><b>${fmt(mv.price)}</b></div>}
-            {mv  && <div className="dp-row"><span>RVOL</span><b className={mv.rvolRatio >= 2 ? "up" : ""}>{mv.rvolRatio}×</b></div>}
-            {scr && <div className="dp-row"><span>RS Rating</span><b>{scr.relativeStrength}/99</b></div>}
-            {mv?.maPosture && <div className="dp-row"><span>MA Status</span><b className={cls(mv.pctChange)}>{mv.maPosture}</b></div>}
+            <div className="dp-row"><span>Price</span><b>{c?.price != null ? `$${fmt(c.price)}` : <NotAvailable />}</b></div>
+            <div className="dp-row"><span>RVOL</span><b className={c?.rvol != null && c.rvol >= 2 ? "up" : ""}>{c?.rvol != null ? `${c.rvol.toFixed(1)}×` : <NotAvailable />}</b></div>
+            <div className="dp-row"><span>RS Rating</span><b>{c?.rsRating != null ? `${c.rsRating}/99` : <NotAvailable />}</b></div>
 
             {/* Same-sector stock list */}
             {hover.peers.length > 0 && (

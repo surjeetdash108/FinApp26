@@ -4,7 +4,7 @@ import { firebaseAuth } from "../firebase";
  * Base URL for the MarketCatalystBackEnd REST/SSE surface, resolved at RUNTIME
  * so a single static build works in every environment without a rebuild:
  *
- *   - Local dev (localhost / 127.0.0.1) -> http://localhost:4100 (local backend)
+ *   - Local dev (localhost / 127.0.0.1) -> http://localhost:4400 (local backend)
  *   - Firebase Hosting (deployed)        -> same-origin, i.e. the Firebase base
  *     URL. firebase.json rewrites /api, /market-data and /live to the backend
  *     Cloud Run service, so there is no CORS and responses are CDN-cacheable.

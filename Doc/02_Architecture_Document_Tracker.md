@@ -5,7 +5,7 @@ System Architecture Document \| v1.1 \| June 2026
 > **⚠ Implementation status (updated 2026-07-27) — CURRENT, supersedes the
 > notes below.** Two changes since the older banners: (1) **The frontend now
 > talks to the backend via REST/SSE**, not Firestore directly. The UI resolves
-> its backend base URL at runtime (`app/iq/backend.ts`): `localhost:4100` in
+> its backend base URL at runtime (`app/iq/backend.ts`): `localhost:4400` in
 > dev, **same-origin** when deployed on Firebase Hosting, with `firebase.json`
 > rewriting `/api`, `/market-data` and `/live` to the public
 > `market-catalyst-live` Cloud Run service. (2) **There are two isolated

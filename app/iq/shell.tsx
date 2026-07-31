@@ -13,17 +13,19 @@ const StockScreenEmbed = dynamic<{ initialSym?: string }>(
 );
 import { signOut } from "firebase/auth";
 import { firebaseAuth } from "../firebase";
-import { apiGet, apiPatch } from "./backend";
+import { apiGet, apiPatch, apiPost, apiDelete } from "./backend";
 import { useAppSelector } from "../store/hooks";
 import { AuthGuard } from "../dashboard/auth-guard";
 import { menuItems } from "../dashboard/menu-items";
-import { pulse, sectorList, sectorByName, funds, fundDetail, folio, earnings as earningsData, movers, screenerStocks, type SectorRow, type Fund, type FundDetail, type PulseItem } from "./data";
-import { fmt, sign, cls, arr, SemiGauge } from "./utils";
+import { pulse, type PulseItem } from "./data";
+import { fmt, sign, cls, arr, SemiGauge, DataState, NotAvailable } from "./utils";
 import { NotificationBell } from "./notification-bell";
 import { useTickerSearch } from "./hooks/useTickerSearch";
 import { useTapeStream } from "./hooks/useTapeStream";
 import { useBackendMarketStatus } from "./hooks/useBackendMarketStatus";
+import { useApiList } from "./hooks/useApiList";
 import { mergePulse, tapeItemsToIndexDocs } from "./live-market-indices";
+import type { CompanyDoc, SectorApiDoc, LiveEarningsDoc, WatchlistDoc } from "./types";
 
 // ---- Route helpers ----
 function slugToHref(slug: string): string {
@@ -40,7 +42,6 @@ interface IQActions {
   openMoverModal: (sym: string) => void;
   openEarnings: (sym: string) => void;
   openSector: (name: string) => void;
-  openFund: (idx: number) => void;
   openIndex: (i: number) => void;
   openFearGreed: () => void;
   setCopilot: (open: boolean) => void;
@@ -56,7 +57,6 @@ export const IQActionsContext = createContext<IQActions>({
   openMoverModal: () => {},
   openEarnings: () => {},
   openSector: () => {},
-  openFund: () => {},
   openIndex: () => {},
   openFearGreed: () => {},
   setCopilot: () => {},
@@ -112,38 +112,21 @@ function NavIcon({ slug }: { slug: string }) {
 }
 
 // ---- Drawers ----
-function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
+function StockDrawer({ sym, companies, sectorsLive, onClose }: {
+  sym: string; companies: CompanyDoc[]; sectorsLive: SectorApiDoc[]; onClose: () => void;
+}) {
   const { openStockFull, openSector } = useIQActions();
-  const mv  = movers.find(x => x.ticker === sym);
-  const scr = screenerStocks.find(x => x.ticker === sym);
+  const c = companies.find(x => x.ticker === sym);
 
-  const name   = mv?.name      ?? scr?.name   ?? sym;
-  const sector = mv?.sector ?? scr?.sector ?? "—";
-  const p      = mv?.price   ?? 0;
-  const c      = mv?.pctChange   ?? 0;
-  const rvol   = mv?.rvolRatio ?? scr?.rvolRatio ?? 1;
-  const rs     = mv?.relativeStrength  ?? scr?.relativeStrength  ?? 50;
-  const wk     = mv?.weekPct  ?? 0;
-  const cat    = mv?.catalystLabel ?? "";
-  const ma     = mv?.maPosture  ?? "";
-  const tech   = mv?.techContext ?? "";
-  const news   = mv?.newsContext ?? "";
-  const mc     = scr?.marketCap ?? 0;
-  const mcTxt  = mc >= 1000 ? `$${(mc / 1000).toFixed(2)}T` : mc > 0 ? `$${mc}B` : mv?.cap ?? "—";
-
-  // Build "why it moved" narrative (HTML string — data is internal, never user input)
-  let why = `<b>${name}</b> is trading <b class="${cls(c)}">${sign(c)}</b> today`;
-  why += cat && cat !== "No known catalyst"
-    ? ` on <b style="color:var(--text-hi)">${cat.toLowerCase()}</b>.`
-    : ` with no single company headline — it is moving with its sector and the broad tape.`;
-  why += ` Volume is running <b>${rvol.toFixed(1)}×</b> its normal pace`;
-  why += rvol >= 2 ? ` — well above average, which confirms real participation behind the move.` : `.`;
-  if (ma) why += ` Price is <b>${ma}</b> with a relative-strength rank of <b>${rs}/99</b>, so the underlying trend is ${c >= 0 ? "constructive" : "weak"}.`;
-  const sec = sectorByName[sector] ?? null;
-  if (sec) {
-    why += ` Its group, <b>${sector}</b>, is ${sec.pctChange >= 0 ? "up" : "down"} <b class="${cls(sec.pctChange)}">${sign(sec.pctChange)}</b> today (${(sec.trend || "Flat").toLowerCase()}) — `;
-    why += (sec.pctChange >= 0) === (c >= 0) ? "in line with sector strength." : "bucking its sector today.";
-  }
+  const name   = c?.name ?? sym;
+  const sector = c?.sector ?? null;
+  const p      = c?.price ?? null;
+  const chg    = c?.pctChange ?? null;
+  const rvol   = c?.rvol ?? null;
+  const rs     = c?.rsRating ?? null;
+  const mc     = c?.marketCap ?? null;
+  const mcTxt  = mc != null ? (mc >= 1e12 ? `$${(mc / 1e12).toFixed(2)}T` : `$${(mc / 1e9).toFixed(1)}B`) : null;
+  const sec    = sector ? sectorsLive.find(s => s.sector === sector) ?? null : null;
 
   return (
     <>
@@ -158,69 +141,56 @@ function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
               {sym}
             </div>
             <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
-              {name} · {sector}
+              {name} · {sector ?? "—"}
             </div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
         </div>
 
         <div className="drawer-b">
-          {/* Pills */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-            <span className={`pill ${c >= 0 ? "up" : "dn"}`}>{arr(c)} {sign(c)} today</span>
-            {cat && cat !== "No known catalyst"
-              ? <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{cat}</span>
-              : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>No known catalyst</span>
-            }
-            {rvol >= 2 && <span className="pill amc">{rvol.toFixed(1)}× volume</span>}
-          </div>
-
-          {/* Why it moved */}
-          {mv && (
-            <div className="ai-block" style={{ marginBottom: 14 }}>
-              <div className="card-h">
-                <h3 className="ai-c">◆ Why it moved</h3>
+          {!c ? (
+            <DataState label={`No live data synced for ${sym} yet.`} />
+          ) : (
+            <>
+              {/* Pills */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                {chg != null && <span className={`pill ${chg >= 0 ? "up" : "dn"}`}>{arr(chg)} {sign(chg)} today</span>}
+                {rvol != null && rvol >= 2 && <span className="pill amc">{rvol.toFixed(1)}× volume</span>}
               </div>
-              <div className="card-b">
-                <p style={{ fontSize: ".85rem", lineHeight: 1.6, color: "var(--text)", margin: 0 }}
-                   dangerouslySetInnerHTML={{ __html: why }} />
+
+              {sec && chg != null && (
+                <div className="ai-block" style={{ marginBottom: 14 }}>
+                  <div className="card-h">
+                    <h3 className="ai-c">◆ Sector context</h3>
+                  </div>
+                  <div className="card-b">
+                    <p style={{ fontSize: ".85rem", lineHeight: 1.6, color: "var(--text)", margin: 0 }}>
+                      Its group, <b>{sector}</b>, is {sec.pctChange >= 0 ? "up" : "down"}{" "}
+                      <b className={cls(sec.pctChange)}>{sign(sec.pctChange)}</b> today —{" "}
+                      {(sec.pctChange >= 0) === (chg >= 0) ? "in line with sector strength." : "bucking its sector today."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Grid 1: Today · Rel. volume · RS rank */}
+              <div className="metric-grid" style={{ marginBottom: 12 }}>
+                <div className="m"><div className="k">Today</div><div className={chg != null ? `v ${cls(chg)}` : "v"}>{chg != null ? sign(chg) : <NotAvailable />}</div></div>
+                <div className="m"><div className="k">Rel. volume</div><div className="v">{rvol != null ? `${rvol.toFixed(1)}×` : <NotAvailable />}</div></div>
+                <div className="m"><div className="k">RS rank</div><div className="v">{rs != null ? `${rs}/99` : <NotAvailable />}</div></div>
               </div>
-            </div>
-          )}
 
-          {/* Grid 1: Today · Rel. volume · 5-day */}
-          <div className="metric-grid" style={{ marginBottom: 12 }}>
-            <div className="m"><div className="k">Today</div><div className={`v ${cls(c)}`}>{sign(c)}</div></div>
-            <div className="m"><div className="k">Rel. volume</div><div className="v">{rvol.toFixed(1)}×</div></div>
-            <div className="m"><div className="k">5-day</div><div className={`v ${cls(wk)}`}>{sign(wk)}</div></div>
-          </div>
-
-          {/* Grid 2: Last price · RS rank · Market cap */}
-          <div className="metric-grid" style={{ marginBottom: 14 }}>
-            <div className="m"><div className="k">Last price</div><div className="v">${fmt(p)}</div></div>
-            <div className="m"><div className="k">RS rank</div><div className="v">{rs}</div></div>
-            <div className="m"><div className="k">Market cap</div><div className="v" style={{ fontSize: ".92rem" }}>{mcTxt}</div></div>
-          </div>
-
-          {/* Technical posture */}
-          {tech && (
-            <div className="ai-sec">
-              <div className="h">Technical posture</div>
-              <p>{tech}</p>
-            </div>
-          )}
-
-          {/* News & catalyst */}
-          {news && (
-            <div className="ai-sec" style={{ marginTop: 10 }}>
-              <div className="h">News &amp; catalyst</div>
-              <p>{news}</p>
-            </div>
+              {/* Grid 2: Last price · Market cap */}
+              <div className="metric-grid" style={{ marginBottom: 14 }}>
+                <div className="m"><div className="k">Last price</div><div className="v">{p != null ? `$${fmt(p)}` : <NotAvailable />}</div></div>
+                <div className="m"><div className="k">Market cap</div><div className="v" style={{ fontSize: ".92rem" }}>{mcTxt ?? <NotAvailable />}</div></div>
+              </div>
+            </>
           )}
 
           {/* CTA buttons */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
-            {sec && (
+            {sector && (
               <button className="btn" style={{ width: "100%" }}
                 onClick={() => { onClose(); openSector(sector); }}>
                 View {sector} in heatmap →
@@ -237,15 +207,12 @@ function StockDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   );
 }
 
-function EarningsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
+function EarningsDrawer({ sym, liveEarnings, onClose }: { sym: string; liveEarnings: LiveEarningsDoc[]; onClose: () => void }) {
   const { openStockFull } = useIQActions();
-  const e = earningsData.find(x => x.ticker ===sym);
-  const posted = e && e.epsActual != null;
+  const events = liveEarnings.filter(x => x.ticker === sym).sort((a, b) => b.date.localeCompare(a.date));
+  const e = events[0] ?? null;
   const epsBeat = e && e.epsActual != null && e.epsEstimate != null && e.epsEstimate !== 0
     ? ((e.epsActual - e.epsEstimate) / Math.abs(e.epsEstimate) * 100)
-    : null;
-  const revBeat = e && e.revenueActual != null && e.revenueEstimate != null && e.revenueEstimate !== 0
-    ? ((e.revenueActual - e.revenueEstimate) / Math.abs(e.revenueEstimate) * 100)
     : null;
 
   return (
@@ -258,108 +225,28 @@ function EarningsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) 
           </div>
           <div style={{ flex: 1 }}>
             <div className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)" }}>{sym}</div>
-            <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
-              {e?.name ?? sym} · {e?.sector ?? "—"} ·{" "}
-              <span className={`pill ${e?.session === "Before open" ? "bmo" : "amc"}`}>{e?.session ?? "—"}</span>
-            </div>
+            <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>{e ? e.date : "—"}</div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
         </div>
 
         <div className="drawer-b">
-          {posted && e ? (
-            <>
-              <div className="metric-grid">
-                <div className="m">
-                  <div className="k">EPS · actual vs est</div>
-                  <div className="v">${e.epsActual}</div>
-                  <div className={`s ${(epsBeat ?? 0) >= 0 ? "up" : "dn"}`}>
-                    est {e.epsEstimate != null ? `$${e.epsEstimate}` : "—"} · {epsBeat != null ? `${epsBeat > 0 ? "+" : ""}${epsBeat.toFixed(1)}%` : ""}
-                  </div>
-                </div>
-                <div className="m">
-                  <div className="k">Revenue</div>
-                  <div className="v">${e.revenueActual}B</div>
-                  <div className={`s ${(revBeat ?? 0) >= 0 ? "up" : "dn"}`}>
-                    est ${e.revenueEstimate}B{revBeat != null ? ` · ${revBeat > 0 ? "+" : ""}${revBeat.toFixed(1)}%` : ""}
-                  </div>
-                </div>
-                <div className="m">
-                  <div className="k">Guidance</div>
-                  <div className="v" style={{ color: e.guidanceStatus === "Raised" ? "var(--up)" : e.guidanceStatus === "Cut" ? "var(--down)" : "var(--text-hi)", fontSize: "1rem" }}>
-                    {e.guidanceStatus ?? "—"}
-                  </div>
-                </div>
-                <div className="m">
-                  <div className="k">Reaction</div>
-                  <div className={`v ${cls(e.priceReaction ?? 0)}`}>{sign(e.priceReaction ?? 0)}</div>
-                  <div className="s">after hours</div>
-                </div>
-              </div>
-
-              <div className="takeaway">
-                <span className="lbl">AI takeaway</span>
-                <span style={{ fontSize: ".8rem", color: "var(--text-dim-solid)" }}>
-                  {e.tags.includes("Beat") ? "Beat on top and bottom line — guidance the catalyst" : "Results mixed; reaction tells the story"}
-                </span>
-                <span className={`verdict ${(e.priceReaction ?? 0) >= 0 ? "up" : "dn"}`}>
-                  {(e.priceReaction ?? 0) >= 2 ? "Bullish" : (e.priceReaction ?? 0) >= 0 ? "Mild beat" : "Bearish"}
-                </span>
-              </div>
-
-              <div className="ai-block" style={{ marginBottom: 14 }}>
-                <div className="card-h">
-                  <h3 className="ai-c">◆ AI Earnings Summary</h3>
-                  <span className="pill ai">conf. 91%</span>
-                </div>
-                <div className="card-b">
-                  <div className="ai-sec">
-                    <div className="h">What happened</div>
-                    <p>{e.name} reported {(epsBeat ?? 0) >= 0 ? "above" : "below"}-consensus EPS of ${e.epsActual} vs. est ${e.epsEstimate}, with revenue of ${e.revenueActual}B. Stock reacted {sign(e.priceReaction ?? 0)} after hours.</p>
-                  </div>
-                  <div className="ai-sec">
-                    <div className="h">Bull case</div>
-                    <p>Beat on both lines with guidance {e.guidanceStatus === "Raised" ? "raised — management confidence is a strong signal" : "maintained — execution visible"}. {e.owned ? "Your position benefits directly." : ""}</p>
-                  </div>
-                  <div className="ai-sec">
-                    <div className="h">Bear case</div>
-                    <p>Much of the upside may be priced in. Implied move was {e.impliedMove != null ? `±${e.impliedMove}%` : "n/a"} — actual {Math.abs(e.priceReaction ?? 0).toFixed(1)}% {e.impliedMove != null && Math.abs(e.priceReaction ?? 0) > e.impliedMove ? "exceeded" : "was within"} expectations.</p>
-                  </div>
-                  <div className="ai-sec">
-                    <div className="h">Guidance detail</div>
-                    <p>Company {e.guidanceStatus === "Raised" ? "raised" : e.guidanceStatus === "In-line" ? "maintained" : "cut"} forward guidance. Watch next quarter&apos;s setup relative to current Street estimates.</p>
-                  </div>
-                  <div className="ai-sec">
-                    <div className="h">What to watch next</div>
-                    <p>Analyst PT revisions in the next 48 hours, conference call tone, and peer read-throughs from sector names reporting later this week.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card" style={{ marginBottom: 14 }}>
-                <div className="card-h"><h3>Peer reactions</h3></div>
-                <div className="card-b">
-                  {[{ s: "Sector index", c: parseFloat(((e.priceReaction ?? 0) * 0.3).toFixed(2)) }, { s: "Direct peers", c: parseFloat(((e.priceReaction ?? 0) * 0.5).toFixed(2)) }].map(p => (
-                    <div key={p.s} className="minirow">
-                      <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)" }}>{p.s}</span>
-                      <span className={`mono ${cls(p.c)}`} style={{ marginLeft: "auto" }}>{sign(p.c)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
+          {!e ? (
+            <DataState label={`No earnings data synced for ${sym} yet.`} />
           ) : (
-            <div style={{ padding: "20px 0", color: "var(--text-dim-solid)", fontSize: ".85rem" }}>
-              {e
-                ? `${e.name} reports ${e.session.toLowerCase()}. Implied move: ±${e.impliedMove}%. Check back after results are posted.`
-                : `No earnings data available for ${sym}.`}
+            <div className="metric-grid">
+              <div className="m">
+                <div className="k">EPS · actual vs est</div>
+                <div className="v">{e.epsActual != null ? `$${e.epsActual}` : <NotAvailable />}</div>
+                <div className={epsBeat != null ? `s ${epsBeat >= 0 ? "up" : "dn"}` : "s"}>
+                  est {e.epsEstimate != null ? `$${e.epsEstimate}` : "—"} · {epsBeat != null ? `${epsBeat > 0 ? "+" : ""}${epsBeat.toFixed(1)}%` : ""}
+                </div>
+              </div>
             </div>
           )}
 
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
             <button className="btn primary" style={{ flex: 1 }} onClick={() => { onClose(); openStockFull(sym); }}>Open full stock page</button>
-            <button className="btn">Transcript</button>
-            <button className="btn ai">▶ Call audio</button>
           </div>
         </div>
       </div>
@@ -367,10 +254,14 @@ function EarningsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) 
   );
 }
 
-function SectorDrawer({ name, onClose }: { name: string; onClose: () => void }) {
+function SectorDrawer({ name, companies, sectorsLive, onClose }: {
+  name: string; companies: CompanyDoc[]; sectorsLive: SectorApiDoc[]; onClose: () => void;
+}) {
   const { openStock } = useIQActions();
-  const sector: SectorRow | undefined = sectorByName[name];
-  const sorted = sector ? [...sector.items].sort((a, b) => b[1] - a[1]) : [];
+  const sector = sectorsLive.find(s => s.sector === name) ?? null;
+  const sorted = companies
+    .filter(c => c.sector === name && c.marketCap != null && c.pctChange != null)
+    .sort((a, b) => (b.marketCap as number) - (a.marketCap as number));
 
   return (
     <>
@@ -383,9 +274,7 @@ function SectorDrawer({ name, onClose }: { name: string; onClose: () => void }) 
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{name}</div>
             <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
-              {sector ? `Group rank #${sector.rank} · ` : ""}
-              <span className={cls(sector?.pctChange ?? 0)}>{sign(sector?.pctChange ?? 0)} today</span>
-              {sector && <> · <span className="pill" style={{ marginLeft: 2 }}>{sector.trend}</span></>}
+              {sector != null ? <span className={cls(sector.pctChange)}>{sign(sector.pctChange)} today</span> : <NotAvailable />}
             </div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
@@ -393,23 +282,13 @@ function SectorDrawer({ name, onClose }: { name: string; onClose: () => void }) 
 
         <div className="drawer-b">
           <div className="ai-sec"><div className="h">Constituents · by market cap</div></div>
-          {sorted.map(([sym, mc, chg]) => (
-            <div key={sym} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); openStock(sym); }}>
-              <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)", minWidth: 52 }}>{sym}</span>
-              <span style={{ fontSize: ".75rem", color: "var(--text-dim-solid)", flex: 1, marginLeft: 8 }}>${mc}B</span>
-              <span className={`mono ${cls(chg)}`} style={{ fontSize: ".82rem" }}>{sign(chg)}</span>
-            </div>
-          ))}
-
-          <div className="ai-sec" style={{ marginTop: 14 }}><div className="h">Big news across the sector</div></div>
-          {[
-            { t: `Rotation into ${name} continues as valuations stay supported`, dt: "Today" },
-            { t: `Sector sees notable inflows amid broad risk-on positioning`, dt: "Yesterday" },
-            { t: `Analyst consensus turns constructive — multiple PT upgrades`, dt: "2 days ago" },
-          ].map((item, i) => (
-            <div key={i} style={{ padding: "8px 0", borderBottom: i < 2 ? "1px solid var(--border-soft)" : "none" }}>
-              <div style={{ fontSize: ".82rem", color: "var(--text-hi)", lineHeight: 1.4 }}>{item.t}</div>
-              <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginTop: 2 }}>{item.dt}</div>
+          {sorted.length === 0 ? (
+            <DataState label={`No live constituents synced for ${name} yet.`} />
+          ) : sorted.map(c => (
+            <div key={c.ticker} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); openStock(c.ticker); }}>
+              <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)", minWidth: 52 }}>{c.ticker}</span>
+              <span style={{ fontSize: ".75rem", color: "var(--text-dim-solid)", flex: 1, marginLeft: 8 }}>${((c.marketCap as number) / 1e9).toFixed(1)}B</span>
+              <span className={`mono ${cls(c.pctChange as number)}`} style={{ fontSize: ".82rem" }}>{sign(c.pctChange as number)}</span>
             </div>
           ))}
 
@@ -420,132 +299,19 @@ function SectorDrawer({ name, onClose }: { name: string; onClose: () => void }) 
   );
 }
 
-function FundDrawer({ idx, onClose }: { idx: number; onClose: () => void }) {
-  const { openStock } = useIQActions();
-  const fund: Fund | undefined = funds[idx];
-  const dt: FundDetail | undefined = fund ? fundDetail[fund.fundName] : undefined;
-
-  return (
-    <>
-      <div className="scrim" onClick={onClose} />
-      <div className="drawer open">
-        <div className="drawer-h">
-          <div className="sd-logo" style={{ background: "linear-gradient(135deg,#3a2f6b,#241c44)", color: "var(--brand-2)", fontSize: ".78rem" }}>
-            {fund?.avatar ?? "—"}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{fund?.fundName ?? "Fund"}</div>
-            <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
-              {fund?.managerName} · 13F AUM {fund?.aum} · {fund?.totalPositions} positions · {fund?.quarter}
-            </div>
-          </div>
-          <button className="closebtn" onClick={onClose}>✕</button>
-        </div>
-
-        <div className="drawer-b">
-          {fund && (
-            <>
-              <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-                <span className="pill up">{fund.newPositions} new</span>
-                <span className="pill dn">{fund.exitCount} exits</span>
-                <span className="src-chip">{fund.quarter} 13F-HR</span>
-              </div>
-
-              {dt && (
-                <>
-                  <div className="ai-sec"><div className="h">Top 10 holdings · % of portfolio</div></div>
-                  <div className="tbl-wrap" style={{ marginBottom: 14 }}>
-                    <table className="tbl">
-                      <thead>
-                        <tr><th>Ticker</th><th className="num">% wt</th><th>Change</th></tr>
-                      </thead>
-                      <tbody>
-                        {dt.holdings.map(([sym, pct, chg]) => (
-                          <tr key={sym} style={{ cursor: "pointer" }} onClick={() => { onClose(); openStock(sym); }}>
-                            <td className="mono" style={{ fontWeight: 700, color: "var(--text-hi)" }}>{sym}</td>
-                            <td className="num">{pct}%</td>
-                            <td>
-                              <span className={`pill ${chg === "new" ? "up" : chg === "reduced" ? "dn" : ""}`} style={{ fontSize: ".68rem" }}>
-                                {chg}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="dash">
-                    <div className="col-6">
-                      <div className="ai-sec"><div className="h" style={{ color: "var(--up)" }}>Biggest buys / adds</div></div>
-                      {dt.buys.map(([sym, desc]) => (
-                        <div key={sym} className="minirow" style={{ cursor: "pointer", flexDirection: "column", alignItems: "flex-start", gap: 2, marginBottom: 6 }} onClick={() => { onClose(); openStock(sym); }}>
-                          <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)" }}>{sym}</span>
-                          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{desc}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="col-6">
-                      <div className="ai-sec"><div className="h" style={{ color: "var(--down)" }}>Biggest exits / trims</div></div>
-                      {dt.exits.map(([sym, desc]) => (
-                        <div key={sym} className="minirow" style={{ cursor: "pointer", flexDirection: "column", alignItems: "flex-start", gap: 2, marginBottom: 6 }} onClick={() => { onClose(); openStock(sym); }}>
-                          <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)" }}>{sym}</span>
-                          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{desc}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="ai-block" style={{ marginTop: 14, marginBottom: 14 }}>
-                    <div className="card-h"><h3 className="ai-c">◆ AI read on the quarter</h3></div>
-                    <div className="card-b">
-                      <div className="ai-sec">
-                        <div className="h">Theme shift</div>
-                        <p style={{ fontSize: ".82rem", lineHeight: 1.6 }}>{dt.theme}</p>
-                      </div>
-                      <div className="ai-sec">
-                        <div className="h">Concentration</div>
-                        <p style={{ fontSize: ".82rem", lineHeight: 1.6 }}>{dt.conc}</p>
-                      </div>
-                      <div className="ai-sec">
-                        <div className="h">Overlap with your portfolio</div>
-                        <p style={{ fontSize: ".82rem", lineHeight: 1.6 }}>
-                          {dt.holdings.filter(([sym]) => folio.some(f => f.ticker ===sym)).length} of {dt.holdings.length} top holdings overlap with your portfolio. Review position sizing for shared names.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <button className="btn primary" style={{ width: "100%" }} onClick={onClose}>Back to 13F overview</button>
-            </>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
 // ---- Index drawer (openIndex) ----
-function IndexDrawer({ idx, pulse: livePulse, onClose }: { idx: number; pulse: PulseItem[]; onClose: () => void }) {
+function IndexDrawer({ idx, pulse: livePulse, sectorsLive, onClose }: {
+  idx: number; pulse: PulseItem[]; sectorsLive: SectorApiDoc[]; onClose: () => void;
+}) {
   const x = livePulse[idx];
   if (!x) return null;
   const dec = x.value > 1000 ? 0 : 2;
   const dollar = x.value - x.prevClose;
   const c = x.change >= 0 ? "up" : "down";
-  const dayLow = Math.min(x.open, x.prevClose, x.value) * 0.997;
-  const dayHigh = Math.max(x.open, x.prevClose, x.value) * 1.003;
-  const y52lo = x.value * 0.82, y52hi = x.value * 1.06;
   const eq = ["S&P 500", "Nasdaq", "Dow", "Russell 2K"].includes(x.label);
-  const lead = [...sectorList].sort((a, b) => b.pctChange - a.pctChange).slice(0, 3);
-  const lag = [...sectorList].sort((a, b) => b.pctChange - a.pctChange).slice(-3).reverse();
-  const note = x.label === "VIX" ? "Volatility is low and falling — a calm, risk-on tape with cheap hedging."
-    : x.label.includes("Yield") ? "Yields easing — supportive for long-duration growth and rate-sensitive sectors."
-    : x.label === "WTI Crude" ? "Crude softer — pressures energy names, eases input-cost worries elsewhere."
-    : x.label === "Gold" ? "Gold firmer — mild safe-haven bid alongside a softer dollar."
-    : x.label === "Dollar (DXY)" ? "Dollar steady — limited FX headwind for multinationals today."
-    : x.change >= 0 ? "Broad-based gains; breadth is positive and the tape reads risk-on." : "Mild risk-off; defensives are outpacing cyclicals.";
+  const sortedSectors = [...sectorsLive].sort((a, b) => b.pctChange - a.pctChange);
+  const lead = sortedSectors.slice(0, 3);
+  const lag = sortedSectors.slice(-3).reverse();
   const sub = eq ? "Equity index" : x.label === "VIX" ? "Volatility index" : x.label.includes("Yield") ? "Treasury yield" : "Market benchmark";
   return (
     <>
@@ -564,28 +330,31 @@ function IndexDrawer({ idx, pulse: livePulse, onClose }: { idx: number; pulse: P
           <div className="metric-grid">
             <div className="m"><div className="k">Open</div><div className="v">{fmt(x.open, dec)}</div></div>
             <div className="m"><div className="k">Prev close</div><div className="v">{fmt(x.prevClose, dec)}</div></div>
-            <div className="m"><div className="k">Day range</div><div className="v" style={{ fontSize: ".92rem" }}>{fmt(dayLow, dec)} – {fmt(dayHigh, dec)}</div></div>
-            <div className="m"><div className="k">52-wk range</div><div className="v" style={{ fontSize: ".92rem" }}>{fmt(y52lo, dec)} – {fmt(y52hi, dec)}</div></div>
           </div>
-          <div className="note" style={{ marginTop: 14 }}><b style={{ color: "var(--text-hi)" }}>AI read:</b> {note}</div>
           {eq && (
             <>
-              <div className="ai-sec" style={{ marginTop: 16 }}><div className="h">Leading sectors today</div></div>
-              {lead.map(g => (
-                <div key={g.name} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
-                  <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.name}</span>
-                  <span className="mid" />
-                  <span className="r up">{sign(g.pctChange)}</span>
-                </div>
-              ))}
-              <div className="ai-sec" style={{ marginTop: 12 }}><div className="h">Lagging sectors today</div></div>
-              {lag.map(g => (
-                <div key={g.name} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
-                  <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.name}</span>
-                  <span className="mid" />
-                  <span className="r down">{sign(g.pctChange)}</span>
-                </div>
-              ))}
+              {sortedSectors.length === 0 ? (
+                <div style={{ marginTop: 16 }}><DataState label="No live sector performance data yet." /></div>
+              ) : (
+                <>
+                  <div className="ai-sec" style={{ marginTop: 16 }}><div className="h">Leading sectors today</div></div>
+                  {lead.map(g => (
+                    <div key={g.sector} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
+                      <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.sector}</span>
+                      <span className="mid" />
+                      <span className="r up">{sign(g.pctChange)}</span>
+                    </div>
+                  ))}
+                  <div className="ai-sec" style={{ marginTop: 12 }}><div className="h">Lagging sectors today</div></div>
+                  {lag.map(g => (
+                    <div key={g.sector} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
+                      <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.sector}</span>
+                      <span className="mid" />
+                      <span className="r down">{sign(g.pctChange)}</span>
+                    </div>
+                  ))}
+                </>
+              )}
             </>
           )}
           <button className="btn primary" style={{ width: "100%", marginTop: 14 }} onClick={onClose}>
@@ -677,17 +446,17 @@ function FearGreedDrawer({ onClose }: { onClose: () => void }) {
 }
 
 // ---- Copilot panel ----
+// No LLM backend is wired up yet (no /api/copilot-style endpoint exists) —
+// this used to cycle 4 hardcoded replies regardless of what was typed while
+// claiming "Connected to your portfolio · live data". That's exactly the kind
+// of fabricated response this pass removes: it never leaves silent, but it
+// must say plainly that there's no real assistant behind it yet.
 type CopilotMsg = { role: "user" | "ai"; text: string };
-const aiReplies = [
-  "Based on current market data, NVDA has strong momentum driven by AI infrastructure spending.",
-  "The recent CPI print suggests inflation is cooling — watch for September rate cut probability to increase.",
-  "Portfolio concentration in tech is currently elevated. Consider reviewing sector allocation.",
-  "Analyst consensus for the S&P 500 is constructive, with a year-end target of ~5,400.",
-];
+const NOT_AVAILABLE_REPLY = "AI Copilot isn't connected to a live assistant yet — there's no model wired up behind this panel. Use the screens directly for live data (Stock Detail, Screener, Dashboard, etc.).";
 
 function CopilotPanel({ onClose }: { onClose: () => void }) {
   const [messages, setMessages] = useState<CopilotMsg[]>([
-    { role: "ai", text: "Hello! I'm your MarketCatalyst AI Copilot. Ask me about markets, your portfolio, earnings, or any stock." },
+    { role: "ai", text: "AI Copilot is a planned feature — no live assistant is connected yet. Your message won't be answered, but the rest of the app's data is real." },
   ]);
   const [input, setInput] = useState("");
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -695,8 +464,7 @@ function CopilotPanel({ onClose }: { onClose: () => void }) {
   function send(overrideText?: string) {
     const txt = (overrideText ?? input).trim();
     if (!txt) return;
-    const reply = aiReplies[messages.length % aiReplies.length];
-    setMessages(prev => [...prev, { role: "user", text: txt }, { role: "ai", text: reply }]);
+    setMessages(prev => [...prev, { role: "user", text: txt }, { role: "ai", text: NOT_AVAILABLE_REPLY }]);
     setInput("");
     setTimeout(() => { bodyRef.current?.scrollTo({ top: 9999, behavior: "smooth" }); }, 50);
   }
@@ -714,8 +482,8 @@ function CopilotPanel({ onClose }: { onClose: () => void }) {
         <div>
           <div className="copilot-title">Market Copilot</div>
           <div className="copilot-sub">
-            <span className="dot" style={{ background: "var(--up)", width: 6, height: 6, borderRadius: "50%", display: "inline-block" }} />
-            Connected to your portfolio · live data
+            <span className="dot" style={{ background: "var(--text-dim-solid)", width: 6, height: 6, borderRadius: "50%", display: "inline-block" }} />
+            Not connected — no live assistant yet
           </div>
         </div>
         <button className="copilot-close" onClick={onClose}>✕</button>
@@ -752,27 +520,6 @@ function CopilotPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-// Stock tickers that can be starred/added to watchlist from search
-// Curated quick-access list (shown before typing, and as a name/symbol-matched
-// fallback while the live `tickers` search warms up / before ticker-universe
-// backfills nameLower). Names let it match by company name too — e.g. "Apple".
-const SEARCHABLE_STOCKS: Array<{ sym: string; name: string }> = [
-  { sym: "NVDA", name: "NVIDIA" },
-  { sym: "AAPL", name: "Apple" },
-  { sym: "MSFT", name: "Microsoft" },
-  { sym: "TSLA", name: "Tesla" },
-  { sym: "META", name: "Meta Platforms" },
-  { sym: "AMZN", name: "Amazon" },
-  { sym: "GOOGL", name: "Alphabet (Google)" },
-  { sym: "AMD", name: "Advanced Micro Devices" },
-  { sym: "AVGO", name: "Broadcom" },
-  { sym: "SMCI", name: "Super Micro Computer" },
-  { sym: "COIN", name: "Coinbase" },
-  { sym: "UBER", name: "Uber Technologies" },
-  { sym: "PLTR", name: "Palantir" },
-  { sym: "JPM", name: "JPMorgan Chase" },
-  { sym: "V", name: "Visa" },
-];
 
 // ---- Main IQ Shell ----
 export function IQShell({ children }: { children: React.ReactNode }) {
@@ -789,6 +536,12 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   const liveIndices = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items) : [];
   const livePulse = mergePulse(pulse, liveIndices);
   const tickerItems = [...livePulse, ...livePulse];
+
+  // Shared live data for the shell-level drawers (stock/sector/earnings/index
+  // quick-preview popups reachable from every screen via useIQActions()).
+  const { data: shellCompanies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: shellSectors } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const { data: shellEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
 
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
@@ -836,28 +589,48 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   });
   const [searchQ, setSearchQ] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  // Real watchlist membership (not a session-only Set) — the ★ button in
+  // search results adds/removes via the same /api/watchlist endpoints the
+  // Watchlist screen uses, so a star here actually persists.
   const [searchStarred, setSearchStarred] = useState<Set<string>>(() => new Set());
-  // Full ~10,000-ticker universe search (on-demand, scoped query — see
-  // useTickerSearch's docblock) — SEARCHABLE_STOCKS below stays as the
-  // curated "quick access" list shown before the user types anything.
+  useEffect(() => {
+    const load = user?.uid
+      ? apiGet<WatchlistDoc>("/api/watchlist").then(w => new Set(w.tickers)).catch(() => new Set<string>())
+      : Promise.resolve(new Set<string>());
+    load.then(setSearchStarred);
+  }, [user?.uid]);
+  async function toggleSearchStar(sym: string) {
+    const wasStarred = searchStarred.has(sym);
+    setSearchStarred(prev => {
+      const n = new Set(prev);
+      if (wasStarred) n.delete(sym); else n.add(sym);
+      return n;
+    });
+    if (!user?.uid) return;
+    try {
+      if (wasStarred) await apiDelete(`/api/watchlist/tickers/${encodeURIComponent(sym)}`);
+      else await apiPost<WatchlistDoc>("/api/watchlist/tickers", { ticker: sym });
+    } catch { /* optimistic update above already applied locally */ }
+  }
+  // Live top-by-market-cap companies, used both as the "quick access" list
+  // shown before the user types and as a name-match augmentation once they
+  // do — useTickerSearch's full ~10,000-ticker universe only matches by
+  // ticker prefix, so a company-name search (e.g. "apple") needs this.
+  const quickAccessCompanies = [...shellCompanies].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).slice(0, 15);
   const tickerSearchResults = useTickerSearch(searchQ);
   const searchMatches: Array<{ sym: string; name: string | null; price: number | null; pctChange: number | null }> = searchQ
     ? (() => {
         const q = searchQ.toLowerCase();
         const bySym = new Map(tickerSearchResults.map(r => [r.ticker, r]));
-        // Curated fallback matches by ticker OR company-name prefix, deduped
-        // against whatever the live query already returned.
-        // Substring (not just prefix) match, so "google" finds "Alphabet
-        // (Google)" and "oogl" finds GOOGL. Cheap because this list is small.
-        const curated = SEARCHABLE_STOCKS.filter(
-          s => (s.sym.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)) && !bySym.has(s.sym),
+        const nameMatched = shellCompanies.filter(
+          c => ((c.name ?? "").toLowerCase().includes(q) || c.ticker.toLowerCase().includes(q)) && !bySym.has(c.ticker),
         );
         return [
           ...tickerSearchResults.map(r => ({ sym: r.ticker, name: r.name, price: r.price, pctChange: r.pctChange })),
-          ...curated.map(s => ({ sym: s.sym, name: s.name, price: null, pctChange: null })),
+          ...nameMatched.map(c => ({ sym: c.ticker, name: c.name, price: c.price, pctChange: c.pctChange })),
         ];
       })()
-    : SEARCHABLE_STOCKS.map(s => ({ sym: s.sym, name: s.name, price: null, pctChange: null }));
+    : quickAccessCompanies.map(c => ({ sym: c.ticker, name: c.name, price: c.price, pctChange: c.pctChange }));
   const cmdRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLElement>(null);
   const [drawer, setDrawer] = useState<
@@ -865,7 +638,6 @@ export function IQShell({ children }: { children: React.ReactNode }) {
     | { type: "mover-modal"; sym: string }
     | { type: "earnings"; sym: string }
     | { type: "sector"; name: string }
-    | { type: "fund"; idx: number }
     | { type: "index"; idx: number }
     | { type: "feargreed" }
     | null
@@ -949,7 +721,6 @@ export function IQShell({ children }: { children: React.ReactNode }) {
     }, [router]),
     openEarnings: useCallback((sym) => setDrawer({ type: "earnings", sym }), []),
     openSector: useCallback((name) => setDrawer({ type: "sector", name }), []),
-    openFund: useCallback((idx) => setDrawer({ type: "fund", idx }), []),
     openIndex: useCallback((idx) => setDrawer({ type: "index", idx }), []),
     openFearGreed: useCallback(() => setDrawer({ type: "feargreed" }), []),
     openChart: useCallback((title: string, node: ReactNode) => setExpandedChart({ title, node }), []),
@@ -1069,7 +840,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                         <button
                           title={searchStarred.has(m.sym) ? "Remove from watchlist" : "Add to watchlist"}
                           onMouseDown={e => e.preventDefault()}
-                          onClick={e => { e.stopPropagation(); setSearchStarred(prev => { const n = new Set(prev); n.has(m.sym) ? n.delete(m.sym) : n.add(m.sym); return n; }); }}
+                          onClick={e => { e.stopPropagation(); void toggleSearchStar(m.sym); }}
                           style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1rem", color: searchStarred.has(m.sym) ? "var(--warn)" : "var(--text-dim-solid)", padding: "0 4px" }}>
                           {searchStarred.has(m.sym) ? "★" : "☆"}
                         </button>
@@ -1223,22 +994,19 @@ export function IQShell({ children }: { children: React.ReactNode }) {
 
           {/* Drawers */}
           {drawer?.type === "stock" && (
-            <StockDrawer sym={drawer.sym} onClose={() => setDrawer(null)} />
+            <StockDrawer sym={drawer.sym} companies={shellCompanies} sectorsLive={shellSectors} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "mover-modal" && (
             <MoverModal key={drawer.sym} sym={drawer.sym} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "earnings" && (
-            <EarningsDrawer sym={drawer.sym} onClose={() => setDrawer(null)} />
+            <EarningsDrawer sym={drawer.sym} liveEarnings={shellEarnings} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "sector" && (
-            <SectorDrawer name={drawer.name} onClose={() => setDrawer(null)} />
-          )}
-          {drawer?.type === "fund" && (
-            <FundDrawer idx={drawer.idx} onClose={() => setDrawer(null)} />
+            <SectorDrawer name={drawer.name} companies={shellCompanies} sectorsLive={shellSectors} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "index" && (
-            <IndexDrawer idx={drawer.idx} pulse={livePulse} onClose={() => setDrawer(null)} />
+            <IndexDrawer idx={drawer.idx} pulse={livePulse} sectorsLive={shellSectors} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "feargreed" && (
             <FearGreedDrawer onClose={() => setDrawer(null)} />

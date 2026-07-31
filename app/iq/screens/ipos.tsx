@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useIQActions } from "../shell";
-import { cls, sign, StockLogo } from "../utils";
+import { cls, sign, StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { IpoEventDoc } from "../types";
 
@@ -20,24 +20,6 @@ interface IpoRow {
   cur: number | null; day1: number | null;
   sec: string; live?: boolean;
 }
-
-const RECENT_IPOS: IpoRow[] = [
-  { s: "RDDT", n: "Reddit",        date: "Mar 21 '24", offer: 34,   cur: 52.40,  day1: 48,  sec: "Internet"  },
-  { s: "ALAB", n: "Astera Labs",   date: "Mar 20 '24", offer: 36,   cur: 71.20,  day1: 72,  sec: "Semis"     },
-  { s: "ARM",  n: "Arm Holdings",  date: "Sep 14 '23", offer: 51,   cur: 118.30, day1: 25,  sec: "Semis"     },
-  { s: "CART", n: "Instacart",     date: "Sep 19 '23", offer: 30,   cur: 38.60,  day1: 12,  sec: "Internet"  },
-  { s: "RBRK", n: "Rubrik",        date: "Apr 25 '24", offer: 32,   cur: 38.90,  day1: 16,  sec: "Software"  },
-  { s: "BIRK", n: "Birkenstock",   date: "Oct 11 '23", offer: 46,   cur: 52.80,  day1: -12, sec: "Consumer"  },
-  { s: "KVYO", n: "Klaviyo",       date: "Sep 20 '23", offer: 30,   cur: 26.10,  day1: 9,   sec: "Software"  },
-  { s: "CAVA", n: "CAVA Group",    date: "Jun 15 '23", offer: 22,   cur: 84.40,  day1: 99,  sec: "Consumer"  },
-];
-
-const PIPELINE = [
-  { s: "CHYM", n: "Chime",         expected: "Q3 '25 (expected)",  sec: "Fintech"   },
-  { s: "TTAN", n: "ServiceTitan",  expected: "Filed S-1",          sec: "Software"  },
-  { s: "SKMS", n: "Skims",         expected: "Rumored 2025",       sec: "Consumer"  },
-  { s: "DBRX", n: "Databricks",    expected: "2025 (expected)",    sec: "Data / AI" },
-];
 
 const SECTOR_OPTIONS = [
   "All", "Consumer", "Data / AI", "Fintech", "Healthcare",
@@ -63,9 +45,7 @@ export function IPOsScreen() {
     sec: e.exchange ?? "—",
     live: true,
   }));
-  const rows = liveRows.length > 0 ? liveRows : RECENT_IPOS;
-  const usingLive = liveRows.length > 0;
-  const filtered = rows.filter(r => sector === "All" || r.sec === sector);
+  const filtered = liveRows.filter(r => sector === "All" || r.sec === sector);
 
   // Only rows with BOTH an offer price and a current price can produce a return.
   const perf = filtered.filter(
@@ -128,7 +108,7 @@ export function IPOsScreen() {
         </select>
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>
-          {filtered.length} of {rows.length} shown{usingLive ? "" : " · sample data"}
+          {filtered.length} of {liveRows.length} shown
         </span>
       </div>
 
@@ -201,19 +181,11 @@ export function IPOsScreen() {
               </tr>
             </thead>
             <tbody>
-              {PIPELINE.map(p => (
-                <tr key={p.s}>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <StockLogo sym={p.s} size={26} />
-                      <b style={{ color: "var(--text-hi)" }}>{p.n}</b>
-                    </div>
-                  </td>
-                  <td style={{ fontFamily: "var(--f-mono)", fontWeight: 700, color: "var(--text-hi)" }}>{p.s}</td>
-                  <td>{p.expected}</td>
-                  <td>{p.sec}</td>
-                </tr>
-              ))}
+              <tr>
+                <td colSpan={4} style={{ padding: 16 }}>
+                  <DataState label="No live source for pre-filing / rumored upcoming IPOs (would need a filings-intelligence feed). The live calendar below shows confirmed, priced offerings." />
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

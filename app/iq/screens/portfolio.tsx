@@ -2,17 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { firebaseAuth } from "../../firebase";
-import { folio as folioData, type FolioItem } from "../data";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc, HoldingDoc } from "../types";
-import { cls, arr, sign } from "../utils";
+import { cls, arr, sign, DataState } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
-const DEFAULT_SHARES: Record<string, number> = {
-  NVDA: 15, AAPL: 120, TSLA: 40, META: 30,
-  HD: 15, MSFT: 60, AMZN: 80, PLTR: 1000,
-};
+interface Holding {
+  ticker: string; shares: number;
+  positionSize: "Small" | "Medium" | "Large";
+  conviction: "High" | "Medium" | "Low";
+}
 
 function usd(v: number) {
   return v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${v.toFixed(2)}`;
@@ -23,70 +23,58 @@ export function PortfolioScreen() {
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
-  const [holdings, setHoldings] = useState<FolioItem[]>(() => [...folioData]);
-  const [pfSel, setPfSel]       = useState(folioData[0]?.ticker ?? "");
-  const [shares, setShares]     = useState<Record<string, number>>(() => {
-    const base = { ...DEFAULT_SHARES };
-    folioData.forEach(f => { if (!(f.ticker in base)) base[f.ticker] = 10; });
-    return base;
-  });
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [pfSel, setPfSel]       = useState("");
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [addOpen, setAddOpen]       = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [importing, setImporting]   = useState(false);
-  const [importDone, setImportDone] = useState(false);
   const [newSym, setNewSym]         = useState("");
   const [newSize, setNewSize]       = useState<"Small"|"Medium"|"Large">("Small");
   const [newConv, setNewConv]       = useState<"High"|"Medium"|"Low">("Medium");
 
-  // Backend persistence layered on top of the demo portfolio: once signed in,
-  // saved holdings (if any) take over; an empty/missing set keeps the demo names.
   const refreshHoldings = useCallback(async () => {
     if (!uid) return;
     try {
       const { holdings: rows } = await apiGet<{ holdings: HoldingDoc[] }>("/api/portfolio");
-      if (rows.length === 0) return;
-      const nextShares: Record<string, number> = {};
-      const nextHoldings: FolioItem[] = rows.map(r => {
-        nextShares[r.ticker] = r.shares;
-        const mock = folioData.find(f => f.ticker === r.ticker);
-        return mock ?? {
-          ticker: r.ticker, name: r.ticker, price: 100, pctChange: 0, gainLossPct: 0,
-          positionSize: r.positionSize, conviction: r.conviction, eventNote: "—",
-        };
-      });
-      setHoldings(nextHoldings);
-      setShares(nextShares);
-      setPfSel(prev => prev || nextHoldings[0]?.ticker || "");
-    } catch { /* stay on demo data */ }
+      setHoldings(rows.map(r => ({ ticker: r.ticker, shares: r.shares, positionSize: r.positionSize, conviction: r.conviction })));
+      setPfSel(prev => prev || rows[0]?.ticker || "");
+    } catch { /* leave holdings empty */ }
   }, [uid]);
 
   useEffect(() => { void refreshHoldings(); }, [refreshHoldings]);
 
-  // Live price/% overlay — merged on top of the mock/demo holdings, never dropping a row.
+  // Every field beyond ticker/shares/positionSize/conviction comes from the
+  // live companies collection — a holding with no live match still lists
+  // (it's the user's data), but its price/change render as "not available"
+  // and it's excluded from value/P&L totals rather than counted as $0.
   const merged = holdings.map(h => {
     const live = byTicker.get(h.ticker);
-    if (!live || live.price == null) return { ...h, live: false as const };
-    return { ...h, price: live.price, pctChange: live.pctChange ?? h.pctChange, live: true as const };
+    const hasLive = !!live && live.price != null;
+    return {
+      ...h,
+      name: live?.name ?? h.ticker,
+      price: hasLive ? live!.price! : null,
+      pctChange: hasLive ? (live!.pctChange ?? 0) : null,
+      live: hasLive,
+    };
   });
-  const liveCount = merged.filter(h => h.live).length;
+  const priced = merged.filter((h): h is typeof h & { price: number; pctChange: number } => h.price != null);
 
   const sel      = merged.find(h => h.ticker === pfSel);
-  const totalVal = merged.reduce((s, h) => s + (shares[h.ticker] ?? 10) * h.price, 0);
-  const dayPL    = merged.reduce((s, h) => s + (shares[h.ticker] ?? 10) * h.price * h.pctChange / 100, 0);
-  const green    = merged.filter(h => h.pctChange > 0).length;
-  const driver   = [...merged].sort((a, b) => (shares[b.ticker] ?? 10) * b.price - (shares[a.ticker] ?? 10) * a.price)[0];
-  const leader   = [...merged].sort((a, b) => b.pctChange - a.pctChange)[0];
-  const laggard  = [...merged].sort((a, b) => a.pctChange - b.pctChange)[0];
+  const totalVal = priced.reduce((s, h) => s + h.shares * h.price, 0);
+  const dayPL    = priced.reduce((s, h) => s + h.shares * h.price * h.pctChange / 100, 0);
+  const green    = priced.filter(h => h.pctChange > 0).length;
+  const driver   = priced.length ? [...priced].sort((a, b) => b.shares * b.price - a.shares * a.price)[0] : null;
+  const leader   = priced.length ? [...priced].sort((a, b) => b.pctChange - a.pctChange)[0] : null;
+  const laggard  = priced.length ? [...priced].sort((a, b) => a.pctChange - b.pctChange)[0] : null;
   const driverWt = driver && totalVal > 0
-    ? ((shares[driver.ticker] ?? 10) * driver.price / totalVal * 100).toFixed(0) : "0";
+    ? (driver.shares * driver.price / totalVal * 100).toFixed(0) : "0";
 
   async function addHolding() {
     if (!newSym.trim()) return;
     const s = newSym.trim().toUpperCase();
     if (holdings.find(h => h.ticker === s)) { setAddOpen(false); return; }
-    setHoldings(prev => [...prev, { ticker: s, name: s, price: 100, pctChange: 0, gainLossPct: 0, positionSize: newSize, conviction: newConv, eventNote: "—" }]);
-    setShares(prev => ({ ...prev, [s]: 10 }));
+    setHoldings(prev => [...prev, { ticker: s, shares: 10, positionSize: newSize, conviction: newConv }]);
     setNewSym(""); setAddOpen(false);
     if (uid) {
       try {
@@ -107,23 +95,14 @@ export function PortfolioScreen() {
     }
   }
 
-  function startImport() {
-    setImporting(true);
-    setTimeout(() => { setImporting(false); setImportDone(true); }, 1400);
-  }
-
-  const PARSED = [{ s: "NVDA", sh: 15 }, { s: "AAPL", sh: 120 }, { s: "MSFT", sh: 60 }];
-
   return (
     <>
       <div className="page-head">
         <div>
           <div className="page-sub">
-            {merged.length} holdings · {usd(totalVal)} ·{" "}
-            <span className={cls(dayPL)}>
-              {dayPL >= 0 ? "+" : ""}{usd(Math.abs(dayPL))} today
-            </span>
-            {liveCount > 0 && <> · <span style={{ color: "var(--up)" }}>{liveCount} live</span></>}
+            {merged.length} holdings{priced.length > 0 && <> · {usd(totalVal)} ·{" "}
+              <span className={cls(dayPL)}>{dayPL >= 0 ? "+" : ""}{usd(Math.abs(dayPL))} today</span>
+            </>}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -153,33 +132,37 @@ export function PortfolioScreen() {
             <span className="pill ai">drivers · leaders · laggards</span>
           </div>
           <div className="card-b">
-            <ul className="wmn-body" style={{ columns: 2 }}>
-              <li>
-                <span className="bullet" />
-                <span>
-                  <b>Biggest driver:</b>{" "}
-                  <b style={{ color: "var(--text-hi)" }}>{driver?.ticker ?? "—"}</b> — {sign(driver?.pctChange ?? 0)} at {driverWt}% weight.
-                </span>
-              </li>
-              <li>
-                <span className="bullet" />
-                <span>
-                  <b>Leader:</b> <b className="up">{leader?.ticker} {sign(leader?.pctChange ?? 0)}</b>;{" "}
-                  <b>laggard:</b> <b className="down">{laggard?.ticker} {sign(laggard?.pctChange ?? 0)}</b>.
-                </span>
-              </li>
-              <li>
-                <span className="bullet" />
-                <span>
-                  <b>Net:</b> {green} of {merged.length} green; day P/L{" "}
-                  <b className={cls(dayPL)}>{dayPL >= 0 ? "+" : ""}{usd(Math.abs(dayPL))}</b>.
-                </span>
-              </li>
-              <li>
-                <span className="bullet" />
-                <span>Click any holding on the left to see its full analysis →</span>
-              </li>
-            </ul>
+            {priced.length === 0 ? (
+              <DataState label="No live price data for any current holding yet." />
+            ) : (
+              <ul className="wmn-body" style={{ columns: 2 }}>
+                <li>
+                  <span className="bullet" />
+                  <span>
+                    <b>Biggest driver:</b>{" "}
+                    <b style={{ color: "var(--text-hi)" }}>{driver?.ticker ?? "—"}</b> — {sign(driver?.pctChange ?? 0)} at {driverWt}% weight.
+                  </span>
+                </li>
+                <li>
+                  <span className="bullet" />
+                  <span>
+                    <b>Leader:</b> <b className="up">{leader?.ticker} {sign(leader?.pctChange ?? 0)}</b>;{" "}
+                    <b>laggard:</b> <b className="down">{laggard?.ticker} {sign(laggard?.pctChange ?? 0)}</b>.
+                  </span>
+                </li>
+                <li>
+                  <span className="bullet" />
+                  <span>
+                    <b>Net:</b> {green} of {priced.length} green; day P/L{" "}
+                    <b className={cls(dayPL)}>{dayPL >= 0 ? "+" : ""}{usd(Math.abs(dayPL))}</b>.
+                  </span>
+                </li>
+                <li>
+                  <span className="bullet" />
+                  <span>Click any holding on the left to see its full analysis →</span>
+                </li>
+              </ul>
+            )}
           </div>
         </div>
 
@@ -206,13 +189,13 @@ export function PortfolioScreen() {
                   sym={f.ticker}
                   name={f.name}
                   seed={i + 3}
-                  sparkUp={f.pctChange >= 0}
+                  sparkUp={(f.pctChange ?? 0) >= 0}
                   isSelected={pfSel === f.ticker}
                   onClick={() => setPfSel(f.ticker)}
                   onDelete={() => setConfirmDel(f.ticker)}
-                  valueTop={f.price >= 1000 ? `$${(f.price / 1000).toFixed(2)}K` : `$${f.price.toFixed(2)}`}
-                  valueBottom={`${arr(f.pctChange)} ${sign(f.pctChange)}`}
-                  valueBottomClass={f.pctChange >= 0 ? "up" : "down"}
+                  valueTop={f.price == null ? "—" : f.price >= 1000 ? `$${(f.price / 1000).toFixed(2)}K` : `$${f.price.toFixed(2)}`}
+                  valueBottom={f.pctChange == null ? "—" : `${arr(f.pctChange)} ${sign(f.pctChange)}`}
+                  valueBottomClass={f.pctChange == null ? "" : f.pctChange >= 0 ? "up" : "down"}
                 />
               ))}
             </StockListCard>
@@ -264,48 +247,14 @@ export function PortfolioScreen() {
       {/* ── Import from photo modal ── */}
       {importOpen && (
         <>
-          <div className="scrim" onClick={() => { setImportOpen(false); setImportDone(false); setImporting(false); }} />
-          <div className="drawer" style={{ maxHeight: "min(480px,88vh)" }}>
+          <div className="scrim" onClick={() => setImportOpen(false)} />
+          <div className="drawer" style={{ maxHeight: "min(320px,85vh)" }}>
             <div className="drawer-h">
               <div style={{ flex: 1, fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Import from photo</div>
-              <button className="closebtn" onClick={() => { setImportOpen(false); setImportDone(false); setImporting(false); }}>✕</button>
+              <button className="closebtn" onClick={() => setImportOpen(false)}>✕</button>
             </div>
             <div className="drawer-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {!importing && !importDone && (
-                <div className="imp-drop" onClick={startImport}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ width: 30, height: 30, color: "var(--brand-2)", flexShrink: 0 }}>
-                    <rect x="3" y="4" width="18" height="16" rx="2" />
-                    <path d="M4 16l5-5 4 4 3-3 4 4" />
-                    <circle cx="8.5" cy="8.5" r="1.5" />
-                  </svg>
-                  <div>
-                    <div style={{ fontWeight: 600, color: "var(--text-hi)" }}>Upload a screenshot</div>
-                    <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Tap to pick a photo of your brokerage holdings</div>
-                  </div>
-                </div>
-              )}
-              {importing && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 0", color: "var(--text-dim-solid)" }}>
-                  <span className="imp-spin" />
-                  <span>Scanning image with AI…</span>
-                </div>
-              )}
-              {importDone && (
-                <>
-                  <div style={{ fontSize: ".82rem", color: "var(--up)", fontWeight: 600 }}>✓ Found {PARSED.length} holdings</div>
-                  {PARSED.map(row => (
-                    <div key={row.s} className="imp-row">
-                      <span className="s" style={{ flex: 1, fontWeight: 700 }}>{row.s}</span>
-                      <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Shares:</span>
-                      <input className="sh-edit" type="number" defaultValue={row.sh} />
-                    </div>
-                  ))}
-                  <button className="btn primary" style={{ width: "100%" }}
-                    onClick={() => { setImportOpen(false); setImportDone(false); }}>
-                    Add to portfolio
-                  </button>
-                </>
-              )}
+              <DataState label="Photo import isn't connected to a live OCR service yet. Add holdings manually for now — this will wire up here once a vendor is integrated." />
             </div>
           </div>
         </>
