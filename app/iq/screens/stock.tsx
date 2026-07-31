@@ -267,13 +267,13 @@ function EarnPane({ hist10 }: { hist10: EarnQ[] }) {
 
 function StockChartExpanded({
   sym, px, initialTf, initialChartType, initialMaStep, initialEmaStep,
-  initialShowVol, initialShowRsi, initialShowEarnings, hist10, rsi, erDate,
+  initialShowVol, initialShowRsi, initialShowEarnings, hist10, rsi, rsiLoading, erDate,
 }: {
   sym: string; px: number; initialTf: string;
   initialChartType: "Candles" | "Hollow" | "Bars" | "Line" | "Area";
   initialMaStep: number; initialEmaStep: number;
   initialShowVol: boolean; initialShowRsi: boolean; initialShowEarnings: boolean;
-  hist10: EarnQ[]; rsi: number | null; erDate: string;
+  hist10: EarnQ[]; rsi: number | null; rsiLoading: boolean; erDate: string;
 }) {
   const [tf, setTf] = useState(initialTf);
   const [chartType, setChartType] = useState(initialChartType);
@@ -282,7 +282,7 @@ function StockChartExpanded({
   const [showVol, setShowVol] = useState(initialShowVol);
   const [showRsi, setShowRsi] = useState(initialShowRsi);
   const [showEarnings, setShowEarnings] = useState(initialShowEarnings);
-  const realBars = useBackendBars(sym, tf);
+  const { bars: realBars } = useBackendBars(sym, tf);
   const isUp = px > 0;
   return (
     <div>
@@ -314,7 +314,7 @@ function StockChartExpanded({
               {rsi != null ? `${Math.round(rsi)} · ${rsi > 70 ? "overbought" : rsi < 40 ? "weak" : "neutral-to-strong"}` : "not available"}
             </span>
           </div>
-          <RsiPane rsi14={rsi} />
+          <RsiPane rsi14={rsi} loading={rsiLoading} />
         </div>
       )}
       {showEarnings && (
@@ -363,22 +363,22 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // endpoints. Nothing here falls back to mock data; a ticker with no live
   // match for a given panel just shows that panel as not available.
   const { data: liveConsensus } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
-  const { data: liveInsider } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
-  const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
-  const { data: liveEarningsEvents } = useApiList<LiveEarningsDoc>("/market-data/earnings");
-  const yearBars = useBackendBars(sym, "1Y");
+  const { data: liveInsider, loading: insiderLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: sectorsLive, loading: sectorsLoading } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const { data: liveEarningsEvents, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const { bars: yearBars, loading: yearBarsLoading } = useBackendBars(sym, "1Y");
   const [emaStep, setEmaStep] = useState(0);
-  const realBars = useBackendBars(sym, tfActive);
+  const { bars: realBars } = useBackendBars(sym, tfActive);
 
   // Per-ticker profile + dividend/split/financials history — cache-aside via
   // GET /live/company|/live/dividend-history|/live/splits|/live/financials
   // (replacing the direct companies Firestore listener this screen used to
   // hold open). Re-fetches whenever `sym` changes since it's part of the path.
-  const { data: liveCompany } = useApiResource<CompanyDoc>(`/live/company?ticker=${encodeURIComponent(sym)}`);
-  const { data: dividendHistory } = useApiResource<DividendHistoryDoc>(`/live/dividend-history?ticker=${encodeURIComponent(sym)}`);
+  const { data: liveCompany, loading: liveCompanyLoading } = useApiResource<CompanyDoc>(`/live/company?ticker=${encodeURIComponent(sym)}`);
+  const { data: dividendHistory, loading: dividendLoading } = useApiResource<DividendHistoryDoc>(`/live/dividend-history?ticker=${encodeURIComponent(sym)}`);
   const { data: splitsDoc } = useApiResource<SplitsDoc>(`/live/splits?ticker=${encodeURIComponent(sym)}`);
-  const { data: financialsDoc } = useApiResource<FinancialsDoc>(`/live/financials?ticker=${encodeURIComponent(sym)}`);
+  const { data: financialsDoc, loading: financialsLoading } = useApiResource<FinancialsDoc>(`/live/financials?ticker=${encodeURIComponent(sym)}`);
   const { data: tickerNews } = useApiResource<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`);
 
   // ── Notes (Firebase stock_comments) ──────────────────────────────────────
@@ -720,7 +720,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     initialMaStep={maStep} initialEmaStep={emaStep}
                     initialShowVol={showVol} initialShowRsi={showRsi}
                     initialShowEarnings={showEarnings}
-                    hist10={hist10} rsi={rsi} erDate={erDate}
+                    hist10={hist10} rsi={rsi} rsiLoading={liveCompanyLoading} erDate={erDate}
                   />
                 }
               />
@@ -739,7 +739,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     {rsi != null ? `${Math.round(rsi)} · ${rsi > 70 ? "overbought" : rsi < 40 ? "weak" : "neutral-to-strong"}` : "not available"}
                   </span>
                 </div>
-                <div style={{ padding: "0 14px 4px" }}><RsiPane rsi14={rsi} /></div>
+                <div style={{ padding: "0 14px 4px" }}><RsiPane rsi14={rsi} loading={liveCompanyLoading} /></div>
               </div>
             )}
             {showEarnings && (
@@ -825,7 +825,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
             <div className="card-b">
               {rs == null ? (
-                <DataState label="Relative-strength rank hasn't been computed for this ticker yet, so the trend/MA read isn't available." />
+                <DataState loading={liveCompanyLoading} label="Relative-strength rank hasn't been computed for this ticker yet, so the trend/MA read isn't available." />
               ) : ([
                 ["Trend",            trendTxt as string],
                 ["Support / Resist.",hi != null ? `52-week high <b>$${nf(hi)}</b>${lo != null ? `; 52-week low <b>$${nf(lo)}</b>` : ""}.` : "Support/resistance levels not available."],
@@ -877,7 +877,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 </div>
                 <div className="card-b" style={{ paddingTop: 8 }}>
                   {inc.length === 0 ? (
-                    <DataState label={`No live ${finPeriod === "Q" ? "quarterly" : "annual"} financials synced for ${sym} yet.`} />
+                    <DataState loading={financialsLoading} label={`No live ${finPeriod === "Q" ? "quarterly" : "annual"} financials synced for ${sym} yet.`} />
                   ) : (
                     <>
                       <div className="ec-legend">
@@ -910,7 +910,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       )}
                     </div>
                     {histEps.length === 0 ? (
-                      <DataState label={`No live earnings history synced for ${sym} yet.`} />
+                      <DataState loading={earningsLoading} label={`No live earnings history synced for ${sym} yet.`} />
                     ) : (
                       <>
                         <EarningsGrowthChart hist={histEps} />
@@ -1008,7 +1008,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     <span className={`r ${cls(peer.c)}`}>{sign(peer.c)}</span>
                   </div>
                 );
-              }) : <DataState label="No live peers found in this sector yet." />}
+              }) : <DataState loading={companiesLoading} label="No live peers found in this sector yet." />}
             </div>
           </div>
 
@@ -1020,7 +1020,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
             <div className="card-b">
               {topSectors.length === 0 ? (
-                <DataState label="No live sector performance data yet." />
+                <DataState loading={sectorsLoading} label="No live sector performance data yet." />
               ) : (
                 <>
                   {topSectors.map((s, i) => (
@@ -1076,7 +1076,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               </div>
               <div className="card-b" style={{ paddingTop: 6 }}>
                 {!dh ? (
-                  <DataState label={`Dividend data not synced for ${sym} yet.`} />
+                  <DataState loading={dividendLoading} label={`Dividend data not synced for ${sym} yet.`} />
                 ) : !hasReal ? (
                   <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "8px 0" }}>{sym} does not currently pay a dividend.</div>
                 ) : (
@@ -1134,7 +1134,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           </div>
           <div className="card-b" style={{ paddingTop: 6 }}>
             {hist10.length === 0 ? (
-              <DataState label={`No live earnings-estimate history synced for ${sym} yet.`} />
+              <DataState loading={earningsLoading} label={`No live earnings-estimate history synced for ${sym} yet.`} />
             ) : (
               <>
                 <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginBottom: 8 }}>Next report: {erDate}</div>
@@ -1219,7 +1219,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 Moving averages &amp; range
               </div>
               {hi == null && lo == null && ema50 == null && sma200 == null ? (
-                <DataState label="No historical price data synced for this ticker yet." />
+                <DataState loading={liveCompanyLoading || yearBarsLoading} label="No historical price data synced for this ticker yet." />
               ) : (
                 ([
                   ["52W High", hi,     isUp ? "up"   : "dim"],
@@ -1381,7 +1381,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               </div>
               <div className="drawer-b">
                 {companies.filter(c => c.sector === group).length === 0 ? (
-                  <DataState label={`No live peers found in ${group ?? "this sector"}.`} />
+                  <DataState loading={companiesLoading} label={`No live peers found in ${group ?? "this sector"}.`} />
                 ) : companies
                   .filter(c => c.sector === group && c.pctChange != null)
                   .sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0))
@@ -1412,7 +1412,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
-                {rankedSectors.length === 0 ? <DataState label="No live sector performance data yet." /> : rankedSectors.map((s, i) => (
+                {rankedSectors.length === 0 ? <DataState loading={sectorsLoading} label="No live sector performance data yet." /> : rankedSectors.map((s, i) => (
                   <div key={s.sector} className="grouprow" style={{ cursor: "pointer" }}
                     onClick={() => { setInnerDrawer(null); openSector(s.sector); }}>
                     <span className="rk">{i + 1}</span>
@@ -1460,7 +1460,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     </div>
                   );
                 }) : (
-                  <DataState label="No recent Form 4 activity found for this ticker." />
+                  <DataState loading={insiderLoading} label="No recent Form 4 activity found for this ticker." />
                 )}
                 <div className="ai-sec" style={{ marginTop: 14 }}><div className="h">Top institutional holders (13F)</div></div>
                 <DataState label="Per-ticker 13F holder mapping needs SEC positions keyed by ticker instead of CUSIP — not available yet." />
@@ -1494,7 +1494,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 </div>
 
                 {hi == null && lo == null ? (
-                  <DataState label="No historical price data synced for this ticker yet." />
+                  <DataState loading={liveCompanyLoading || yearBarsLoading} label="No historical price data synced for this ticker yet." />
                 ) : (
                   <>
                     <div className="ai-sec"><div className="h">52-week levels</div></div>
@@ -1533,7 +1533,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               </div>
               <div className="drawer-b">
                 {hist10.length === 0 ? (
-                  <DataState label={`No live earnings-estimate history synced for ${sym} yet.`} />
+                  <DataState loading={earningsLoading} label={`No live earnings-estimate history synced for ${sym} yet.`} />
                 ) : (
                   <>
                     <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)", marginBottom: 12 }}>
@@ -1606,7 +1606,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       )}
                     </div>
                     <div className="card-b" style={{ paddingTop: 8 }}>
-                      {hist10.length === 0 ? <DataState label={`No live earnings-estimate history synced for ${sym} yet.`} /> : (
+                      {hist10.length === 0 ? <DataState loading={earningsLoading} label={`No live earnings-estimate history synced for ${sym} yet.`} /> : (
                         <>
                           <div className="ec-legend">
                             <span><i style={{ background: "var(--surface-3)" }} />EPS estimate</span>
@@ -1630,7 +1630,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       )}
                     </div>
                     <div className="card-b" style={{ paddingTop: 8 }}>
-                      {inc.length === 0 ? <DataState label={`No live financials synced for ${sym} yet.`} /> : (
+                      {inc.length === 0 ? <DataState loading={financialsLoading} label={`No live financials synced for ${sym} yet.`} /> : (
                         <>
                           <div className="ec-legend">
                             <span><i style={{ background: "var(--brand)" }} />Revenue</span>
@@ -1713,7 +1713,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 </div>
                 <div className="drawer-b">
                   {!dh ? (
-                    <DataState label={`Dividend data not synced for ${sym} yet.`} />
+                    <DataState loading={dividendLoading} label={`Dividend data not synced for ${sym} yet.`} />
                   ) : !hasReal ? (
                     <div style={{ padding: "24px 0", textAlign: "center", fontSize: ".9rem", color: "var(--text-dim-solid)" }}>
                       {sym} does not currently pay a dividend.

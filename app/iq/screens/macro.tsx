@@ -183,7 +183,7 @@ function DivHistoryChart({ data }: { data: { year: number; div: number }[] }) {
 
 // ── Dividend sliding drawer ──────────────────────────────────────────────────
 function DividendDrawer({ stock, onClose }: { stock: DivStock; onClose: () => void }) {
-  const { data: dh } = useApiResource<DividendHistoryDoc>(`/live/dividend-history?ticker=${encodeURIComponent(stock.sym)}`);
+  const { data: dh, loading: dhLoading } = useApiResource<DividendHistoryDoc>(`/live/dividend-history?ticker=${encodeURIComponent(stock.sym)}`);
   const hist = (dh?.annualTotals ?? []).map(a => ({ year: a.year, div: a.total })).sort((a, b) => a.year - b.year);
   return (
     <>
@@ -213,7 +213,7 @@ function DividendDrawer({ stock, onClose }: { stock: DivStock; onClose: () => vo
                 <div className="m"><div className="k">5yr CAGR</div><div className="v up">{dh.cagr5yPct != null ? `${dh.cagr5yPct.toFixed(1)}%` : "—"}</div></div>
               </div>
               {hist.length === 0 ? (
-                <DataState label={`No live dividend history synced for ${stock.sym} yet.`} />
+                <DataState loading={dhLoading} label={`No live dividend history synced for ${stock.sym} yet.`} />
               ) : (
                 <>
                   <div className="card" style={{ marginBottom: 14 }}>
@@ -289,10 +289,10 @@ function divMonthCal(year: number, month1: number, liveStocks: DivStock[]) {
 
 // ── Main screen ──────────────────────────────────────────────────────────────
 export function MacroScreen() {
-  const { data: macroLive } = useApiList<MacroEventDoc>("/market-data/macro-events");
+  const { data: macroLive, loading: macroLoading } = useApiList<MacroEventDoc>("/market-data/macro-events");
 
-  const { data: liveDividends } = useApiList<DividendDoc>("/market-data/dividends");
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: liveDividends, loading: liveDividendsLoading } = useApiList<DividendDoc>("/market-data/dividends");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const { frame: tapeFrame } = useTapeStream();
   const liveVix = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items).find(i => i.label === "VIX") : null;
   // Real high-beta names (proxy for "VIX sensitive") — no live implied-vol
@@ -535,7 +535,7 @@ export function MacroScreen() {
             </div>
             <div className="card-b">
               {!liveVix ? (
-                <DataState label="No live VIX-proxy quote available right now." />
+                <DataState loading={!tapeFrame} label="No live VIX-proxy quote available right now." />
               ) : (
                 <>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
@@ -563,7 +563,7 @@ export function MacroScreen() {
             </div>
             <div className="tbl-wrap" style={{ flex: 1 }}>
               {ecoRows.length === 0 ? (
-                <div style={{ padding: 16 }}><DataState label="No live macro events for this window yet." /></div>
+                <div style={{ padding: 16 }}><DataState loading={macroLoading} label="No live macro events for this window yet." /></div>
               ) : (
                 <table className="tbl">
                   <thead>
@@ -611,7 +611,7 @@ export function MacroScreen() {
           </div>
           <div className="tbl-wrap">
             {liveDividendsSorted.length === 0 ? (
-              <div style={{ padding: 16 }}><DataState label="No live dividend calendar data synced yet." /></div>
+              <div style={{ padding: 16 }}><DataState loading={liveDividendsLoading} label="No live dividend calendar data synced yet." /></div>
             ) : (
               <table className="tbl">
                 <thead>
@@ -653,7 +653,7 @@ export function MacroScreen() {
           </div>
           <div className="tbl-wrap">
             {highBetaStocks.length === 0 ? (
-              <DataState label="No live beta data synced yet." />
+              <DataState loading={companiesLoading} label="No live beta data synced yet." />
             ) : (
               <table className="tbl">
                 <thead>

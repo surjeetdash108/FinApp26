@@ -88,7 +88,7 @@ function FeedItem({ item, i, total, onClick }: {
 /* ── News Drawer ── */
 function NewsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   const { openStockFull } = useIQActions();
-  const { data: tickerNews } = useApiResource<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`);
+  const { data: tickerNews, loading: tickerNewsLoading } = useApiResource<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`);
   const liveItems = [...(tickerNews ?? [])].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
   return (
@@ -106,7 +106,7 @@ function NewsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
 
         <div className="drawer-b">
           {liveItems.length === 0 ? (
-            <DataState label={`No live news synced for ${sym} yet.`} />
+            <DataState loading={tickerNewsLoading} label={`No live news synced for ${sym} yet.`} />
           ) : (
             liveItems.map(item => (
               <a key={item.id} href={item.url} target="_blank" rel="noreferrer"
@@ -141,8 +141,8 @@ function NewsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
 export function CommentaryScreen() {
   const router = useRouter();
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  const { data: liveNews } = useApiList<NewsArticleDoc>("/market-data/news");
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: liveNews, loading: liveNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
   const [newsDrawer,    setNewsDrawer]    = useState<string | null>(null);
@@ -275,7 +275,7 @@ export function CommentaryScreen() {
               </div>
               <div className="card-b" style={{ paddingTop: 2, maxHeight: 620, overflowY: "auto" }}>
                 {tabFeed.length === 0 ? (
-                  <DataState label={activeTab === 3
+                  <DataState loading={liveNewsLoading} label={activeTab === 3
                     ? (uid ? "No live news matches your portfolio or watchlist names right now." : "Sign in and add names to your watchlist or portfolio to see this feed.")
                     : "No live news items in this category right now."} />
                 ) : tabFeed.map((item, i) => (
@@ -292,7 +292,7 @@ export function CommentaryScreen() {
               </div>
               <div className="card-b" style={{ paddingTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {(activeTab === 3 ? [...mySymbols] : topSymbols).length === 0 ? (
-                  <DataState label={activeTab === 3 ? "No tracked names yet." : "No live companies synced yet."} />
+                  <DataState loading={activeTab === 3 ? false : companiesLoading} label={activeTab === 3 ? "No tracked names yet." : "No live companies synced yet."} />
                 ) : (activeTab === 3 ? [...mySymbols] : topSymbols).map(sym => (
                   <button key={sym} className="chip" onClick={() => openNews(sym)}>{sym}</button>
                 ))}

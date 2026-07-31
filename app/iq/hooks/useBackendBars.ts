@@ -17,8 +17,10 @@ interface BarsResponse {
  * timeframes (the old hook only ever had real data for 3M/6M/1Y; 1D/1W/1M/5Y
  * always fell back to the synthetic generator).
  */
-export function useBackendBars(sym: string, tf: string): OHLCBar[] | undefined {
-  const { data } = useApiResource<BarsResponse>(`/live/bars?ticker=${encodeURIComponent(sym)}&tf=${tf}`);
-  if (!data || data.bars.length < 2) return undefined;
-  return data.bars.map((b) => ({ o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+export function useBackendBars(sym: string, tf: string): { bars: OHLCBar[] | undefined; loading: boolean } {
+  const { data, loading } = useApiResource<BarsResponse>(`/live/bars?ticker=${encodeURIComponent(sym)}&tf=${tf}`);
+  const bars = !data || data.bars.length < 2
+    ? undefined
+    : data.bars.map((b) => ({ o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+  return { bars, loading };
 }

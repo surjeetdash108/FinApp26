@@ -29,9 +29,9 @@ function TrashIcon() {
 }
 
 /* ── EPS surprise bars — real surprise % from the live earnings feed ── */
-function EarnPane({ hist }: { hist: EarnQ[] }) {
+function EarnPane({ hist, loading }: { hist: EarnQ[]; loading: boolean }) {
   if (hist.length === 0) {
-    return <DataState label="No live earnings-surprise history synced for this ticker yet." height={80} />;
+    return <DataState loading={loading} label="No live earnings-surprise history synced for this ticker yet." height={80} />;
   }
   const W = 720, H = 80, PADL = 40, PADR = 20, PADT = 10, PADB = 18;
   const iw = W - PADL - PADR;
@@ -116,12 +116,14 @@ export function StockRow({
 
 /* ── StockListCard: 340px card with scrollable list ── */
 export function StockListCard({
-  title, headerRight, isEmpty, emptyMessage = "No items.", maxListHeight, children,
+  title, headerRight, isEmpty, emptyMessage = "No items.", loading, maxListHeight, children,
 }: {
   title: string;
   headerRight?: ReactNode;
   isEmpty?: boolean;
   emptyMessage?: string;
+  /** True while the underlying fetch is still in flight — shows a spinner instead of the empty message. */
+  loading?: boolean;
   maxListHeight?: number;
   children?: ReactNode;
 }) {
@@ -133,11 +135,7 @@ export function StockListCard({
           {headerRight}
         </div>
         <div className="pf-list" style={{ flex: 1, maxHeight: maxListHeight ?? "none", overflowY: "auto" }}>
-          {isEmpty ? (
-            <div style={{ padding: 16, fontSize: ".8rem", color: "var(--text-dim-solid)" }}>
-              {emptyMessage}
-            </div>
-          ) : children}
+          {isEmpty ? <DataState loading={loading} label={emptyMessage} /> : children}
         </div>
       </div>
     </div>
@@ -149,8 +147,8 @@ export function StockListCard({
  * the live earnings feed for one ticker — same pattern stock.tsx uses for its
  * own hist10, shared here so the two never drift onto different data.
  */
-function useLiveEarningsForSym(sym: string): { hist: EarnQ[]; erDate: string } {
-  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+function useLiveEarningsForSym(sym: string): { hist: EarnQ[]; erDate: string; loading: boolean } {
+  const { data: liveEarnings, loading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   const symEvents = liveEarnings.filter(e => e.ticker === sym).sort((a, b) => a.date.localeCompare(b.date));
   const todayStr = new Date().toISOString().slice(0, 10);
   const erDate = symEvents.find(e => e.date >= todayStr)?.date ?? symEvents[symEvents.length - 1]?.date ?? "—";
@@ -166,19 +164,19 @@ function useLiveEarningsForSym(sym: string): { hist: EarnQ[]; erDate: string } {
         e: est, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
       };
     });
-  return { hist, erDate };
+  return { hist, erDate, loading };
 }
 
 /* ── Expanded chart rendered inside the modal opened by ExpandBtn ── */
 function ChartCardExpanded({
   sym, px, initialTf, initialChartType, initialMaStep, initialEmaStep,
-  initialShowVol, initialShowRsi, initialShowEarnings, rsi, hist, erDate,
+  initialShowVol, initialShowRsi, initialShowEarnings, rsi, rsiLoading, hist, earningsLoading, erDate,
 }: {
   sym: string; px: number; initialTf: string;
   initialChartType: "Candles" | "Hollow" | "Bars" | "Line" | "Area";
   initialMaStep: number; initialEmaStep: number;
   initialShowVol: boolean; initialShowRsi: boolean; initialShowEarnings: boolean;
-  rsi: number | null; hist: EarnQ[]; erDate: string;
+  rsi: number | null; rsiLoading: boolean; hist: EarnQ[]; earningsLoading: boolean; erDate: string;
 }) {
   const [tf, setTf] = useState(initialTf);
   const [chartType, setChartType] = useState(initialChartType);
@@ -187,7 +185,7 @@ function ChartCardExpanded({
   const [showVol, setShowVol] = useState(initialShowVol);
   const [showRsi, setShowRsi] = useState(initialShowRsi);
   const [showEarnings, setShowEarnings] = useState(initialShowEarnings);
-  const realBars = useBackendBars(sym, tf);
+  const { bars: realBars } = useBackendBars(sym, tf);
   return (
     <div>
       <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
@@ -218,7 +216,7 @@ function ChartCardExpanded({
               {rsi != null ? `${Math.round(rsi)} · ${rsi > 70 ? "overbought" : rsi < 40 ? "weak" : "neutral-to-strong"}` : "not available"}
             </span>
           </div>
-          <RsiPane rsi14={rsi} />
+          <RsiPane rsi14={rsi} loading={rsiLoading} />
         </div>
       )}
       {showEarnings && (
@@ -227,7 +225,7 @@ function ChartCardExpanded({
             <span>Earnings · EPS Surprise</span>
             <span className="mono" style={{ color: "var(--warn)", fontWeight: 600 }}>Next: {erDate}</span>
           </div>
-          <EarnPane hist={hist} />
+          <EarnPane hist={hist} loading={earningsLoading} />
         </div>
       )}
     </div>
@@ -251,10 +249,10 @@ export function ChartCard({
   const [showRsi, setShowRsi] = useState(false);
   const [showEarnings, setShowEarnings] = useState(false);
 
-  const realBars = useBackendBars(sym, tf);
-  const { data: liveCompany } = useApiResource<CompanyDoc>(sym ? `/live/company?ticker=${encodeURIComponent(sym)}` : null);
+  const { bars: realBars } = useBackendBars(sym, tf);
+  const { data: liveCompany, loading: liveCompanyLoading } = useApiResource<CompanyDoc>(sym ? `/live/company?ticker=${encodeURIComponent(sym)}` : null);
   const rsi = liveCompany?.rsi14 ?? null;
-  const { hist, erDate } = useLiveEarningsForSym(sym);
+  const { hist, erDate, loading: earningsLoading } = useLiveEarningsForSym(sym);
 
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -296,7 +294,7 @@ export function ChartCard({
                   initialMaStep={maStep} initialEmaStep={emaStep}
                   initialShowVol={showVol} initialShowRsi={showRsi}
                   initialShowEarnings={showEarnings}
-                  rsi={rsi} hist={hist} erDate={erDate}
+                  rsi={rsi} rsiLoading={liveCompanyLoading} hist={hist} earningsLoading={earningsLoading} erDate={erDate}
                 />
               }
             />
@@ -312,7 +310,7 @@ export function ChartCard({
                   {rsi != null ? `${Math.round(rsi)} · ${rsi > 70 ? "overbought" : rsi < 40 ? "weak" : "neutral-to-strong"}` : "not available"}
                 </span>
               </div>
-              <RsiPane rsi14={rsi} />
+              <RsiPane rsi14={rsi} loading={liveCompanyLoading} />
             </div>
           )}
           {showEarnings && (
@@ -321,7 +319,7 @@ export function ChartCard({
                 <span>Earnings · EPS Surprise</span>
                 <span className="mono" style={{ color: "var(--warn)", fontWeight: 600 }}>Next: {erDate}</span>
               </div>
-              <EarnPane hist={hist} />
+              <EarnPane hist={hist} loading={earningsLoading} />
             </div>
           )}
         </div>

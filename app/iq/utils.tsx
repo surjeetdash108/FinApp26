@@ -523,10 +523,10 @@ export function CandleChart({
  * old version this never draws a fabricated 90-point line. It plots the one
  * real value as a marker against the classic 70/30 zones and says so.
  */
-export function RsiPane({ rsi14 }: { rsi14: number | null }) {
+export function RsiPane({ rsi14, loading }: { rsi14: number | null; loading?: boolean }) {
   const w = 720, h = 72;
   if (rsi14 == null) {
-    return <DataState label="RSI (14) needs the technical-indicators job to have run for this ticker — not available yet." height={h} />;
+    return <DataState loading={loading} label="RSI (14) needs the technical-indicators job to have run for this ticker — not available yet." height={h} />;
   }
   const Yp = (p: number) => 8 + (h - 16) * (1 - p / 100);
   const v = Math.max(0, Math.min(100, rsi14));

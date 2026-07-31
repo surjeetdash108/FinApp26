@@ -112,8 +112,8 @@ function NavIcon({ slug }: { slug: string }) {
 }
 
 // ---- Drawers ----
-function StockDrawer({ sym, companies, sectorsLive, onClose }: {
-  sym: string; companies: CompanyDoc[]; sectorsLive: SectorApiDoc[]; onClose: () => void;
+function StockDrawer({ sym, companies, sectorsLive, loading, onClose }: {
+  sym: string; companies: CompanyDoc[]; sectorsLive: SectorApiDoc[]; loading: boolean; onClose: () => void;
 }) {
   const { openStockFull, openSector } = useIQActions();
   const c = companies.find(x => x.ticker === sym);
@@ -149,7 +149,7 @@ function StockDrawer({ sym, companies, sectorsLive, onClose }: {
 
         <div className="drawer-b">
           {!c ? (
-            <DataState label={`No live data synced for ${sym} yet.`} />
+            <DataState loading={loading} label={`No live data synced for ${sym} yet.`} />
           ) : (
             <>
               {/* Pills */}
@@ -207,7 +207,7 @@ function StockDrawer({ sym, companies, sectorsLive, onClose }: {
   );
 }
 
-function EarningsDrawer({ sym, liveEarnings, onClose }: { sym: string; liveEarnings: LiveEarningsDoc[]; onClose: () => void }) {
+function EarningsDrawer({ sym, liveEarnings, loading, onClose }: { sym: string; liveEarnings: LiveEarningsDoc[]; loading: boolean; onClose: () => void }) {
   const { openStockFull } = useIQActions();
   const events = liveEarnings.filter(x => x.ticker === sym).sort((a, b) => b.date.localeCompare(a.date));
   const e = events[0] ?? null;
@@ -232,7 +232,7 @@ function EarningsDrawer({ sym, liveEarnings, onClose }: { sym: string; liveEarni
 
         <div className="drawer-b">
           {!e ? (
-            <DataState label={`No earnings data synced for ${sym} yet.`} />
+            <DataState loading={loading} label={`No earnings data synced for ${sym} yet.`} />
           ) : (
             <div className="metric-grid">
               <div className="m">
@@ -254,8 +254,8 @@ function EarningsDrawer({ sym, liveEarnings, onClose }: { sym: string; liveEarni
   );
 }
 
-function SectorDrawer({ name, companies, sectorsLive, onClose }: {
-  name: string; companies: CompanyDoc[]; sectorsLive: SectorApiDoc[]; onClose: () => void;
+function SectorDrawer({ name, companies, sectorsLive, loading, onClose }: {
+  name: string; companies: CompanyDoc[]; sectorsLive: SectorApiDoc[]; loading: boolean; onClose: () => void;
 }) {
   const { openStock } = useIQActions();
   const sector = sectorsLive.find(s => s.sector === name) ?? null;
@@ -283,7 +283,7 @@ function SectorDrawer({ name, companies, sectorsLive, onClose }: {
         <div className="drawer-b">
           <div className="ai-sec"><div className="h">Constituents · by market cap</div></div>
           {sorted.length === 0 ? (
-            <DataState label={`No live constituents synced for ${name} yet.`} />
+            <DataState loading={loading} label={`No live constituents synced for ${name} yet.`} />
           ) : sorted.map(c => (
             <div key={c.ticker} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); openStock(c.ticker); }}>
               <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)", minWidth: 52 }}>{c.ticker}</span>
@@ -300,8 +300,8 @@ function SectorDrawer({ name, companies, sectorsLive, onClose }: {
 }
 
 // ---- Index drawer (openIndex) ----
-function IndexDrawer({ idx, pulse: livePulse, sectorsLive, onClose }: {
-  idx: number; pulse: PulseItem[]; sectorsLive: SectorApiDoc[]; onClose: () => void;
+function IndexDrawer({ idx, pulse: livePulse, sectorsLive, loading, onClose }: {
+  idx: number; pulse: PulseItem[]; sectorsLive: SectorApiDoc[]; loading: boolean; onClose: () => void;
 }) {
   const x = livePulse[idx];
   if (!x) return null;
@@ -336,7 +336,7 @@ function IndexDrawer({ idx, pulse: livePulse, sectorsLive, onClose }: {
           {eq && (
             <>
               {sortedSectors.length === 0 ? (
-                <div style={{ marginTop: 16 }}><DataState label="No live sector performance data yet." /></div>
+                <div style={{ marginTop: 16 }}><DataState loading={loading} label="No live sector performance data yet." /></div>
               ) : (
                 <>
                   <div className="ai-sec" style={{ marginTop: 16 }}><div className="h">Leading sectors today</div></div>
@@ -541,9 +541,9 @@ export function IQShell({ children }: { children: React.ReactNode }) {
 
   // Shared live data for the shell-level drawers (stock/sector/earnings/index
   // quick-preview popups reachable from every screen via useIQActions()).
-  const { data: shellCompanies } = useApiList<CompanyDoc>("/market-data/companies");
-  const { data: shellSectors } = useApiList<SectorApiDoc>("/market-data/sectors");
-  const { data: shellEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const { data: shellCompanies, loading: shellCompaniesLoading } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: shellSectors, loading: shellSectorsLoading } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const { data: shellEarnings, loading: shellEarningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
 
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
@@ -996,19 +996,19 @@ export function IQShell({ children }: { children: React.ReactNode }) {
 
           {/* Drawers */}
           {drawer?.type === "stock" && (
-            <StockDrawer sym={drawer.sym} companies={shellCompanies} sectorsLive={shellSectors} onClose={() => setDrawer(null)} />
+            <StockDrawer sym={drawer.sym} companies={shellCompanies} sectorsLive={shellSectors} loading={shellCompaniesLoading} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "mover-modal" && (
             <MoverModal key={drawer.sym} sym={drawer.sym} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "earnings" && (
-            <EarningsDrawer sym={drawer.sym} liveEarnings={shellEarnings} onClose={() => setDrawer(null)} />
+            <EarningsDrawer sym={drawer.sym} liveEarnings={shellEarnings} loading={shellEarningsLoading} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "sector" && (
-            <SectorDrawer name={drawer.name} companies={shellCompanies} sectorsLive={shellSectors} onClose={() => setDrawer(null)} />
+            <SectorDrawer name={drawer.name} companies={shellCompanies} sectorsLive={shellSectors} loading={shellCompaniesLoading} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "index" && (
-            <IndexDrawer idx={drawer.idx} pulse={livePulse} sectorsLive={shellSectors} onClose={() => setDrawer(null)} />
+            <IndexDrawer idx={drawer.idx} pulse={livePulse} sectorsLive={shellSectors} loading={shellSectorsLoading} onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "feargreed" && (
             <FearGreedDrawer onClose={() => setDrawer(null)} />

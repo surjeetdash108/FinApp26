@@ -58,7 +58,7 @@ function CheckOpt({ label, on, onToggle }: { label: string; on: boolean; onToggl
 }
 
 export function ScreenerScreen() {
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
   const universe = companiesToScreenerStocks(companies);
   const liveCount = universe.filter(s => s.live).length;
@@ -304,6 +304,7 @@ export function ScreenerScreen() {
               title="Results"
               headerRight={<span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{filtered.length} matches</span>}
               isEmpty={filtered.length === 0}
+              loading={companiesLoading}
               emptyMessage="No matches — try relaxing filters."
               maxListHeight={414}
             >

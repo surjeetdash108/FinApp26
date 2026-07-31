@@ -492,7 +492,7 @@ function CalTable({
 export function EarningsScreen() {
   const { openStockFull } = useIQActions();
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings", autoRefresh ? 300_000 : undefined);
+  const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings", autoRefresh ? 300_000 : undefined);
   const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   // Manual refresh (⟳ button) bypasses the polling interval with a one-shot
   // fetch, merged in ahead of whatever the hooks above last returned.
@@ -526,7 +526,7 @@ export function EarningsScreen() {
 
   const [sel, setSel]           = useState<string>("GOOG");
   const { data: liveCompanySel } = useApiResource<CompanyDoc>(`/live/company?ticker=${encodeURIComponent(sel)}`);
-  const { data: financialsDoc } = useApiResource<FinancialsDoc>(`/live/financials?ticker=${encodeURIComponent(sel)}`);
+  const { data: financialsDoc, loading: financialsLoading } = useApiResource<FinancialsDoc>(`/live/financials?ticker=${encodeURIComponent(sel)}`);
   const [selectedCall,   setSelectedCall]   = useState<string | null>(null);
   const [aiModalSym,      setAiModalSym]      = useState<string | null>(null);
 
@@ -805,7 +805,7 @@ export function EarningsScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
               {hist.length === 0 ? (
-                <DataState label={`No live earnings history synced for ${sel} yet.`} />
+                <DataState loading={earningsLoading} label={`No live earnings history synced for ${sel} yet.`} />
               ) : (
                 <>
                   <div className="ec-legend">
@@ -857,7 +857,7 @@ export function EarningsScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
               {inc.length === 0 ? (
-                <DataState label={`No live quarterly financials synced for ${sel} yet.`} />
+                <DataState loading={financialsLoading} label={`No live quarterly financials synced for ${sel} yet.`} />
               ) : (
                 <>
                   <div className="ec-legend">

@@ -31,7 +31,7 @@ function buildChainRows(chain: OptionsChainDoc, expiry: string): ChainRow[] {
 }
 
 export function OptionsScreen() {
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const stockList = useMemo(
     () => [...companies]
       .filter(c => c.price != null)
@@ -45,7 +45,7 @@ export function OptionsScreen() {
   const [expiry, setExpiry] = useState<string | null>(null);
   const sym = selSym ?? stockList[0]?.s ?? null;
   const inUniverse = !!sym && OPTIONS_UNIVERSE.includes(sym);
-  const { data: liveChain } = useApiResource<OptionsChainDoc>(
+  const { data: liveChain, loading: liveChainLoading } = useApiResource<OptionsChainDoc>(
     inUniverse ? `/live/options-chain?ticker=${sym}` : null,
   );
 
@@ -109,7 +109,7 @@ export function OptionsScreen() {
         {/* ─── Main chain ─── */}
         <div className="opt-main">
           {!cur ? (
-            <DataState label="No live stock data yet — pick a ticker once the companies feed has synced." />
+            <DataState loading={companiesLoading} label="No live stock data yet — pick a ticker once the companies feed has synced." />
           ) : (
             <>
               {/* Stock header */}
@@ -168,7 +168,7 @@ export function OptionsScreen() {
                         </td></tr>
                       ) : rows.length === 0 ? (
                         <tr><td colSpan={13} style={{ padding: 0 }}>
-                          <DataState label={`No live options contracts synced for ${cur.s} yet.`} />
+                          <DataState loading={liveChainLoading} label={`No live options contracts synced for ${cur.s} yet.`} />
                         </td></tr>
                       ) : rows.map(r => (
                         <tr key={r.strike}>

@@ -269,16 +269,16 @@ export function DashboardScreen() {
   const liveIndices = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items) : [];
   const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
   const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
-  const { data: liveInsiderTx } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  const { data: liveInsiderTx, loading: insiderLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
   // Live Fear & Greed (fear-greed.job → market_sentiment/fear_greed). No mock
   // fallback: fgVal/fgLabel are null until the job has actually run.
-  const { data: marketSentiment } = useApiList<MarketSentimentDoc>("/market-data/market-sentiment");
+  const { data: marketSentiment, loading: marketSentimentLoading } = useApiList<MarketSentimentDoc>("/market-data/market-sentiment");
   const fearGreed = marketSentiment.find(d => d.id === "fear_greed");
   const fgVal = fearGreed?.value ?? null;
   const fgLabel = fearGreed?.label ?? null;
-  const { data: consensusLive } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
+  const { data: consensusLive, loading: consensusLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
 
   const pulse = mergePulse(mockPulse, liveIndices);
   const movers = mergeMoversData(liveMovers, companies);
@@ -300,8 +300,8 @@ export function DashboardScreen() {
   // Real watchlist/portfolio (signed-in user). No demo fallback: an empty
   // list renders DataState instead of a fabricated $128,430 showcase.
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  const { data: watchlistDoc } = useApiResource<WatchlistDoc>(uid ? "/api/watchlist" : null);
-  const { data: portfolioDoc } = useApiResource<{ holdings: HoldingDoc[] }>(uid ? "/api/portfolio" : null);
+  const { data: watchlistDoc, loading: watchlistLoading } = useApiResource<WatchlistDoc>(uid ? "/api/watchlist" : null);
+  const { data: portfolioDoc, loading: portfolioLoading } = useApiResource<{ holdings: HoldingDoc[] }>(uid ? "/api/portfolio" : null);
   const realWatchTickers = watchlistDoc?.tickers ?? [];
   const realHoldings = portfolioDoc?.holdings ?? [];
 
@@ -561,7 +561,7 @@ export function DashboardScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
               {consensusLive.length === 0 ? (
-                <DataState label="No analyst consensus synced yet." height={80} />
+                <DataState loading={consensusLoading} label="No analyst consensus synced yet." height={80} />
               ) : consensusLive.slice(0, 5).map(a => (
                 <div key={a.ticker} className="minirow" style={{ cursor: "pointer" }}
                   onClick={() => openStock(a.ticker)}
@@ -599,7 +599,7 @@ export function DashboardScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
               {rankedCompanies.length === 0 ? (
-                <DataState label="No RS-ranked companies synced yet." height={80} />
+                <DataState loading={companiesLoading} label="No RS-ranked companies synced yet." height={80} />
               ) : (scrTab === "leaders" ? leaders : laggards).map(s => {
                 const dayC = movers.find(m => m.ticker === s.ticker)?.pctChange ?? 0;
                 return (
@@ -636,7 +636,7 @@ export function DashboardScreen() {
                   </div>
                 );
               })() : (
-                <DataState label="No saved portfolio yet." height={60} />
+                <DataState loading={portfolioLoading} label="No saved portfolio yet." height={60} />
               )}
               {folioMini.slice(0, 4).map(f => {
                 const dayC = movers.find(m => m.ticker === f.ticker)?.pctChange ?? f.pctChange;
@@ -665,7 +665,7 @@ export function DashboardScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
               {watchMini.length === 0 ? (
-                <DataState label="No saved watchlist yet." height={80} />
+                <DataState loading={watchlistLoading} label="No saved watchlist yet." height={80} />
               ) : watchMini.slice(0, 5).map(w => (
                 <div key={w.ticker} className="minirow" style={{ cursor: "pointer" }}
                   onClick={() => openStock(w.ticker)}
@@ -690,7 +690,7 @@ export function DashboardScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
               {INSIDER_MINI.length === 0 ? (
-                <DataState label="No insider filings synced yet." height={80} />
+                <DataState loading={insiderLoading} label="No insider filings synced yet." height={80} />
               ) : INSIDER_MINI.map(x => (
                 <div key={x.key} className="minirow" style={{ cursor: "pointer" }}
                   onClick={() => openStock(x.s)}
@@ -743,7 +743,7 @@ export function DashboardScreen() {
             <div className="card-b">
               {(() => {
                 const vix = liveIndices.find(i => i.id === "VIX");
-                if (!vix) return <DataState label="VIX not synced yet." height={100} />;
+                if (!vix) return <DataState loading={!tapeFrame} label="VIX not synced yet." height={100} />;
                 return <>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
                     <span className="big">{vix.value.toFixed(2)}</span>
@@ -773,7 +773,7 @@ export function DashboardScreen() {
             <div className="card-b gauge-wrap">
               {fgVal != null && fgLabel != null
                 ? <SemiGauge val={fgVal} label={fgLabel} id="fg" />
-                : <DataState label="Fear &amp; Greed hasn't synced yet." height={140} />}
+                : <DataState loading={marketSentimentLoading} label="Fear &amp; Greed hasn't synced yet." height={140} />}
             </div>
           </div>
         </div>
@@ -851,7 +851,7 @@ export function DashboardScreen() {
 
               {/* Analyst */}
               {drawer === "analyst" && (consensusLive.length === 0 ? (
-                <DataState label="No analyst consensus synced yet." />
+                <DataState loading={consensusLoading} label="No analyst consensus synced yet." />
               ) : consensusLive.map(a => (
                 <div key={a.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
                   onClick={() => { openStock(a.ticker); setDrawer(null); }}>
@@ -893,7 +893,7 @@ export function DashboardScreen() {
 
               {/* Watchlist */}
               {drawer === "watchlist" && (watchMini.length === 0 ? (
-                <DataState label="No saved watchlist yet." />
+                <DataState loading={watchlistLoading} label="No saved watchlist yet." />
               ) : watchMini.map(w => (
                 <div key={w.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
                   onClick={() => { openStock(w.ticker); setDrawer(null); }}>

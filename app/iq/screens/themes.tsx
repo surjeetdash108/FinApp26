@@ -45,7 +45,7 @@ function resolveThemeStocks(tickers: string[], byTicker: Map<string, CompanyDoc>
 }
 
 export function ThemesScreen() {
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
   const [themeId, setThemeId] = useState<string>(THEMES[0].id);
@@ -106,7 +106,7 @@ export function ThemesScreen() {
         {stocks.length === 0 ? (
           <div className="card">
             <div className="card-b">
-              <DataState label={`No live price data for any ${theme.name} constituent right now.`} />
+              <DataState loading={companiesLoading} label={`No live price data for any ${theme.name} constituent right now.`} />
             </div>
           </div>
         ) : (

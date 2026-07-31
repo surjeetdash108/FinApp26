@@ -19,7 +19,7 @@ type Tab = typeof TABS[number];
 
 export function AnalystScreen() {
   const { openStock } = useIQActions();
-  const { data: liveConsensus } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
+  const { data: liveConsensus, loading: consensusLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   const [tab, setTab] = useState<Tab>("All");
   const [clustersOnly, setClustersOnly] = useState(false);
 
@@ -57,7 +57,7 @@ export function AnalystScreen() {
         </div>
         <div className="card-b" style={{ paddingTop: 4, display: "flex", flexDirection: "column", gap: 8 }}>
           {liveRows.length === 0 ? (
-            <DataState label="No live analyst consensus synced yet." />
+            <DataState loading={consensusLoading} label="No live analyst consensus synced yet." />
           ) : liveRows.map(c => {
             const total = c.strongBuy + c.buy + c.hold + c.sell + c.strongSell || 1;
             return (

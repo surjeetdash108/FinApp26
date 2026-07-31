@@ -73,10 +73,10 @@ export function RecapScreen() {
   const [drawer, setDrawer] = useState<"earn-movers" | null>(null);
   const [audioMsg, setAudioMsg] = useState(false);
 
-  const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
-  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
-  const { data: liveNews } = useApiList<NewsArticleDoc>("/market-data/news");
-  const { data: macroEvents } = useApiList<MacroEventDoc>("/market-data/macro-events");
+  const { data: sectorsLive, loading: sectorsLoading } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const { data: liveNews, loading: liveNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
+  const { data: macroEvents, loading: macroLoading } = useApiList<MacroEventDoc>("/market-data/macro-events");
   const { frame: tapeFrame } = useTapeStream();
   const liveIndices = tapeFrame
     ? tapeItemsToIndexDocs(tapeFrame.items).filter(i => MAJOR_INDEX_LABELS.includes(i.label))
@@ -112,7 +112,7 @@ export function RecapScreen() {
   // ---- Reusable cards ----
 
   const IndicesRow = liveIndices.length === 0 ? (
-    <DataState label="No live index snapshot available right now." />
+    <DataState loading={!tapeFrame} label="No live index snapshot available right now." />
   ) : (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
       {liveIndices.map(idx => {
@@ -137,7 +137,7 @@ export function RecapScreen() {
       </div>
       <div className="card-b">
         {pageSectors.length === 0 ? (
-          <DataState label="No live sector performance data yet." />
+          <DataState loading={sectorsLoading} label="No live sector performance data yet." />
         ) : (
           <>
             <div className="heat">
@@ -177,7 +177,7 @@ export function RecapScreen() {
       </div>
       <div className="card-b" style={{ paddingTop: 6 }}>
         {list.length === 0 ? (
-          <DataState label="No live earnings-surprise data for this window yet." />
+          <DataState loading={earningsLoading} label="No live earnings-surprise data for this window yet." />
         ) : list.slice(0, 8).map(m => (
           <div key={m.ticker + m.date} className="minirow" style={{ cursor: "pointer" }} onClick={() => openStock(m.ticker)}>
             <StockLogo sym={m.ticker} size={20} />
@@ -198,7 +198,7 @@ export function RecapScreen() {
       </div>
       <div className="card-b" style={{ paddingTop: 6 }}>
         {list.length === 0 ? (
-          <DataState label="No live news synced for this window yet." />
+          <DataState loading={liveNewsLoading} label="No live news synced for this window yet." />
         ) : list.map(n => (
           <a key={n.id} href={n.url} target="_blank" rel="noreferrer" className="minirow"
             style={{ alignItems: "flex-start", gap: 10, textDecoration: "none", cursor: "pointer" }}>
@@ -266,7 +266,7 @@ export function RecapScreen() {
                   <span className="link" onClick={() => router.push("/menu/commentary")}>View all →</span>
                 </div>
                 {todayHeadlines.length === 0 ? (
-                  <DataState label="No live news synced yet today." />
+                  <DataState loading={liveNewsLoading} label="No live news synced yet today." />
                 ) : todayHeadlines.map(n => (
                   <div key={n.id} style={{ display: "flex", gap: 8, padding: "6px 0", fontSize: ".84rem" }}>
                     <span className="bullet" style={{ marginTop: 6, flexShrink: 0 }} />
@@ -280,7 +280,7 @@ export function RecapScreen() {
                   <span className="link" onClick={() => router.push("/menu/macro")}>View all →</span>
                 </div>
                 {upcomingMacro.length === 0 ? (
-                  <DataState label="No upcoming macro events on record." />
+                  <DataState loading={macroLoading} label="No upcoming macro events on record." />
                 ) : upcomingMacro.map(e => (
                   <div key={e.id} className="minirow">
                     <span className="mono" style={{ width: 66, color: "var(--warn)" }}>{e.eventDate.slice(5)}</span>
@@ -353,7 +353,7 @@ export function RecapScreen() {
                 <span className="link" onClick={() => router.push("/menu/macro")}>View all →</span>
               </div>
               {upcomingMacro.length === 0 ? (
-                <DataState label="No upcoming macro events on record." />
+                <DataState loading={macroLoading} label="No upcoming macro events on record." />
               ) : upcomingMacro.map(e => (
                 <div key={e.id} className="minirow">
                   <span className="mono" style={{ width: 66, color: "var(--warn)" }}>{e.eventDate.slice(5)}</span>
@@ -401,7 +401,7 @@ export function RecapScreen() {
             </div>
             <div className="drawer-b">
               {surprises.length === 0 ? (
-                <DataState label="No live earnings-surprise data yet." />
+                <DataState loading={earningsLoading} label="No live earnings-surprise data yet." />
               ) : surprises.map(e => (
                 <div key={e.ticker + e.date} className="minirow" style={{ cursor: "pointer", padding: "8px 0" }}
                   onClick={() => { openStock(e.ticker); setDrawer(null); }}>

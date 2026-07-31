@@ -20,7 +20,7 @@ function usd(v: number) {
 
 export function PortfolioScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -133,7 +133,7 @@ export function PortfolioScreen() {
           </div>
           <div className="card-b">
             {priced.length === 0 ? (
-              <DataState label="No live price data for any current holding yet." />
+              <DataState loading={companiesLoading} label="No live price data for any current holding yet." />
             ) : (
               <ul className="wmn-body" style={{ columns: 2 }}>
                 <li>
@@ -181,6 +181,7 @@ export function PortfolioScreen() {
                 </div>
               }
               isEmpty={merged.length === 0}
+              loading={companiesLoading}
               emptyMessage='No holdings — click "Add holding".'
             >
               {merged.map((f, i) => (

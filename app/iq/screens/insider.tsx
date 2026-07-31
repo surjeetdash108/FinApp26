@@ -39,8 +39,8 @@ async function fetchPositions(cik: string, accessionNumber: string): Promise<Pos
 }
 
 // ---- insider stock drawer ----
-function InsiderDrawer({ sym, liveTxns, onClose, onOpenFull }: {
-  sym: string; liveTxns: InsiderTxDoc[]; onClose: () => void; onOpenFull: (s: string) => void;
+function InsiderDrawer({ sym, liveTxns, loading, onClose, onOpenFull }: {
+  sym: string; liveTxns: InsiderTxDoc[]; loading: boolean; onClose: () => void; onOpenFull: (s: string) => void;
 }) {
   const txns  = liveTxns.filter(x => x.ticker === sym)
     .sort((a, b) => (b.transactionDate ?? "").localeCompare(a.transactionDate ?? ""));
@@ -66,7 +66,7 @@ function InsiderDrawer({ sym, liveTxns, onClose, onOpenFull }: {
         </div>
         <div className="drawer-b">
           {txns.length === 0 ? (
-            <DataState label={`No Form 4 filings synced for ${sym} yet.`} />
+            <DataState loading={loading} label={`No Form 4 filings synced for ${sym} yet.`} />
           ) : (
             <>
               <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -139,10 +139,8 @@ function FundDrawer({ fund, onClose }: { fund: FundHoldingDoc; onClose: () => vo
             <div className="m"><div className="k">Positions</div><div className="v">{fund.totalPositions}</div></div>
           </div>
           <div className="ai-sec"><div className="h">Top positions · latest 13F</div></div>
-          {positions === null ? (
-            <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Loading…</div>
-          ) : positions.length === 0 ? (
-            <DataState label="No position-level detail synced for this filing yet." />
+          {positions === null || positions.length === 0 ? (
+            <DataState loading={positions === null} label="No position-level detail synced for this filing yet." />
           ) : (
             [...positions].sort((a, b) => b.value - a.value).slice(0, 20).map(p => (
               <div key={p.id} className="minirow">
@@ -170,8 +168,8 @@ export function InsiderScreen() {
   const [instSort,   setInstSort]   = useState<InstSort>("owners");
   const [drawer,     setDrawer]     = useState<DrawerState>(null);
 
-  const { data: liveInsiderTx } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
-  const { data: liveFunds } = useApiList<FundHoldingDoc>("/market-data/fund-holdings");
+  const { data: liveInsiderTx, loading: liveInsiderTxLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  const { data: liveFunds, loading: liveFundsLoading } = useApiList<FundHoldingDoc>("/market-data/fund-holdings");
 
   // Real cross-fund overlap (CUSIP-matched across live 13F positions).
   const [liveOverlap, setLiveOverlap] = useState<Array<{ cusip: string; name: string; funds: string[] }> | null>(null);
@@ -275,7 +273,7 @@ export function InsiderScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
               {list.length === 0 ? (
-                <DataState label="No Form 4 filings synced yet." />
+                <DataState loading={liveInsiderTxLoading} label="No Form 4 filings synced yet." />
               ) : (
                 <table className="tbl" id="insTbl">
                   <thead>
@@ -370,7 +368,7 @@ export function InsiderScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
               {sortedFunds.length === 0 ? (
-                <DataState label="No 13F filings synced yet." />
+                <DataState loading={liveFundsLoading} label="No 13F filings synced yet." />
               ) : (
                 <table className="tbl">
                   <thead>
@@ -421,10 +419,8 @@ export function InsiderScreen() {
                   <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--brand-2)", fontWeight: 700, margin: "12px 0 6px" }}>
                     Live overlap (CUSIP-matched, real)
                   </div>
-                  {liveOverlap === null ? (
-                    <div style={{ fontSize: ".76rem", color: "var(--text-dim-solid)" }}>Computing…</div>
-                  ) : liveOverlap.length === 0 ? (
-                    <DataState label="No overlap found yet in synced 13F data." />
+                  {liveOverlap === null || liveOverlap.length === 0 ? (
+                    <DataState loading={liveOverlap === null} label="No overlap found yet in synced 13F data." />
                   ) : liveOverlap.slice(0, 5).map(o => (
                     <div key={o.cusip} className="minirow">
                       <span className="mid">
@@ -443,7 +439,7 @@ export function InsiderScreen() {
 
       {/* ---- drawers ---- */}
       {drawer?.kind === "insider" && (
-        <InsiderDrawer sym={drawer.sym} liveTxns={liveInsiderTx} onClose={() => setDrawer(null)} onOpenFull={openStockFull} />
+        <InsiderDrawer sym={drawer.sym} liveTxns={liveInsiderTx} loading={liveInsiderTxLoading} onClose={() => setDrawer(null)} onOpenFull={openStockFull} />
       )}
       {drawer?.kind === "fund" && (
         <FundDrawer key={drawer.fund.id} fund={drawer.fund} onClose={() => setDrawer(null)} />

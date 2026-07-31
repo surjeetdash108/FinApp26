@@ -10,7 +10,7 @@ import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
 export function WatchlistScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
   const [items, setItems]                 = useState<string[]>([]);
@@ -112,7 +112,7 @@ export function WatchlistScreen() {
           </div>
           <div className="card-b">
             {sumTxt == null ? (
-              <DataState label="No live price data for any watched ticker yet." />
+              <DataState loading={companiesLoading} label="No live price data for any watched ticker yet." />
             ) : (
               <>
                 <p dangerouslySetInnerHTML={{ __html: sumTxt }}
@@ -136,6 +136,7 @@ export function WatchlistScreen() {
               title="Watchlist"
               headerRight={<span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{items.length} stocks</span>}
               isEmpty={items.length === 0}
+              loading={companiesLoading}
               emptyMessage='No stocks — click "Add stock".'
             >
               {list.map((w, i) => (
