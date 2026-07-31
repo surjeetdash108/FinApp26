@@ -2,7 +2,7 @@
 // STOCKWISE — MOCK DATA (TypeScript)
 // ============================================================
 
-export interface PulseItem { label: string; value: number; change: number; open: number; prevClose: number; }
+export interface PulseItem { label: string; value: number; change: number; open: number; prevClose: number; dayHigh?: number; dayLow?: number; }
 export interface WMNItem { headline: string; body: string; tag: 'macro' | 'earn' | 'sector'; }
 export interface Earning {
   ticker: string; name: string; session: string; marketCap: string; sector: string;

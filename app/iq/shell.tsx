@@ -330,6 +330,8 @@ function IndexDrawer({ idx, pulse: livePulse, sectorsLive, onClose }: {
           <div className="metric-grid">
             <div className="m"><div className="k">Open</div><div className="v">{fmt(x.open, dec)}</div></div>
             <div className="m"><div className="k">Prev close</div><div className="v">{fmt(x.prevClose, dec)}</div></div>
+            <div className="m"><div className="k">Day high</div><div className="v">{x.dayHigh != null ? fmt(x.dayHigh, dec) : <NotAvailable />}</div></div>
+            <div className="m"><div className="k">Day low</div><div className="v">{x.dayLow != null ? fmt(x.dayLow, dec) : <NotAvailable />}</div></div>
           </div>
           {eq && (
             <>
