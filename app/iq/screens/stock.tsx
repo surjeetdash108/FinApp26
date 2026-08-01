@@ -429,7 +429,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
   // Ticker universe for autocomplete + header chips: the live companies
   // collection, most-active first, instead of a fixed mock catalog.
-  const symbolList = [...companies].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).map(c => c.ticker);
+  const symbolList = [...companies].filter(c => !!c.ticker).sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).map(c => c.ticker);
   const suggestions = symbolList.filter(s =>
     search && s.toLowerCase().startsWith(search.toLowerCase())
   );

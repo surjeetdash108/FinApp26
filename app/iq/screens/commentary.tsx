@@ -161,7 +161,7 @@ export function CommentaryScreen() {
     })().then(setMySymbols);
   }, [uid]);
 
-  const symbolList = [...companies].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).map(c => ({ s: c.ticker, n: c.name ?? c.ticker }));
+  const symbolList = [...companies].filter(c => !!c.ticker).sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).map(c => ({ s: c.ticker, n: c.name ?? c.ticker }));
   const topSymbols = symbolList.slice(0, 8).map(x => x.s);
 
   const sorted = [...liveNews].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());

@@ -16,3 +16,4 @@ export * from "./watchlist";
 export * from "./portfolio";
 export * from "./news";
 export * from "./options";
+export * from "./feature-requests";

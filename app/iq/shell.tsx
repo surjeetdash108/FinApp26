@@ -624,15 +624,19 @@ export function IQShell({ children }: { children: React.ReactNode }) {
     ? (() => {
         const q = searchQ.toLowerCase();
         const bySym = new Map(tickerSearchResults.map(r => [r.ticker, r]));
+        // A handful of live `companies` docs are written by side-jobs (news
+        // count, fundamentals growth) that can create the doc before the
+        // primary sync job ever sets `ticker` — guard rather than crash on
+        // that partial data.
         const nameMatched = shellCompanies.filter(
-          c => ((c.name ?? "").toLowerCase().includes(q) || c.ticker.toLowerCase().includes(q)) && !bySym.has(c.ticker),
+          c => !!c.ticker && ((c.name ?? "").toLowerCase().includes(q) || c.ticker.toLowerCase().includes(q)) && !bySym.has(c.ticker),
         );
         return [
           ...tickerSearchResults.map(r => ({ sym: r.ticker, name: r.name, price: r.price, pctChange: r.pctChange })),
           ...nameMatched.map(c => ({ sym: c.ticker, name: c.name, price: c.price, pctChange: c.pctChange })),
         ];
       })()
-    : quickAccessCompanies.map(c => ({ sym: c.ticker, name: c.name, price: c.price, pctChange: c.pctChange }));
+    : quickAccessCompanies.filter(c => !!c.ticker).map(c => ({ sym: c.ticker, name: c.name, price: c.price, pctChange: c.pctChange }));
   const cmdRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLElement>(null);
   const [drawer, setDrawer] = useState<
@@ -913,6 +917,9 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                     </button>
                     <button className="pd-item" onClick={() => { router.push("/manage-plan"); setProfileDropdownOpen(false); }}>
                       <span className="pd-icon">◈</span> Manage Account
+                    </button>
+                    <button className="pd-item" onClick={() => { router.push("/requests"); setProfileDropdownOpen(false); }}>
+                      <span className="pd-icon">💡</span> Feature Requests
                     </button>
                     <div className="pd-divider" />
                     <button className="pd-item danger" onClick={() => { handleSignOut(); setProfileDropdownOpen(false); }}>
