@@ -535,13 +535,13 @@ export function RsiPane({ rsi14, loading }: { rsi14: number | null; loading?: bo
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", display: "block" }}>
       <line x1="40" x2={w - 20} y1={Yp(70)} y2={Yp(70)} stroke="#FF547055" strokeWidth="1" strokeDasharray="3 3" />
       <line x1="40" x2={w - 20} y1={Yp(30)} y2={Yp(30)} stroke="#2FE6A655" strokeWidth="1" strokeDasharray="3 3" />
-      <text x={w - 16} y={Yp(70) + 3} fill="#69748680" fontSize="8" fontFamily="JetBrains Mono">70</text>
-      <text x={w - 16} y={Yp(30) + 3} fill="#69748680" fontSize="8" fontFamily="JetBrains Mono">30</text>
+      <text x={w - 16} y={Yp(70) + 3} fill="var(--text-dim-solid)" fontSize="8" fontFamily="JetBrains Mono">70</text>
+      <text x={w - 16} y={Yp(30) + 3} fill="var(--text-dim-solid)" fontSize="8" fontFamily="JetBrains Mono">30</text>
       <line x1="40" x2={w - 20} y1={Yp(v)} y2={Yp(v)} stroke={zoneColor} strokeWidth="2" />
       <text x={44} y={Yp(v) - 5} fill={zoneColor} fontSize="9" fontFamily="JetBrains Mono" fontWeight={700}>
         {v.toFixed(1)} · latest
       </text>
-      <text x={44} y={h - 4} fill="#69748680" fontSize="7" fontFamily="JetBrains Mono">
+      <text x={44} y={h - 4} fill="var(--text-dim-solid)" fontSize="7" fontFamily="JetBrains Mono">
         Historical RSI line needs a time-series technicals feed — not available yet.
       </text>
     </svg>

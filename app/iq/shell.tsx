@@ -32,6 +32,13 @@ function slugToHref(slug: string): string {
   return slug === "dashboard" ? "/dashboard" : `/menu/${slug}`;
 }
 
+// Fire-and-forget: records a resolved ticker search/selection for the
+// "Most searched tickers" dashboard widget. Never blocks or throws on the
+// caller — a failed log write shouldn't stop navigation to the stock page.
+function logSearchedTicker(sym: string) {
+  void apiPost("/live/searched-ticker", { ticker: sym }).catch(() => {});
+}
+
 // ---- Font type ----
 export type FontKey = "geist" | "inter" | "dm-sans" | "space-grotesk" | "plus-jakarta-sans" | "ibm-plex-sans" | "outfit" | "manrope";
 
@@ -553,10 +560,15 @@ export function IQShell({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined") return "dm-sans";
     return (localStorage.getItem("iq-font") as FontKey) || "dm-sans";
   });
+  // Always the US Eastern session clock, regardless of the viewer's own
+  // timezone — this label is hard-coded "ET" in the JSX below, so the value
+  // itself must actually be ET (previously used the browser's local
+  // timezone with no `timeZone` option, so a viewer in India saw IST labelled
+  // "ET").
   const [navTime, setNavTime] = useState(() => {
     const d = new Date();
-    const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-    const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const day = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" });
+    const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
     return { day, time };
   });
   // GET /live/market-status (vendor session state), not the local ET-clock
@@ -567,8 +579,8 @@ export function IQShell({ children }: { children: React.ReactNode }) {
     const tick = () => {
       const d = new Date();
       setNavTime({
-        day: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-        time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        day: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" }),
+        time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }),
       });
     };
     tick(); // correct any build-time (static-export) value right after hydration
@@ -819,7 +831,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                     onKeyDown={e => {
                       if (e.key === "Escape") { setSearchOpen(false); setSearchQ(""); }
                       if (e.key === "Enter") {
-                        if (searchMatches[0]) { localStorage.setItem("iq-stock", searchMatches[0].sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }
+                        if (searchMatches[0]) { logSearchedTicker(searchMatches[0].sym); localStorage.setItem("iq-stock", searchMatches[0].sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }
                       }
                     }}
                   />
@@ -830,7 +842,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                     {searchMatches.map(m => (
                       <div key={m.sym} className="palette-item"
                         onMouseDown={e => e.preventDefault()}
-                        onClick={() => { localStorage.setItem("iq-stock", m.sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }}
+                        onClick={() => { logSearchedTicker(m.sym); localStorage.setItem("iq-stock", m.sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }}
                       >
                         <div className="palette-item-icon" style={{ color: "var(--brand-2)", fontWeight: 700, fontFamily: "var(--f-mono)" }}>{m.sym[0]}</div>
                         <div style={{ flex: 1 }}>

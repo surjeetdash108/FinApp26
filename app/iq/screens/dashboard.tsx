@@ -279,6 +279,7 @@ export function DashboardScreen() {
   const fgVal = fearGreed?.value ?? null;
   const fgLabel = fearGreed?.label ?? null;
   const { data: consensusLive, loading: consensusLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
+  const { data: mostSearched, loading: mostSearchedLoading } = useApiResource<{ results: Array<{ ticker: string; count: number }> }>("/live/most-searched-tickers?limit=10");
 
   const pulse = mergePulse(mockPulse, liveIndices);
   const movers = mergeMoversData(liveMovers, companies);
@@ -412,6 +413,51 @@ export function DashboardScreen() {
           </div>
         </div>
  {/* ── needs an Anthropic API key ── */}
+
+        {/* ── 2b. Most Searched Tickers ── */}
+        <div className="col-12">
+          <div className="card">
+            <div className="card-h">
+              <h3>Most Searched Tickers</h3>
+              <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>by user searches</span>
+            </div>
+            <div className="card-b" style={{ paddingTop: 6 }}>
+              {!mostSearched || mostSearched.results.length === 0 ? (
+                <DataState loading={mostSearchedLoading} label="No searches recorded yet." />
+              ) : (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {mostSearched.results.map(({ ticker, count }) => {
+                    const c = companyByTicker.get(ticker);
+                    return (
+                      <div key={ticker}
+                        onClick={() => openStock(ticker)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          flex: "1 1 190px", minWidth: 190, maxWidth: 240,
+                          background: "var(--surface-1)", border: "1px solid var(--border)",
+                          borderRadius: 8, padding: "8px 10px", cursor: "pointer", transition: "border-color .13s",
+                        }}
+                      >
+                        <StockLogo sym={ticker} size={28} />
+                        <span className="tkr">{ticker}<small>{c?.name ?? "—"}</small></span>
+                        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                          {c?.price != null ? (
+                            <>
+                              <div className="mono" style={{ fontSize: ".8rem", color: "var(--text-hi)" }}>{fmt(c.price)}</div>
+                              {c?.pctChange != null && <div className={`mono ${cls(c.pctChange)}`} style={{ fontSize: ".68rem" }}>{sign(c.pctChange)}</div>}
+                            </>
+                          ) : <NotAvailable />}
+                        </div>
+                        <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)", flexShrink: 0 }}>{count}×</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* ── 3. Earnings Today ── */}
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
@@ -484,41 +530,43 @@ export function DashboardScreen() {
               <Link className="link" href="/menu/heatmap">Full map →</Link>
             </div>
             {(() => {
-              // Top 16 stocks by market cap across all sectors (deduplicated)
+              // Top 30 stocks by market cap across all sectors (deduplicated)
+              // — was 16, which left the card looking half-empty next to its
+              // taller siblings (Earnings Today / Movers).
               const seen = new Set<string>();
-              const top16 = mergedSectorList
+              const top30 = mergedSectorList
                 .flatMap(sd => sd.items.map(([sym, mcap, chg]) => ({ sym, mcap, chg, sd })))
                 .sort((a, b) => b.mcap - a.mcap)
                 .filter(s => { if (seen.has(s.sym)) return false; seen.add(s.sym); return true; })
-                .slice(0, 16);
+                .slice(0, 30);
 
               // Group back by sector, preserving sector order
               const groups = mergedSectorList
-                .map(sd => ({ sd, stocks: top16.filter(s => s.sd === sd) }))
+                .map(sd => ({ sd, stocks: top30.filter(s => s.sd === sd) }))
                 .filter(g => g.stocks.length > 0);
 
               return (
-                <div className="card-b" style={{ paddingTop: 6 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div className="card-b" style={{ paddingTop: 6, maxHeight: 420, overflowY: "auto" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                     {groups.map(({ sd, stocks }) => {
                       const hcSect = heatCol(sd.pctChange ?? 0);
                       return (
-                        <div key={sd.name} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <div key={sd.name} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                           <div
                             onClick={() => openSector(sd.name)}
                             onMouseEnter={e => showHeatPop(e, sd)}
                             onMouseLeave={hideHeatPop}
                             style={{
-                              width: 90, flexShrink: 0, cursor: "pointer",
-                              background: hcSect.bg, borderRadius: 6,
-                              padding: "4px 7px", height: 40,
+                              width: 104, flexShrink: 0, cursor: "pointer",
+                              background: hcSect.bg, borderRadius: 7,
+                              padding: "5px 8px", height: 48,
                               display: "flex", flexDirection: "column", justifyContent: "center", gap: 2,
                             }}
                           >
-                            <span style={{ fontSize: ".65rem", fontWeight: 700, color: hcSect.fg, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sd.name}</span>
-                            <span style={{ fontFamily: "var(--f-mono)", fontSize: ".6rem", color: hcSect.fg, opacity: .9 }}>{sd.pctChange == null ? <NotAvailable /> : sign(sd.pctChange)}</span>
+                            <span style={{ fontSize: ".7rem", fontWeight: 700, color: hcSect.fg, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sd.name}</span>
+                            <span style={{ fontFamily: "var(--f-mono)", fontSize: ".64rem", color: hcSect.fg, opacity: .9 }}>{sd.pctChange == null ? <NotAvailable /> : sign(sd.pctChange)}</span>
                           </div>
-                          <div style={{ display: "flex", gap: 3 }}>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                             {stocks.map(({ sym, chg }) => {
                               const hc = heatCol(chg);
                               return (
@@ -526,8 +574,8 @@ export function DashboardScreen() {
                                   onClick={() => openStock(sym)}
                                   title={`${sym}  ${sign(chg)}`}
                                   style={{
-                                    background: hc.bg, borderRadius: 6,
-                                    width: 56, height: 40, flexShrink: 0,
+                                    background: hc.bg, borderRadius: 7,
+                                    width: 64, height: 48, flexShrink: 0,
                                     display: "flex", flexDirection: "column",
                                     alignItems: "center", justifyContent: "center",
                                     cursor: "pointer", transition: "filter .12s",
@@ -536,8 +584,8 @@ export function DashboardScreen() {
                                   onMouseOver={e => (e.currentTarget.style.filter = "brightness(1.3)")}
                                   onMouseOut={e => (e.currentTarget.style.filter = "")}
                                 >
-                                  <span style={{ fontSize: ".65rem", fontWeight: 800, color: hc.fg, lineHeight: 1 }}>{sym.slice(0, 4)}</span>
-                                  <span style={{ fontSize: ".58rem", fontFamily: "var(--f-mono)", color: hc.fg, opacity: .88, lineHeight: 1 }}>{sign(chg)}</span>
+                                  <span style={{ fontSize: ".72rem", fontWeight: 800, color: hc.fg, lineHeight: 1 }}>{sym.slice(0, 4)}</span>
+                                  <span style={{ fontSize: ".62rem", fontFamily: "var(--f-mono)", color: hc.fg, opacity: .88, lineHeight: 1 }}>{sign(chg)}</span>
                                 </div>
                               );
                             })}
@@ -823,21 +871,24 @@ export function DashboardScreen() {
                 </div>
               ))}
 
-              {/* Movers */}
+              {/* Movers — same Gainers/Losers/Most Active tabs as the dashboard card */}
               {drawer === "movers" && (
                 <>
-                  <div className="up" style={{ fontSize: ".6rem", fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", margin: "0 0 6px" }}>&#x25B2; Top gainers</div>
-                  {movers.filter(m => m.pctChange > 0).sort((a,b) => b.pctChange - a.pctChange).map(m => (
-                    <div key={m.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
-                      onClick={() => { openMoverModal(m.ticker); setDrawer(null); }}>
-                      <StockLogo sym={m.ticker} size={22} />
-                      <span className="tkr">{m.ticker}<small>{m.name}</small></span>
-                      <span className="mid">{m.catalystLabel}</span>
-                      <span className={`r mono ${cls(m.pctChange)}`}>{sign(m.pctChange)}</span>
-                    </div>
-                  ))}
-                  <div className="down" style={{ fontSize: ".6rem", fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", margin: "14px 0 6px" }}>&#x25BC; Top losers</div>
-                  {movers.filter(m => m.pctChange < 0).sort((a,b) => a.pctChange - b.pctChange).map(m => (
+                  <div style={{ display: "flex", gap: 4, margin: "0 0 10px" }}>
+                    {(["Gainers", "Losers", "Most Active"] as const).map((label, i) => (
+                      <button key={label}
+                        className={`chip${moversTab === i ? " on" : ""}`}
+                        style={{ fontSize: ".65rem", padding: "3px 9px" }}
+                        onClick={() => setMoversTab(i as 0 | 1 | 2)}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  {(moversTab === 0
+                    ? [...movers].filter(m => m.pctChange > 0).sort((a, b) => b.pctChange - a.pctChange)
+                    : moversTab === 1
+                    ? [...movers].filter(m => m.pctChange < 0).sort((a, b) => a.pctChange - b.pctChange)
+                    : [...movers].sort((a, b) => b.rvolRatio - a.rvolRatio)
+                  ).map(m => (
                     <div key={m.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
                       onClick={() => { openMoverModal(m.ticker); setDrawer(null); }}>
                       <StockLogo sym={m.ticker} size={22} />

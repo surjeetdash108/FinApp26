@@ -59,14 +59,14 @@ function EarnPane({ hist, loading }: { hist: EarnQ[]; loading: boolean }) {
               {beat ? "+" : ""}{q.surp.toFixed(1)}%
             </text>
             <text x={cx.toFixed(1)} y={(H - 3).toFixed(1)} textAnchor="middle"
-              fill="#69748680" fontSize="7.5" fontFamily="JetBrains Mono,monospace">
+              fill="var(--text-dim-solid)" fontSize="7.5" fontFamily="JetBrains Mono,monospace">
               {q.q.replace(" ", "'")}
             </text>
           </g>
         );
       })}
-      <text x={PADL - 4} y={(mid - 2).toFixed(1)} textAnchor="end" fill="#69748680" fontSize="7" fontFamily="JetBrains Mono,monospace">BEAT</text>
-      <text x={PADL - 4} y={(mid + 10).toFixed(1)} textAnchor="end" fill="#69748680" fontSize="7" fontFamily="JetBrains Mono,monospace">MISS</text>
+      <text x={PADL - 4} y={(mid - 2).toFixed(1)} textAnchor="end" fill="var(--text-dim-solid)" fontSize="7" fontFamily="JetBrains Mono,monospace">BEAT</text>
+      <text x={PADL - 4} y={(mid + 10).toFixed(1)} textAnchor="end" fill="var(--text-dim-solid)" fontSize="7" fontFamily="JetBrains Mono,monospace">MISS</text>
     </svg>
   );
 }

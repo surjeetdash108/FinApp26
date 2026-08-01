@@ -71,8 +71,11 @@
   --border-strong: #B0BDD2;
   --text-hi: #0D1525;
   --text: #3A4562;
-  --text-dim: #8892A8;
-  --text-dim-solid: #8892A8;
+  /* #8892A8 read ~3.3:1 against white/surface-1 — under the 4.5:1 AA floor
+     for normal text, which is what "not blackish enough" was: dim text
+     wasn't dim-on-dark, it was low-contrast-on-light. */
+  --text-dim: #5C6780;
+  --text-dim-solid: #5C6780;
   --shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 4px 16px -4px rgba(0,0,50,.08);
 }
 
