@@ -289,7 +289,34 @@ export function EarningsGrowthChart({ hist }: { hist: EarnQ[] }) {
 }
 
 // ---- Candlestick chart (matches HTML genOHLC + candleChart) ----
-export type OHLCBar = { o: number; h: number; l: number; c: number; v: number };
+export type OHLCBar = { t: number; o: number; h: number; l: number; c: number; v: number };
+
+/** Approximate real trading-session span per timeframe, used to space out synthetic bar timestamps. */
+const TF_SPAN_MS: Record<string, number> = {
+  "1H": 60 * 60 * 1000,
+  "1D": 6.5 * 60 * 60 * 1000,
+  "1W": 5 * 24 * 60 * 60 * 1000,
+  "1M": 22 * 24 * 60 * 60 * 1000,
+  "3M": 90 * 24 * 60 * 60 * 1000,
+  "6M": 182 * 24 * 60 * 60 * 1000,
+  "1Y": 365 * 24 * 60 * 60 * 1000,
+  "5Y": 5 * 365 * 24 * 60 * 60 * 1000,
+};
+
+/** X-axis tick label for one bar, in ET — intraday timeframes show a clock time, longer ones a date. */
+function xAxisLabel(t: number, tf: string): string {
+  const d = new Date(t);
+  if (tf === "1H" || tf === "1D") {
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+  }
+  if (tf === "1W") {
+    return d.toLocaleDateString("en-US", { weekday: "short", timeZone: "America/New_York" });
+  }
+  if (tf === "1M" || tf === "3M") {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
+  }
+  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "America/New_York" });
+}
 
 function _seed(n: number) {
   let s = n;
@@ -335,6 +362,8 @@ function genOHLC(sym: string, tf: string, px: number): OHLCBar[] {
   let price = px * (tf === "5Y" ? 0.32 : tf === "1Y" ? 0.6 : 0.86);
   const out: OHLCBar[] = [];
   const bias = 0.08;
+  const span = TF_SPAN_MS[tf] ?? TF_SPAN_MS["3M"];
+  const now = Date.now();
   for (let i = 0; i < n; i++) {
     const o = price;
     const ch = (rnd() - 0.5) * volat * 2 + bias * volat * 0.9;
@@ -342,7 +371,8 @@ function genOHLC(sym: string, tf: string, px: number): OHLCBar[] {
     const h = Math.max(o, c) * (1 + rnd() * volat / 160);
     const l = Math.min(o, c) * (1 - rnd() * volat / 160);
     const v = 0.5 + rnd() * 0.7 + (Math.abs(ch) > volat ? 0.9 : 0);
-    out.push({ o, h, l, c, v });
+    const t = now - (n - 1 - i) * (span / n);
+    out.push({ t, o, h, l, c, v });
     price = c;
   }
   const k = px / out[out.length - 1].c;
@@ -367,7 +397,7 @@ export function CandleChart({
     [sym, tf, px, realBars],
   );
   const n = data.length;
-  const W = 720, PH = 224, VH = showVol ? 54 : 0, GAP = showVol ? 10 : 0, PADT = 12, PADB = 18, axisW = 46;
+  const W = 720, PH = 224, VH = showVol ? 54 : 0, GAP = showVol ? 10 : 0, PADT = 12, PADB = 26, axisW = 46;
   const H = PADT + PH + GAP + VH + PADB;
   const plotW = W - axisW - 8;
   const cw = plotW / n;
@@ -392,6 +422,14 @@ export function CandleChart({
     const val = mx2 - rng * g / 4;
     return { yy, val };
   });
+
+  // X-axis date/time ticks — a handful of evenly spaced bars, deduped so two
+  // ticks never land on the same index when n is small.
+  const xTickCount = Math.min(6, n);
+  const xTickIdx = xTickCount <= 1
+    ? [0]
+    : [...new Set(Array.from({ length: xTickCount }, (_, i) => Math.round(i * (n - 1) / (xTickCount - 1))))];
+  const xAxisY = PADT + PH + GAP + VH + 15;
 
   const erIdx = Math.round(n * 0.82);
   const ct = chartType.toLowerCase();
@@ -509,6 +547,13 @@ export function CandleChart({
             <text className="caxis" x={X(erIdx)} y={Y(data[erIdx].h) - 16} textAnchor="middle" fill="var(--ai)">◆ ER</text>
           </>
         )}
+        {/* X-axis date/time ticks — edge ticks anchor inward so their text never clips off the plot */}
+        {xTickIdx.map((i, k) => (
+          <text key={`x${i}`} className="caxis" x={X(i)} y={xAxisY}
+            textAnchor={k === 0 ? "start" : k === xTickIdx.length - 1 ? "end" : "middle"}>
+            {xAxisLabel(data[i].t, tf)}
+          </text>
+        ))}
         {/* Invisible hover rect */}
         <rect x="6" y={PADT} width={plotW} height={PH + GAP + VH} fill="transparent"
           onMouseMove={handleMove} onMouseLeave={() => setTip(null)} />

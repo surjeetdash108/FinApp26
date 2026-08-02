@@ -21,6 +21,6 @@ export function useBackendBars(sym: string, tf: string): { bars: OHLCBar[] | und
   const { data, loading } = useApiResource<BarsResponse>(`/live/bars?ticker=${encodeURIComponent(sym)}&tf=${tf}`);
   const bars = !data || data.bars.length < 2
     ? undefined
-    : data.bars.map((b) => ({ o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+    : data.bars.map((b) => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
   return { bars, loading };
 }

@@ -308,20 +308,23 @@ export function ScreenerScreen() {
               emptyMessage="No matches — try relaxing filters."
               maxListHeight={414}
             >
-              {filtered.map((s, i) => (
-                <StockRow
-                  key={s.ticker}
-                  sym={s.ticker}
-                  name={s.name}
-                  seed={i + 11}
-                  sparkUp={s.relativeStrength >= 60}
-                  isSelected={selSym === s.ticker}
-                  onClick={() => setScrSel(s.ticker)}
-                  valueTop={`RS ${s.relativeStrength}`}
-                  valueBottom={s.techRating}
-                  valueBottomClass={s.techRating.includes("Buy") ? "up" : s.techRating.includes("Sell") ? "down" : ""}
-                />
-              ))}
+              {filtered.map((s, i) => {
+                const px = byTicker.get(s.ticker)?.price ?? null;
+                return (
+                  <StockRow
+                    key={s.ticker}
+                    sym={s.ticker}
+                    name={s.name}
+                    seed={i + 11}
+                    sparkUp={s.relativeStrength >= 60}
+                    isSelected={selSym === s.ticker}
+                    onClick={() => setScrSel(s.ticker)}
+                    valueTop={px == null ? "—" : px >= 1000 ? `$${(px / 1000).toFixed(2)}K` : `$${px.toFixed(2)}`}
+                    valueBottom={`RS ${s.relativeStrength} · ${s.techRating}`}
+                    valueBottomClass={s.techRating.includes("Buy") ? "up" : s.techRating.includes("Sell") ? "down" : ""}
+                  />
+                );
+              })}
             </StockListCard>
           }
         />
