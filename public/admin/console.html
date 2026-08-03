@@ -1371,6 +1371,30 @@ function ahRecheckBtn(mt){
   return '<button id="apiRecheck" style="'+(mt?'margin-top:10px;':'')+'font:600 12px/1 var(--f-disp),system-ui;'
     + 'color:#05222a;background:#38d6e6;border:0;border-radius:8px;padding:8px 14px;cursor:pointer">Re-check</button>';
 }
+/* Vendor APIs: each external data vendor called with its configured key —
+   200 → online (green), else offline (red), no key → offline/grey. */
+function ahVendors(vendors){
+  if (!vendors || !vendors.length) return '';
+  var online = vendors.filter(function(v){return v.online;}).length;
+  var row = function(v){
+    var color = v.online ? '#2fe6a6' : (v.keyPresent ? '#ff5d7a' : 'var(--dim)');
+    var state = v.online ? 'online' : (v.keyPresent ? ('offline · ' + ahEsc(v.note)) : 'offline · no key');
+    var meta = v.status ? (' · ' + v.status + (v.ms != null ? ' · ' + v.ms + 'ms' : '')) : '';
+    return '<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;'
+      + 'padding:9px 12px;border-bottom:1px solid #1e2a38;font-size:12.5px">'
+      + '<span><b style="color:var(--hi)">' + ahEsc(v.name) + '</b> '
+      + '<span style="color:var(--dim);font-size:11px;font-family:var(--f-mono,ui-monospace,monospace)">' + ahEsc(v.keyName) + '</span></span>'
+      + '<span style="color:' + color + ';white-space:nowrap">● ' + state + meta + '</span></div>';
+  };
+  return '<div style="margin:0 0 16px">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin:0 0 8px">'
+    + '<span style="font:700 12px/1 var(--f-disp),system-ui;color:var(--hi)">Vendor APIs</span>'
+    + ahChip('online', online, online ? '#2fe6a6' : 'var(--dim)')
+    + ahChip('offline', vendors.length - online, (vendors.length - online) ? '#ff5d7a' : 'var(--dim)')
+    + '</div>'
+    + '<div style="border:1px solid #1e2a38;border-radius:10px;background:#0d131b;overflow:hidden">'
+    + vendors.map(row).join('') + '</div></div>';
+}
 function ahHtml(h){
   const s = h.summary || {};
   const rows = (h.endpoints||[]).map(e=>{
@@ -1397,6 +1421,8 @@ function ahHtml(h){
     + ahChip('not probed', s.skipped||0, 'var(--dim)')
     + '<span style="flex:1"></span>' + ahRecheckBtn(false)
     + '</div>'
+    + ahVendors(h.vendors)
+    + '<div style="font:700 12px/1 var(--f-disp),system-ui;color:var(--hi);margin:0 0 8px">Internal routes</div>'
     + '<div style="flex:1;overflow:auto;border:1px solid #1e2a38;border-radius:10px;background:#0d131b">' + rows + '</div>'
     + '<div style="font-size:11px;color:var(--dim);padding:8px 2px 0">'+ahEsc(h.service)+' · '
     + (h.endpoints||[]).length+' routes · probed = public no-param GETs only · '+ahEsc(h.generatedAt)+'</div></div>';

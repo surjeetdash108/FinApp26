@@ -106,9 +106,19 @@ export interface ApiHealthEndpoint {
     | { status: number; ok: boolean; up: boolean; ms: number; error?: string }
     | { skipped: true; reason: string };
 }
+export interface VendorHealth {
+  name: string;
+  keyName: string;
+  keyPresent: boolean;
+  online: boolean;
+  status: number | null;
+  ms: number | null;
+  note: string;
+}
 export interface ApiHealthReport {
   service: string;
   generatedAt: string;
+  vendors?: VendorHealth[];
   summary: {
     total: number;
     byMethod: Record<string, number>;
