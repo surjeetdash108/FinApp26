@@ -732,6 +732,25 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
   background: var(--ai-dim); border: 1px solid var(--ai); border-radius: var(--r-lg);
   padding: 13px; box-shadow: var(--glow-ai); margin-bottom: 11px;
 }
+
+/* Collapsible AI-summary card — same interaction as .wmn on the dashboard.
+   The header stays visible; the body animates open via a grid 0fr->1fr row. */
+.ai-block.collapsible { padding: 0; overflow: hidden; }
+.ai-block.collapsible .collapse-h {
+  width: 100%; margin: 0; border: 0; border-bottom: 1px solid var(--border-soft);
+  background: transparent; font: inherit; color: inherit; text-align: left;
+  cursor: pointer; -webkit-appearance: none; appearance: none;
+}
+.ai-block.collapsible:not(.open) .collapse-h { border-bottom-color: transparent; }
+.collapse-h-right { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.collapse-chev {
+  width: 18px; height: 18px; flex: none; color: var(--text-dim-solid);
+  transition: transform .25s ease;
+}
+.ai-block.collapsible.open .collapse-chev { transform: rotate(180deg); }
+.collapse-region { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease; }
+.ai-block.collapsible.open .collapse-region { grid-template-rows: 1fr; }
+.collapse-region-inner { overflow: hidden; }
 .ai-icon { font-size: 1.0625rem; margin-bottom: 5px; }
 .ai-rating { font-family: var(--f-display); font-size: 0.9375rem; font-weight: 700; color: var(--ai); margin-bottom: 4px; }
 .ai-thesis { font-size: 0.75rem; color: var(--text); line-height: 1.6; }

@@ -8,6 +8,7 @@ import type { CompanyDoc, WatchlistDoc } from "../types";
 import { arr, sign, DataState } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 import { TickerSearchField } from "../ticker-search-field";
+import { AiSummaryCard } from "../ai-summary-card";
 
 export function WatchlistScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
@@ -106,12 +107,7 @@ export function WatchlistScreen() {
 
       <div style={{ padding: "0 18px 18px" }}>
 
-        <div className="ai-block" style={{ marginBottom: 14 }}>
-          <div className="card-h">
-            <h3 className="ai-c">◆ AI watchlist summary</h3>
-            <span className="pill ai">leaders · laggards · alerts</span>
-          </div>
-          <div className="card-b">
+        <AiSummaryCard title="◆ AI watchlist summary" pill={<span className="pill ai">leaders · laggards · alerts</span>}>
             {sumTxt == null ? (
               <DataState loading={companiesLoading} label="No live price data for any watched ticker yet." />
             ) : (
@@ -124,8 +120,7 @@ export function WatchlistScreen() {
                 </div>
               </>
             )}
-          </div>
-        </div>
+        </AiSummaryCard>
 
         <StockPanelLayout
           selectedSym={sel ?? ""}

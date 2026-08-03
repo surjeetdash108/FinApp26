@@ -5,6 +5,7 @@ import { cls, arr, sign, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
+import { AiSummaryCard } from "../ai-summary-card";
 
 interface ThemeStock { s: string; n: string; price: number; c: number; }
 interface Theme { id: string; name: string; desc: string; tickers: string[]; }
@@ -112,12 +113,7 @@ export function ThemesScreen() {
         ) : (
           <>
             {/* AI theme summary */}
-            <div className="ai-block" style={{ marginBottom: 14 }}>
-              <div className="card-h">
-                <h3 className="ai-c">◆ AI theme summary</h3>
-                <span className="pill ai">leaders · laggards · momentum</span>
-              </div>
-              <div className="card-b">
+            <AiSummaryCard title="◆ AI theme summary" pill={<span className="pill ai">leaders · laggards · momentum</span>}>
                 <p style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }}>
                   <b style={{ color: "var(--text-hi)" }}>{theme.name}</b> — {theme.desc}.{" "}
                   {stocks.length} constituents finished{" "}
@@ -130,8 +126,7 @@ export function ThemesScreen() {
                   <span className="src-chip">Avg {avgLabel}</span>
                   {leader && <span className="src-chip">Leader {leader.s}</span>}
                 </div>
-              </div>
-            </div>
+            </AiSummaryCard>
 
             <StockPanelLayout
               selectedSym={sel ?? ""}

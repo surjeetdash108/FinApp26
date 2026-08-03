@@ -8,6 +8,7 @@ import type { CompanyDoc, HoldingDoc } from "../types";
 import { cls, arr, sign, DataState } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 import { TickerSearchField } from "../ticker-search-field";
+import { AiSummaryCard } from "../ai-summary-card";
 
 interface Holding {
   ticker: string; shares: number;
@@ -127,12 +128,7 @@ export function PortfolioScreen() {
       <div style={{ padding: "0 18px 18px" }}>
 
         {/* AI portfolio summary */}
-        <div className="ai-block" style={{ marginBottom: 14 }}>
-          <div className="card-h">
-            <h3 className="ai-c">◆ AI portfolio summary</h3>
-            <span className="pill ai">drivers · leaders · laggards</span>
-          </div>
-          <div className="card-b">
+        <AiSummaryCard title="◆ AI portfolio summary" pill={<span className="pill ai">drivers · leaders · laggards</span>}>
             {priced.length === 0 ? (
               <DataState loading={companiesLoading} label="No live price data for any current holding yet." />
             ) : (
@@ -164,8 +160,7 @@ export function PortfolioScreen() {
                 </li>
               </ul>
             )}
-          </div>
-        </div>
+        </AiSummaryCard>
 
         <StockPanelLayout
           selectedSym={pfSel}
