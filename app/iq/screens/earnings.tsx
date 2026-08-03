@@ -791,7 +791,7 @@ export function EarningsScreen() {
       <div className="dash" style={{ marginTop: 16 }}>
         {/* col-6: 10-quarter EPS history */}
         <div className="col-6">
-          <div className="card">
+          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <h3>{sel} · 10-quarter earnings history</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -803,9 +803,9 @@ export function EarningsScreen() {
                 <ExpandBtn title={`${sel} · 10-quarter earnings history`} node={<EpsChart hist={hist} />} />
               </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 8 }}>
+            <div className="card-b" style={{ paddingTop: 8, flex: 1, display: "flex", flexDirection: "column" }}>
               {hist.length === 0 ? (
-                <DataState loading={earningsLoading} label={`No live earnings history synced for ${sel} yet.`} />
+                <DataState loading={earningsLoading} label={`No live earnings history synced for ${sel} yet.`} height="100%" />
               ) : (
                 <>
                   <div className="ec-legend">
@@ -847,7 +847,7 @@ export function EarningsScreen() {
 
         {/* col-6: Income statement */}
         <div className="col-6">
-          <div className="card">
+          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <h3>{sel} · Income statement</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -855,9 +855,9 @@ export function EarningsScreen() {
                 <ExpandBtn title={`${sel} · Income statement`} node={<IncChart inc={inc} />} />
               </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 8 }}>
+            <div className="card-b" style={{ paddingTop: 8, flex: 1, display: "flex", flexDirection: "column" }}>
               {inc.length === 0 ? (
-                <DataState loading={financialsLoading} label={`No live quarterly financials synced for ${sel} yet.`} />
+                <DataState loading={financialsLoading} label={`No live quarterly financials synced for ${sel} yet.`} height="100%" />
               ) : (
                 <>
                   <div className="ec-legend">

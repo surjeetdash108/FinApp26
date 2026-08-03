@@ -10,7 +10,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useBackendBars } from "../hooks/useBackendBars";
 import type {
   CompanyDoc, AnalystConsensusDoc, InsiderTxDoc,
-  DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, NewsArticleDoc, LiveEarningsDoc, SectorApiDoc,
+  DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, NewsArticleDoc, LiveEarningsDoc, SectorApiDoc,
 } from "../types";
 
 // Maps the numeric 1-99 tech rating onto the same string categories the
@@ -137,6 +137,62 @@ function incRowsFromFinancials(
       oi: operatingIncome / 1e9,
       ni: netIncome / 1e9,
       eps: r.epsActual ?? 0,
+    };
+  });
+}
+
+/** "+12%" / "-8%" YoY, or "—" when there's no prior-period value to compare against
+ * or that value is too close to zero for a percentage to be meaningful. */
+function pctChangeStr(curr: number | null | undefined, prev: number | null | undefined): string {
+  if (curr == null || prev == null || Math.abs(prev) < 0.005) return "—";
+  const pct = ((curr - prev) / Math.abs(prev)) * 100;
+  return `${pct >= 0 ? "+" : ""}${Math.round(pct)}%`;
+}
+
+type AnnualEpsSalesRow = { year: string; eps: number | null; epsChg: string; sales: number | null; salesChg: string };
+
+/** One row per real reported fiscal year (Polygon annual financials — actuals
+ * only, no forward estimates exist for this in the current data pipeline),
+ * oldest first, with EPS/Sales YoY %change vs the prior row. */
+function annualEpsSalesRows(annual: AnnualFinancials[]): AnnualEpsSalesRow[] {
+  const asc = [...annual]
+    .filter(r => r.fiscalYear)
+    .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear));
+  return asc.map((r, i) => {
+    const prev = i > 0 ? asc[i - 1] : null;
+    return {
+      year: r.fiscalYear as string,
+      eps: r.epsActual,
+      epsChg: pctChangeStr(r.epsActual, prev?.epsActual),
+      sales: r.revenue != null ? r.revenue / 1e6 : null,
+      salesChg: pctChangeStr(r.revenue, prev?.revenue),
+    };
+  });
+}
+
+type QuarterlyEpsSalesRow = {
+  label: string; eps: number | null; epsChg: string; epsSurp: string; sales: number | null; salesChg: string; salesSurp: string;
+};
+
+/** One row per real reported quarter, oldest first. %CHG compares the same
+ * quarter a year earlier (4 rows back); %SURP is actual-vs-estimate for that
+ * quarter. EPS surprise is real (epsEstimate is synced); sales/revenue has no
+ * estimate in the pipeline yet, so its surprise column is always "—" rather
+ * than a fabricated number. */
+function quarterlyEpsSalesRows(quarters: QuarterFinancials[]): QuarterlyEpsSalesRow[] {
+  const asc = [...quarters]
+    .filter(r => r.endDate)
+    .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string));
+  return asc.map((r, i) => {
+    const yoy = i >= 4 ? asc[i - 4] : null;
+    return {
+      label: new Date(r.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      eps: r.epsActual,
+      epsChg: pctChangeStr(r.epsActual, yoy?.epsActual),
+      epsSurp: pctChangeStr(r.epsActual, r.epsEstimate),
+      sales: r.revenue != null ? r.revenue / 1e6 : null,
+      salesChg: pctChangeStr(r.revenue, yoy?.revenue),
+      salesSurp: "—",
     };
   });
 }
@@ -804,6 +860,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 ["Next ER",        erDate],
                 ["52W Range",      hi != null && lo != null ? "$" + nf(lo) + " – $" + nf(hi) : null],
                 ["Avg Vol (20d)",  avgVol20 != null ? nf(avgVol20 / 1e6) + "M" : null],
+                ["Sector",         data.sector],
+                ["Div Yield",      data.dividendYield != null ? data.dividendYield.toFixed(2) + "%" : null],
               ] as [string, string | null][]).map(k => (
                 <div key={k[0]} className="kstat">
                   <div className="k">{k[0]}</div>
@@ -935,6 +993,134 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             );
           })()}
 
+          {/* Dividend & split history — moved into LEFT COLUMN's own flex
+              stack (see note by RIGHT COLUMN's Earnings history/Key levels
+              for why: keeps each column's total height matched to its own
+              real content, no trailing blank gap). */}
+          {(() => {
+            const dh = dividendHistory;
+            const hasReal = !!dh && dh.isPayer;
+            const yieldPct = hasReal ? dh!.yieldPct : null;
+            const annualDiv = hasReal ? (dh!.ttmTotal ?? 0) : 0;
+            const payoutRatio = eps != null && eps > 0 && yieldPct != null && yieldPct > 0
+              ? Math.min(99, Math.round((annualDiv / eps) * 100)) : null;
+            const growthLabel = hasReal && dh!.cagr5yPct != null
+              ? `${dh!.cagr5yPct >= 0 ? "+" : ""}${dh!.cagr5yPct.toFixed(1)}% / yr`
+              : null;
+            const streakLabel = hasReal && dh!.increaseStreakYears > 0 ? ` · ${dh!.increaseStreakYears}-yr streak` : "";
+            const divRows = hasReal
+              ? dh!.history.slice(0, 5).map(h => ({
+                  label: h.exDividendDate ?? "—",
+                  perShare: h.amount,
+                  note: h.exDividendDate ? `ex ${h.exDividendDate.slice(5)}` : "",
+                }))
+              : [];
+            return (
+              <div className="card">
+                <div className="card-h">
+                  <h3>Dividend &amp; split history</h3>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {dh && (yieldPct != null
+                      ? <span className="pill up">{yieldPct.toFixed(2)}% yield</span>
+                      : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>No dividend</span>)}
+                    {hasReal && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>}
+                    <span className="link" onClick={() => setInnerDrawer("dividend")}>View all →</span>
+                  </div>
+                </div>
+                <div className="card-b" style={{ paddingTop: 6 }}>
+                  {!dh ? (
+                    <DataState loading={dividendLoading} label={`Dividend data not synced for ${sym} yet.`} />
+                  ) : !hasReal ? (
+                    <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "8px 0" }}>{sym} does not currently pay a dividend.</div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginBottom: 4 }}>5-yr dividend growth</div>
+                          <div style={{ fontSize: ".78rem", color: "var(--text-hi)" }}>
+                            {growthLabel ?? "—"}{payoutRatio != null ? ` · payout ${payoutRatio}%` : ""}{streakLabel}
+                          </div>
+                        </div>
+                      </div>
+                      {divRows.map(q => (
+                        <div key={q.label} className="minirow">
+                          <span className="tkr" style={{ width: 60 }}>{q.label}</span>
+                          <span className="mid mono">${q.perShare.toFixed(4)}/sh</span>
+                          <span className="r" style={{ color: "var(--text-dim-solid)", fontSize: ".72rem" }}>{q.note}</span>
+                        </div>
+                      ))}
+                      <div className="minirow" style={{ marginTop: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 6 }}>
+                        <span className="mid">Annual ({dh!.ttmPayments} payments)</span>
+                        <span className="r" style={{ color: "var(--text-hi)" }}>${annualDiv.toFixed(2)}/sh</span>
+                      </div>
+                    </>
+                  )}
+
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border-soft)" }}>
+                    <div style={{ fontSize: ".66rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>
+                      Stock splits
+                    </div>
+                    {splitsDoc && splitsDoc.splits.length > 0 ? splitsDoc.splits.slice(0, 3).map(s => (
+                      <div key={s.executionDate} className="minirow">
+                        <span className="mid">{s.executionDate}</span>
+                        <span className="r" style={{ color: "var(--text-hi)" }}>{s.splitFrom}:{s.splitTo}</span>
+                      </div>
+                    )) : (
+                      <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>No splits on record.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Insider & institutional — moved into LEFT COLUMN, same reason as above. */}
+          <div className="card">
+            <div className="card-h">
+              <h3>Insider &amp; institutional</h3>
+              <span className="link" onClick={() => setInnerDrawer("insider")}>View all →</span>
+            </div>
+            <div className="card-b" style={{ paddingTop: 6 }}>
+              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+                Recent insider transactions
+              </div>
+              {data.insiderActivity.length > 0 ? (
+                data.insiderActivity.map((n, idx) => {
+                  const isSell = /sale|sold|exercis/i.test(n.action);
+                  return (
+                    <div key={idx} className="minirow" style={{ cursor: "pointer", alignItems: "flex-start", gap: 10 }}>
+                      <span className="tkr" style={{ flex: "none" }}>{sym}</span>
+                      <span className="mid" style={{ whiteSpace: "normal", lineHeight: 1.45 }}>
+                        {n.name} {n.action} <span style={{ color: "var(--text-dim-solid)" }}>({n.date})</span>
+                      </span>
+                      <span className={`r ${isSell ? "down" : "up"}`} style={{ flex: "none" }}>
+                        {n.valueUsd != null ? `${isSell ? "−" : "+"}$${(n.valueUsd / 1e6).toFixed(1)}M` : <NotAvailable />}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "4px 0 8px" }}>
+                  No recent Form 4 activity.
+                </div>
+              )}
+              <div style={{ height: 1, background: "var(--border-soft)", margin: "12px 0 8px" }} />
+              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+                Institutional
+              </div>
+              {([
+                ["Inst. ownership", null],
+                ["Short interest", null],
+                ["13F funds holding", null],
+              ] as [string, string | null][]).map(x => (
+                <div key={x[0]} className="minirow">
+                  <span className="mid">{x[0]}</span>
+                  <span className="r">{x[1] ?? <NotAvailable />}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
 
         {/* RIGHT COLUMN */}
@@ -1040,170 +1226,45 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-        </div>
-
-        {/* Dividend history — row 3, col 1 */}
-        {/* alignSelf stretch is default on grid children; explicit here for clarity */}
-        {(() => {
-          const dh = dividendHistory;
-          const hasReal = !!dh && dh.isPayer;
-          const yieldPct = hasReal ? dh!.yieldPct : null;
-          const annualDiv = hasReal ? (dh!.ttmTotal ?? 0) : 0;
-          const payoutRatio = eps != null && eps > 0 && yieldPct != null && yieldPct > 0
-            ? Math.min(99, Math.round((annualDiv / eps) * 100)) : null;
-          const growthLabel = hasReal && dh!.cagr5yPct != null
-            ? `${dh!.cagr5yPct >= 0 ? "+" : ""}${dh!.cagr5yPct.toFixed(1)}% / yr`
-            : null;
-          const streakLabel = hasReal && dh!.increaseStreakYears > 0 ? ` · ${dh!.increaseStreakYears}-yr streak` : "";
-          const divRows = hasReal
-            ? dh!.history.slice(0, 5).map(h => ({
-                label: h.exDividendDate ?? "—",
-                perShare: h.amount,
-                note: h.exDividendDate ? `ex ${h.exDividendDate.slice(5)}` : "",
-              }))
-            : [];
-          return (
-            <div className="card">
-              <div className="card-h">
-                <h3>Dividend &amp; split history</h3>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {dh && (yieldPct != null
-                    ? <span className="pill up">{yieldPct.toFixed(2)}% yield</span>
-                    : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>No dividend</span>)}
-                  {hasReal && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>}
-                  <span className="link" onClick={() => setInnerDrawer("dividend")}>View all →</span>
-                </div>
-              </div>
-              <div className="card-b" style={{ paddingTop: 6 }}>
-                {!dh ? (
-                  <DataState loading={dividendLoading} label={`Dividend data not synced for ${sym} yet.`} />
-                ) : !hasReal ? (
-                  <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "8px 0" }}>{sym} does not currently pay a dividend.</div>
-                ) : (
-                  <>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                      <div>
-                        <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginBottom: 4 }}>5-yr dividend growth</div>
-                        <div style={{ fontSize: ".78rem", color: "var(--text-hi)" }}>
-                          {growthLabel ?? "—"}{payoutRatio != null ? ` · payout ${payoutRatio}%` : ""}{streakLabel}
-                        </div>
-                      </div>
-                    </div>
-                    {divRows.map(q => (
-                      <div key={q.label} className="minirow">
-                        <span className="tkr" style={{ width: 60 }}>{q.label}</span>
-                        <span className="mid mono">${q.perShare.toFixed(4)}/sh</span>
-                        <span className="r" style={{ color: "var(--text-dim-solid)", fontSize: ".72rem" }}>{q.note}</span>
-                      </div>
-                    ))}
-                    <div className="minirow" style={{ marginTop: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 6 }}>
-                      <span className="mid">Annual ({dh!.ttmPayments} payments)</span>
-                      <span className="r" style={{ color: "var(--text-hi)" }}>${annualDiv.toFixed(2)}/sh</span>
-                    </div>
-                  </>
-                )}
-
-                <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border-soft)" }}>
-                  <div style={{ fontSize: ".66rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>
-                    Stock splits
-                  </div>
-                  {splitsDoc && splitsDoc.splits.length > 0 ? splitsDoc.splits.slice(0, 3).map(s => (
-                    <div key={s.executionDate} className="minirow">
-                      <span className="mid">{s.executionDate}</span>
-                      <span className="r" style={{ color: "var(--text-hi)" }}>{s.splitFrom}:{s.splitTo}</span>
-                    </div>
-                  )) : (
-                    <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>No splits on record.</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Earnings history — row 3, col 2 */}
-        <div className="card">
-          <div className="card-h">
-            <h3>Earnings history</h3>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {hist10.length > 0 && (
-                <span className={`pill ${beatStreak >= 0 ? "up" : "dn"}`}>{Math.abs(beatStreak)}-qtr {beatStreak >= 0 ? "beat" : "miss"} streak</span>
-              )}
-              <span className="link" onClick={() => setInnerDrawer("earnings")}>View all →</span>
-            </div>
-          </div>
-          <div className="card-b" style={{ paddingTop: 6 }}>
-            {hist10.length === 0 ? (
-              <DataState loading={earningsLoading} label={`No live earnings-estimate history synced for ${sym} yet.`} />
-            ) : (
-              <>
-                <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginBottom: 8 }}>Next report: {erDate}</div>
-                {hist10.slice(0, 5).map(q => (
-                  <div key={q.q} className="minirow">
-                    <span className="tkr" style={{ width: 60 }}>{q.q}</span>
-                    <span className="mid mono">${fmt(Math.abs(q.a), 2)} EPS</span>
-                    <span className={`r ${q.surp >= 0 ? "up" : "down"}`}>{q.surp >= 0 ? "beat" : "miss"} {Math.abs(q.surp)}%</span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Insider & institutional — col 1 */}
-        <div className="card">
+          {/* Earnings history — moved into RIGHT COLUMN's own flex stack (not
+              a separate grid row) so this column's total height always
+              matches its own real content instead of stretching to match
+              LEFT's, which left a blank gap whenever LEFT had more data. */}
+          <div className="card" style={{ display: "flex", flexDirection: "column" }}>
             <div className="card-h">
-              <h3>Insider &amp; institutional</h3>
-              <span className="link" onClick={() => setInnerDrawer("insider")}>View all →</span>
+              <h3>Earnings history</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {hist10.length > 0 && (
+                  <span className={`pill ${beatStreak >= 0 ? "up" : "dn"}`}>{Math.abs(beatStreak)}-qtr {beatStreak >= 0 ? "beat" : "miss"} streak</span>
+                )}
+                <span className="link" onClick={() => setInnerDrawer("earnings")}>View all →</span>
+              </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 6 }}>
-              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
-                Recent insider transactions
-              </div>
-              {data.insiderActivity.length > 0 ? (
-                data.insiderActivity.map((n, idx) => {
-                  const isSell = /sale|sold|exercis/i.test(n.action);
-                  return (
-                    <div key={idx} className="minirow" style={{ cursor: "pointer", alignItems: "flex-start", gap: 10 }}>
-                      <span className="tkr" style={{ flex: "none" }}>{sym}</span>
-                      <span className="mid" style={{ whiteSpace: "normal", lineHeight: 1.45 }}>
-                        {n.name} {n.action} <span style={{ color: "var(--text-dim-solid)" }}>({n.date})</span>
-                      </span>
-                      <span className={`r ${isSell ? "down" : "up"}`} style={{ flex: "none" }}>
-                        {n.valueUsd != null ? `${isSell ? "−" : "+"}$${(n.valueUsd / 1e6).toFixed(1)}M` : <NotAvailable />}
-                      </span>
-                    </div>
-                  );
-                })
+            <div className="card-b" style={{ paddingTop: 6, flex: 1, display: "flex", flexDirection: "column" }}>
+              {hist10.length === 0 ? (
+                <DataState loading={earningsLoading} label={`No live earnings-estimate history synced for ${sym} yet.`} height="100%" />
               ) : (
-                <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "4px 0 8px" }}>
-                  No recent Form 4 activity.
-                </div>
+                <>
+                  <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginBottom: 8 }}>Next report: {erDate}</div>
+                  {hist10.slice(0, 5).map(q => (
+                    <div key={q.q} className="minirow">
+                      <span className="tkr" style={{ width: 60 }}>{q.q}</span>
+                      <span className="mid mono">${fmt(Math.abs(q.a), 2)} EPS</span>
+                      <span className={`r ${q.surp >= 0 ? "up" : "down"}`}>{q.surp >= 0 ? "beat" : "miss"} {Math.abs(q.surp)}%</span>
+                    </div>
+                  ))}
+                </>
               )}
-              <div style={{ height: 1, background: "var(--border-soft)", margin: "12px 0 8px" }} />
-              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
-                Institutional
-              </div>
-              {([
-                ["Inst. ownership", null],
-                ["Short interest", null],
-                ["13F funds holding", null],
-              ] as [string, string | null][]).map(x => (
-                <div key={x[0]} className="minirow">
-                  <span className="mid">{x[0]}</span>
-                  <span className="r">{x[1] ?? <NotAvailable />}</span>
-                </div>
-              ))}
             </div>
           </div>
 
-        {/* Key levels — col 2 */}
-        <div className="card">
+          {/* Key levels (pivots) — moved into RIGHT COLUMN, same reason as above. */}
+          <div className="card">
             <div className="card-h">
               <h3>Key levels (pivots)</h3>
               <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
             </div>
-            <div className="card-b" style={{ paddingTop: 6 }}>
+            <div className="card-b">
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
                 Weekly pivots
               </div>
@@ -1239,8 +1300,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-        {/* News */}
-        <div className="card">
+        </div>
+
+        {/* News — last card, alone in its row: span both grid columns so it
+            fills the full width instead of leaving the 400px right column
+            empty beside it. */}
+        <div className="card" style={{ gridColumn: "1 / -1" }}>
           <div className="card-h">
             <h3>News</h3>
             {tickerNews && tickerNews.length > 0 && (
@@ -1581,6 +1646,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             const inc = incRowsFromFinancials(finPeriod, financialsDoc, () => []);
             const fb = (v: number) => v >= 1 ? `$${v.toFixed(2)}B` : `$${(v * 1000).toFixed(0)}M`;
             const beats10 = hist10.filter(h => h.surp >= 0).length;
+            const annualRows = annualEpsSalesRows(financialsDoc?.annual ?? []);
+            const quarterlyRows = quarterlyEpsSalesRows(financialsDoc?.quarters ?? []);
             return (
               <div className="side-drawer" style={{ zIndex: 52 }}>
                 <div className="drawer-h">
@@ -1618,6 +1685,92 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       )}
                     </div>
                   </div>
+                  {/* Annual EPS & Sales */}
+                  <div className="card" style={{ marginBottom: 14 }}>
+                    <div className="card-h">
+                      <h3>Fiscal year</h3>
+                      <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>EPS &amp; sales</span>
+                    </div>
+                    <div className="card-b" style={{ paddingTop: 4 }}>
+                      {annualRows.length === 0 ? (
+                        <DataState loading={financialsLoading} label={`No live annual financials synced for ${sym} yet.`} />
+                      ) : (
+                        <div style={{ overflowX: "auto" }}>
+                          <table className="tbl">
+                            <thead>
+                              <tr>
+                                <th>Fiscal year</th>
+                                <th className="num">EPS</th>
+                                <th className="num">%chg</th>
+                                <th className="num">Sales (mil)</th>
+                                <th className="num">%chg</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {annualRows.map(r => (
+                                <tr key={r.year}>
+                                  <td style={{ fontWeight: 700, color: "var(--text-hi)" }}>{r.year}</td>
+                                  <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
+                                  <td className={`num${r.epsChg.startsWith("+") ? " up" : r.epsChg.startsWith("-") ? " down" : ""}`}>{r.epsChg}</td>
+                                  <td className="num">{r.sales != null ? r.sales.toFixed(1) : <NotAvailable />}</td>
+                                  <td className={`num${r.salesChg.startsWith("+") ? " up" : r.salesChg.startsWith("-") ? " down" : ""}`}>{r.salesChg}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
+                        Reported fiscal years only — %chg is year-over-year. Forward analyst estimates aren&apos;t wired yet.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quarterly EPS & Sales */}
+                  <div className="card" style={{ marginBottom: 14 }}>
+                    <div className="card-h">
+                      <h3>Quarter</h3>
+                      <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>EPS &amp; sales</span>
+                    </div>
+                    <div className="card-b" style={{ paddingTop: 4 }}>
+                      {quarterlyRows.length === 0 ? (
+                        <DataState loading={financialsLoading} label={`No live quarterly financials synced for ${sym} yet.`} />
+                      ) : (
+                        <div style={{ overflowX: "auto" }}>
+                          <table className="tbl">
+                            <thead>
+                              <tr>
+                                <th>Quarter</th>
+                                <th className="num">EPS</th>
+                                <th className="num">%chg</th>
+                                <th className="num">%surp</th>
+                                <th className="num">Sales (mil)</th>
+                                <th className="num">%chg</th>
+                                <th className="num">%surp</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {quarterlyRows.map((r, i) => (
+                                <tr key={`${r.label}-${i}`}>
+                                  <td style={{ fontWeight: 700, color: "var(--text-hi)" }}>{r.label}</td>
+                                  <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
+                                  <td className={`num${r.epsChg.startsWith("+") ? " up" : r.epsChg.startsWith("-") ? " down" : ""}`}>{r.epsChg}</td>
+                                  <td className={`num${r.epsSurp.startsWith("+") ? " up" : r.epsSurp.startsWith("-") ? " down" : ""}`}>{r.epsSurp}</td>
+                                  <td className="num">{r.sales != null ? r.sales.toFixed(1) : <NotAvailable />}</td>
+                                  <td className={`num${r.salesChg.startsWith("+") ? " up" : r.salesChg.startsWith("-") ? " down" : ""}`}>{r.salesChg}</td>
+                                  <td className="num">{r.salesSurp}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
+                        %chg is year-over-year (same quarter, prior year). %surp is actual vs analyst estimate — sales surprise needs a revenue-estimate feed, not available yet.
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Income statement */}
                   <div className="card" style={{ marginBottom: 14 }}>
                     <div className="card-h">

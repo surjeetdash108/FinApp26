@@ -574,7 +574,18 @@
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
   background: linear-gradient(180deg, var(--ai), var(--brand)); box-shadow: 0 0 18px var(--ai);
 }
-.wmn-h { display: flex; align-items: center; justify-content: space-between; padding: 15px 18px 6px; }
+.wmn-h {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 15px 18px; margin: 0; border: 0; background: transparent;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+}
+.wmn.open .wmn-h { padding-bottom: 6px; }
+.wmn-chev { width: 18px; height: 18px; flex: none; color: var(--text-dim-solid); transition: transform .25s ease; }
+.wmn.open .wmn-chev { transform: rotate(180deg); }
+.wmn-collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease; }
+.wmn.open .wmn-collapse { grid-template-rows: 1fr; }
+.wmn-collapse-inner { overflow: hidden; }
 .wmn-h .t { display: flex; align-items: center; gap: 11px; }
 .wmn-orb {
   width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex: none;

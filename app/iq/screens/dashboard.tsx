@@ -25,7 +25,10 @@ import type {
 // with no REST endpoint), so those two render DataState instead of inventing
 // numbers.
 
-type DrawerKey = "earnings" | "movers" | "analyst" | "earn-movers" | "internals" | "watchlist" | "portfolio" | "insider" | "fg-history" | null;
+// "View all" widgets now navigate to /menu/{screen} (see the <Link> controls);
+// the only remaining in-page drawer is Fear & Greed history. The removed drawer
+// branches are archived in Doc/ARCHIVED-dashboard-viewall-drawers.md.
+type DrawerKey = "fg-history" | null;
 
 // ---- Dash hover popup ----
 type PopBlock = "earnings" | "movers" | "analyst" | "watchlist" | "portfolio" | "insider" | "screener";
@@ -329,13 +332,10 @@ export function DashboardScreen() {
   const leaders  = [...rankedCompanies].sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0)).slice(0, 3);
   const laggards = [...rankedCompanies].sort((a, b) => (a.rsRating ?? 0) - (b.rsRating ?? 0)).slice(0, 3);
 
-  const EARN_MOVERS = [...earnings]
-    .filter(e => e.priceReaction !== null)
-    .sort((a, b) => Math.abs(b.priceReaction!) - Math.abs(a.priceReaction!));
-
   const [drawer, setDrawer] = useState<DrawerKey>(null);
   const [moversTab, setMoversTab] = useState<0 | 1 | 2>(0);
   const [scrTab, setScrTab] = useState<"leaders" | "laggards">("leaders");
+  const [wmnOpen, setWmnOpen] = useState(false);
 
   // ---- Dash pop hover ----
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -395,8 +395,13 @@ export function DashboardScreen() {
 
         {/* ── 2. What Matters Now ── */}
         <div className="col-12">
-          <div className="wmn">
-            <div className="wmn-h">
+          <div className={`wmn${wmnOpen ? " open" : ""}`}>
+            <button
+              type="button"
+              className="wmn-h"
+              aria-expanded={wmnOpen}
+              onClick={() => setWmnOpen(o => !o)}
+            >
               <div className="t">
                 <div className="wmn-orb">
                   <svg viewBox="0 0 24 24" fill="none">
@@ -408,8 +413,15 @@ export function DashboardScreen() {
                   <div className="meta">AI-curated market briefing</div>
                 </div>
               </div>
+              <svg className="wmn-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <div className="wmn-collapse">
+              <div className="wmn-collapse-inner">
+                <DataState label="AI features aren't wired yet — Coming soon...." />
+              </div>
             </div>
-            <DataState label="AI features aren't wired yet — Coming soon...." />
           </div>
         </div>
  {/* ── needs an Anthropic API key ── */}
@@ -463,7 +475,7 @@ export function DashboardScreen() {
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
               <h3>Earnings Today</h3>
-              <button className="link" onClick={() => setDrawer("earnings")}>View all →</button>
+              <Link className="link" href="/menu/earnings">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
               {earnings.slice(0, 5).map(e => (
@@ -492,7 +504,7 @@ export function DashboardScreen() {
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
               <h3>Movers</h3>
-              <button className="link" onClick={() => setDrawer("movers")}>View all →</button>
+              <Link className="link" href="/menu/movers">View all →</Link>
             </div>
             <div style={{ display: "flex", gap: 4, padding: "6px 13px 0" }}>
               {(["Gainers", "Losers", "Most Active"] as const).map((label, i) => (
@@ -605,7 +617,7 @@ export function DashboardScreen() {
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
               <h3>Analyst Actions</h3>
-              <button className="link" onClick={() => setDrawer("analyst")}>View all →</button>
+              <Link className="link" href="/menu/analyst">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
               {consensusLive.length === 0 ? (
@@ -671,7 +683,7 @@ export function DashboardScreen() {
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
               <h3>Portfolio Pulse</h3>
-              <button className="link" onClick={() => setDrawer("portfolio")}>View all →</button>
+              <Link className="link" href="/menu/portfolio">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
               {isRealFolio ? (() => {
@@ -709,7 +721,7 @@ export function DashboardScreen() {
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
               <h3>Watchlist</h3>
-              <button className="link" onClick={() => setDrawer("watchlist")}>View all →</button>
+              <Link className="link" href="/menu/watchlist">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
               {watchMini.length === 0 ? (
@@ -734,7 +746,7 @@ export function DashboardScreen() {
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
               <h3>Insider &amp; Institutional</h3>
-              <button className="link" onClick={() => setDrawer("insider")}>View all →</button>
+              <Link className="link" href="/menu/insider">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
               {INSIDER_MINI.length === 0 ? (
@@ -837,14 +849,6 @@ export function DashboardScreen() {
             <div className="drawer-h">
               <div style={{ flex: 1 }}>
                 <div className="drawer-title">
-                  {drawer === "earnings"    && "Earnings Calendar"}
-                  {drawer === "movers"      && "Movers"}
-                  {drawer === "analyst"     && "Analyst Actions"}
-                  {drawer === "earn-movers" && "Biggest Earnings Movers"}
-                  {drawer === "internals"   && "Market Internals"}
-                  {drawer === "watchlist"   && "Watchlist"}
-                  {drawer === "portfolio"   && "Portfolio Pulse"}
-                  {drawer === "insider"     && "Insider & Institutional"}
                   {drawer === "fg-history"  && "Fear & Greed · History"}
                 </div>
               </div>
@@ -852,140 +856,11 @@ export function DashboardScreen() {
             </div>
             <div className="drawer-b">
 
-              {/* Earnings */}
-              {drawer === "earnings" && earnings.map(e => (
-                <div key={e.ticker} className="minirow" style={{ cursor: "pointer", padding: "8px 0" }}
-                  onClick={() => { openEarnings(e.ticker); setDrawer(null); }}>
-                  <StockLogo sym={e.ticker} size={22} />
-                  <span className="tkr">{e.ticker}<small>{e.name}</small></span>
-                  <span className="mid">
-                    <span className={`pill ${e.session.includes("pre") ? "bmo" : "amc"}`}>{e.session}</span>
-                  </span>
-                  <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-                    EPS est <span className="mono">{e.epsEstimate != null ? `$${e.epsEstimate}` : "—"}</span>
-                    {e.epsActual != null && e.epsEstimate != null && <> &rarr; <span className={`mono ${e.epsActual >= e.epsEstimate ? "up" : "down"}`}>${e.epsActual}</span></>}
-                  </span>
-                  <span className={`r ${e.priceReaction != null ? cls(e.priceReaction) : ""}`}>
-                    {e.priceReaction != null ? sign(e.priceReaction) : <span style={{ color: "var(--text-dim-solid)" }}>pending</span>}
-                  </span>
-                </div>
-              ))}
-
-              {/* Movers — same Gainers/Losers/Most Active tabs as the dashboard card */}
-              {drawer === "movers" && (
-                <>
-                  <div style={{ display: "flex", gap: 4, margin: "0 0 10px" }}>
-                    {(["Gainers", "Losers", "Most Active"] as const).map((label, i) => (
-                      <button key={label}
-                        className={`chip${moversTab === i ? " on" : ""}`}
-                        style={{ fontSize: ".65rem", padding: "3px 9px" }}
-                        onClick={() => setMoversTab(i as 0 | 1 | 2)}
-                      >{label}</button>
-                    ))}
-                  </div>
-                  {(moversTab === 0
-                    ? [...movers].filter(m => m.pctChange > 0).sort((a, b) => b.pctChange - a.pctChange)
-                    : moversTab === 1
-                    ? [...movers].filter(m => m.pctChange < 0).sort((a, b) => a.pctChange - b.pctChange)
-                    : [...movers].sort((a, b) => b.rvolRatio - a.rvolRatio)
-                  ).map(m => (
-                    <div key={m.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
-                      onClick={() => { openMoverModal(m.ticker); setDrawer(null); }}>
-                      <StockLogo sym={m.ticker} size={22} />
-                      <span className="tkr">{m.ticker}<small>{m.name}</small></span>
-                      <span className="mid">{m.catalystLabel}</span>
-                      <span className={`r mono ${cls(m.pctChange)}`}>{sign(m.pctChange)}</span>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Analyst */}
-              {drawer === "analyst" && (consensusLive.length === 0 ? (
-                <DataState loading={consensusLoading} label="No analyst consensus synced yet." />
-              ) : consensusLive.map(a => (
-                <div key={a.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
-                  onClick={() => { openStock(a.ticker); setDrawer(null); }}>
-                  <StockLogo sym={a.ticker} size={22} />
-                  <span className="tkr">{a.ticker}</span>
-                  <span className="mid" style={{ fontSize: ".74rem" }}>
-                    {a.strongBuy + a.buy} Buy · {a.hold} Hold · {a.sell + a.strongSell} Sell
-                  </span>
-                  <span className="r"><b style={{ color: "var(--text-hi)" }}>{a.consensus}</b></span>
-                </div>
-              )))}
-
-              {/* Earn movers */}
-              {drawer === "earn-movers" && EARN_MOVERS.length === 0 && (
-                <DataState label="Price reaction has no live source yet (needs a Benzinga-class feed)." />
-              )}
-              {drawer === "earn-movers" && EARN_MOVERS.map(e => (
-                <div key={e.ticker} className="minirow" style={{ cursor: "pointer", padding: "8px 0" }}
-                  onClick={() => { openEarnings(e.ticker); setDrawer(null); }}>
-                  <StockLogo sym={e.ticker} size={22} />
-                  <span className="tkr">{e.ticker}<small>{e.name}</small></span>
-                  <span className="mid">
-                    <span className={`pill ${e.priceReaction! >= 0 ? "beat" : "miss"}`}>{e.priceReaction! >= 0 ? "Beat" : "Miss"}</span>
-                    {e.guidanceStatus && e.guidanceStatus !== "In-line" && (
-                      <span className={`pill ${e.guidanceStatus === "Raised" ? "beat" : "miss"}`} style={{ marginLeft: 4 }}>{e.guidanceStatus}</span>
-                    )}
-                    <span style={{ marginLeft: 6, fontSize: ".7rem", color: "var(--text-dim-solid)" }}>EPS: ${e.epsEstimate} &rarr; ${e.epsActual}</span>
-                  </span>
-                  <span className={`r mono ${e.priceReaction! >= 0 ? "up" : "down"}`} style={{ fontWeight: 700 }}>
-                    {e.priceReaction! >= 0 ? "+" : ""}{e.priceReaction}%
-                  </span>
-                </div>
-              ))}
-
-              {/* Market internals */}
-              {drawer === "internals" && (
-                <DataState label="Market internals (advance/decline, TICK, TRIN, McClellan, put/call) have no live endpoint yet." />
-              )}
-
-              {/* Watchlist */}
-              {drawer === "watchlist" && (watchMini.length === 0 ? (
-                <DataState loading={watchlistLoading} label="No saved watchlist yet." />
-              ) : watchMini.map(w => (
-                <div key={w.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
-                  onClick={() => { openStock(w.ticker); setDrawer(null); }}>
-                  <StockLogo sym={w.ticker} size={22} />
-                  <span className="tkr">{w.ticker}<small>{w.name}</small></span>
-                  <span className="mid">{companyByTicker.get(w.ticker) ? "live" : "not synced"}</span>
-                  <span className={`r ${cls(w.pctChange)}`}>{sign(w.pctChange)}</span>
-                </div>
-              )))}
-
-              {/* Portfolio */}
-              {drawer === "portfolio" && folioMini.map(f => {
-                const dayC = movers.find(m => m.ticker === f.ticker)?.pctChange ?? f.pctChange;
-                return (
-                  <div key={f.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
-                    onClick={() => { openStock(f.ticker); setDrawer(null); }}>
-                    <StockLogo sym={f.ticker} size={22} />
-                    <span className="tkr">{f.ticker}</span>
-                    <span className="mid">{f.positionSize} &middot; {f.conviction} conv.</span>
-                    <span className={`r ${cls(dayC)}`}>{sign(dayC)}</span>
-                    <span className={`mono ${cls(f.gainLossPct)}`} style={{ fontSize: ".74rem", marginLeft: 6 }}>
-                      {f.gainLossPct > 0 ? "+" : ""}{f.gainLossPct.toFixed(1)}% total
-                    </span>
-                  </div>
-                );
-              })}
-
-              {/* Insider */}
-              {drawer === "insider" && INSIDER_MINI.map(x => (
-                <div key={x.key} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
-                  onClick={() => { openStock(x.s); setDrawer(null); }}>
-                  <StockLogo sym={x.s} size={22} />
-                  <span className="tkr">{x.s}</span>
-                  <span className="mid">{x.dir === "buy" ? "Buy" : "Sell"} &middot; {x.role}</span>
-                  <span className={`r ${x.dir === "buy" ? "up" : "down"}`}>
-                    {x.dir === "buy" ? "+" : "−"}${x.val}
-                  </span>
-                </div>
-              ))}
-
-              {/* Fear & Greed History */}
+              {/* Fear & Greed History — the only remaining in-page drawer.
+                  All "View all" widgets now navigate to /menu/{screen}; the
+                  removed earnings/movers/analyst/earn-movers/internals/watchlist/
+                  portfolio/insider branches are archived in
+                  Doc/ARCHIVED-dashboard-viewall-drawers.md. */}
               {drawer === "fg-history" && (
                 <DataState label="Fear & Greed history has no live endpoint yet (the backfill job writes to Firestore directly; nothing exposes it over REST)." />
               )}
