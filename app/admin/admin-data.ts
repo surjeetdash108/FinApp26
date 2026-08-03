@@ -114,6 +114,8 @@ export interface VendorHealth {
   status: number | null;
   ms: number | null;
   note: string;
+  request: { method: string; url: string } | null;
+  response: string | null;
 }
 export interface ApiHealthReport {
   service: string;

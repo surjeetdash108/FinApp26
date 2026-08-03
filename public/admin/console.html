@@ -1376,15 +1376,25 @@ function ahRecheckBtn(mt){
 function ahVendors(vendors){
   if (!vendors || !vendors.length) return '';
   var online = vendors.filter(function(v){return v.online;}).length;
+  var mono = 'font-family:var(--f-mono,ui-monospace,monospace)';
   var row = function(v){
     var color = v.online ? '#2fe6a6' : (v.keyPresent ? '#ff5d7a' : 'var(--dim)');
     var state = v.online ? 'online' : (v.keyPresent ? ('offline · ' + ahEsc(v.note)) : 'offline · no key');
     var meta = v.status ? (' · ' + v.status + (v.ms != null ? ' · ' + v.ms + 'ms' : '')) : '';
-    return '<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;'
-      + 'padding:9px 12px;border-bottom:1px solid #1e2a38;font-size:12.5px">'
+    var reqLine = v.request
+      ? '<div style="'+mono+';font-size:11px;color:var(--dim);margin-top:5px;word-break:break-all">'
+        + '<b style="color:#5bd0ff">' + ahEsc(v.request.method) + '</b> ' + ahEsc(v.request.url) + '</div>'
+      : '';
+    var resLine = (v.response != null && v.response !== '')
+      ? '<div style="'+mono+';font-size:11px;color:var(--dim2,#7c8798);margin-top:3px;white-space:pre-wrap;'
+        + 'word-break:break-all;max-height:54px;overflow:hidden">↳ ' + ahEsc(v.response) + '</div>'
+      : '';
+    return '<div style="padding:10px 12px;border-bottom:1px solid #1e2a38;font-size:12.5px">'
+      + '<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center">'
       + '<span><b style="color:var(--hi)">' + ahEsc(v.name) + '</b> '
-      + '<span style="color:var(--dim);font-size:11px;font-family:var(--f-mono,ui-monospace,monospace)">' + ahEsc(v.keyName) + '</span></span>'
-      + '<span style="color:' + color + ';white-space:nowrap">● ' + state + meta + '</span></div>';
+      + '<span style="color:var(--dim);font-size:11px;'+mono+'">' + ahEsc(v.keyName) + '</span></span>'
+      + '<span style="color:' + color + ';white-space:nowrap">● ' + state + meta + '</span></div>'
+      + reqLine + resLine + '</div>';
   };
   return '<div style="margin:0 0 16px">'
     + '<div style="display:flex;align-items:center;gap:8px;margin:0 0 8px">'
