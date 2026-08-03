@@ -287,8 +287,9 @@ export async function buildAdminDataset(): Promise<ConsoleDataset> {
       country: "—",
       joined: u.joinedDate ?? new Date().toISOString(),
       lastActive: u.lastLogin ?? u.joinedDate ?? new Date().toISOString(),
-      // Engagement counts computed server-side (watchlists/holdings real;
-      // apiCalls/alerts are 0 until api_usage + the alerts engine are built).
+      // Engagement counts computed server-side: watchlists/holdings/apiCalls are
+      // real (apiCalls via the backend's request-metering interceptor); alerts
+      // stays 0 until the alerts engine (R44) writes users/{uid}/alerts.
       watchlists: u.watchlists ?? 0,
       holdings: u.holdings ?? 0,
       apiCalls: u.apiCalls ?? 0,
