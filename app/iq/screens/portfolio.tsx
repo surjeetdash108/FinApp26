@@ -7,6 +7,7 @@ import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc, HoldingDoc } from "../types";
 import { cls, arr, sign, DataState } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
+import { TickerSearchField } from "../ticker-search-field";
 
 interface Holding {
   ticker: string; shares: number;
@@ -209,7 +210,7 @@ export function PortfolioScreen() {
       {addOpen && (
         <>
           <div className="scrim" onClick={() => setAddOpen(false)} />
-          <div className="drawer" style={{ maxHeight: "min(360px,85vh)" }}>
+          <div className="drawer" style={{ maxHeight: "min(480px,85vh)" }}>
             <div className="drawer-h">
               <div style={{ flex: 1, fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Add Holding</div>
               <button className="closebtn" onClick={() => setAddOpen(false)}>✕</button>
@@ -217,11 +218,7 @@ export function PortfolioScreen() {
             <div className="drawer-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
                 <label style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", display: "block", marginBottom: 5 }}>Ticker</label>
-                <input className="inp"
-                  style={{ width: "100%", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "8px 12px", color: "var(--text)", fontSize: ".9rem" }}
-                  placeholder="e.g. NVDA"
-                  value={newSym} onChange={e => setNewSym(e.target.value.toUpperCase())}
-                  onKeyDown={e => { if (e.key === "Enter") addHolding(); }} />
+                <TickerSearchField value={newSym} onChange={setNewSym} onEnter={addHolding} />
               </div>
               <div>
                 <label style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", display: "block", marginBottom: 5 }}>Position size</label>

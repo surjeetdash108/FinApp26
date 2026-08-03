@@ -7,6 +7,7 @@ import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc, WatchlistDoc } from "../types";
 import { arr, sign, DataState } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
+import { TickerSearchField } from "../ticker-search-field";
 
 export function WatchlistScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
@@ -164,7 +165,7 @@ export function WatchlistScreen() {
       {addOpen && (
         <>
           <div className="scrim" onClick={() => setAddOpen(false)} />
-          <div className="drawer" style={{ maxHeight: "min(240px,85vh)" }}>
+          <div className="drawer" style={{ maxHeight: "min(440px,85vh)" }}>
             <div className="drawer-h">
               <div style={{ flex: 1, fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Add Stock</div>
               <button className="closebtn" onClick={() => setAddOpen(false)}>✕</button>
@@ -172,14 +173,7 @@ export function WatchlistScreen() {
             <div className="drawer-b" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
                 <label style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", display: "block", marginBottom: 5 }}>Ticker symbol</label>
-                <input
-                  autoFocus
-                  style={{ width: "100%", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "8px 12px", color: "var(--text)", fontSize: ".9rem" }}
-                  placeholder="e.g. TSLA"
-                  value={newSym}
-                  onChange={e => setNewSym(e.target.value.toUpperCase())}
-                  onKeyDown={e => { if (e.key === "Enter") addStock(); }}
-                />
+                <TickerSearchField value={newSym} onChange={setNewSym} onEnter={addStock} />
               </div>
               <button className="btn primary" style={{ width: "100%" }} onClick={addStock}>
                 Add to watchlist
