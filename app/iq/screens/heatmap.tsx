@@ -7,7 +7,7 @@ import { sign, heatCol, fmt, StockLogo, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc, SectorApiDoc } from "../types";
 
-const TABS = ["Stocks", "S&P 500"];
+const TABS = ["Stocks", "S&P 500", "Nasdaq", "Dow", "Russell 2000"];
 const HEADER_H = 24;
 const APPROX_W = 1100;
 const APPROX_H = 620;

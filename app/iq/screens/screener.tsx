@@ -65,6 +65,7 @@ export function ScreenerScreen() {
 
   /* ── Preset multi-select ── */
   const [activePresets, setActivePresets] = useState<Set<number>>(new Set());
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   /* ── Manual filter state ── */
   const [rs90,       setRs90]       = useState(false);
@@ -189,11 +190,15 @@ export function ScreenerScreen() {
         {/* ── Filter card ── */}
         <div className="card" style={{ marginBottom: 14, overflow: "visible" }}>
 
-          <div className="filt-hdr">
-            Filters
-            <span className="link" onClick={resetAll}>Reset</span>
+          <div className="filt-hdr" style={{ cursor: "pointer" }} onClick={() => setFiltersOpen(o => !o)}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <span aria-hidden style={{ display: "inline-block", transition: "transform .2s", transform: filtersOpen ? "rotate(90deg)" : "none", fontSize: ".72rem", color: "var(--text-dim-solid)" }}>▸</span>
+              Filters
+            </span>
+            <span className="link" onClick={e => { e.stopPropagation(); resetAll(); }}>Reset</span>
           </div>
 
+          {filtersOpen && (<>
           {/* Presets row */}
           <div style={{
             display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center",
@@ -291,6 +296,7 @@ export function ScreenerScreen() {
               <CheckOpt label="Price > $5"          on={false}    onToggle={() => {}} />
             </div>
           </div>
+          </>)}
 
         </div>
 
