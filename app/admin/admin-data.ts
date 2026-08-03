@@ -1,0 +1,338 @@
+import { apiGet } from "../iq/backend";
+import { TRACKED_FEATURES, FEATURE_LABEL, FEATURE_GROUP } from "../iq/feature-adoption";
+import { ENTITLEMENTS } from "./entitlement-catalog";
+
+/**
+ * Builds the admin console's dataset — sourced ENTIRELY from the backend.
+ *
+ * New-architecture rule: the browser never talks to Firebase directly. The flow
+ * is UI → backend → Firebase → backend → UI. So this reads the backend's
+ * AdminGuard-protected read-models (`GET /admin/users`, `/admin/subscriptions`,
+ * `GET /plans`) via `apiGet` (which attaches the admin's Firebase ID token), and
+ * does ONLY presentation mapping here — MRR/LTV/initials/colours are derived in
+ * plain JS from the backend rows, not fetched from Firestore.
+ *
+ * The console (`public/admin/console.html`) renders once at module scope from a
+ * dataset staged in sessionStorage; this produces rows in exactly that shape.
+ * Anything genuinely unavailable is reported as 0/null rather than estimated.
+ */
+
+/**
+ * Human labels for the entitlement keys, for the console's per-plan editor.
+ * Kept beside the keys themselves so a new entitlement cannot ship without one.
+ */
+export const ENTITLEMENT_CATALOG = ENTITLEMENTS.map(e => ({
+  key: e.key,
+  label: e.label,
+  description: e.description,
+  group: e.group,
+  staffOnly: e.staffOnly === true,
+  unbuilt: e.unbuilt === true,
+}));
+
+const AVATAR_COLORS = [
+  "#7c6cf5", "#38d6e6", "#2fe6a6", "#ffb547", "#ff5d7a", "#9d8dff", "#5bd0ff", "#ff8a5b",
+];
+
+/**
+ * The single fixed admin account. One definition, imported by page.tsx, so the
+ * gate and the metric exclusion can never disagree about who the admin is.
+ * Mirrors ADMIN_EMAIL in the backend's deploy/env.production.yaml.
+ */
+export const ADMIN_EMAIL = (
+  process.env.NEXT_PUBLIC_ADMIN_EMAIL || "admin@marketcatalyst.ai"
+).toLowerCase();
+
+/**
+ * Staff accounts are excluded from every metric. The BACKEND already filters
+ * staff out of `/admin/users` (AdminAnalyticsService.isStaff), so this set is a
+ * second belt-and-braces guard for any client-side derivation.
+ */
+const STAFF_EMAILS = new Set<string>([ADMIN_EMAIL]);
+
+export function isStaffAccount(email: string | null | undefined): boolean {
+  return !!email && STAFF_EMAILS.has(email.trim().toLowerCase());
+}
+
+export interface ConsoleUserRow {
+  id: string;
+  name: string;
+  email: string;
+  plan: string;
+  status: string;
+  mrr: number;
+  color: string;
+  initials: string;
+  country: string;
+  joined: string;      // ISO — revived to Date inside the console
+  lastActive: string;  // ISO
+  watchlists: number;
+  holdings: number;
+  apiCalls: number;
+  alerts: number;
+  renewsIn: number | null;
+  ltv: number;
+}
+
+export interface FeatureAdoptionRow {
+  feature: string;
+  label: string;
+  /** Section heading in the admin panel (Intelligence, Charting, …). */
+  group: string;
+  /** Total opens across all users. */
+  opens: number;
+  /** Distinct users who opened it — the adoption number that matters. */
+  users: number;
+  lastOpened: string | null;
+  /** True when the feature is tracked but has never been opened. */
+  neverOpened: boolean;
+}
+
+export interface ConsolePlanRow {
+  id: string;
+  name: string;
+  amount: number;
+  currency: string;
+  billingCycle: string;
+  /** Entitlement key → granted. Editable from the console. */
+  featureFlags: Record<string, boolean>;
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface ConsoleDataset {
+  users: ConsoleUserRow[];
+  /** Full plans, so the console can render and edit per-plan entitlements. */
+  plans: ConsolePlanRow[];
+  /** The entitlement catalog: label, one-line description, group and the
+   *  staffOnly / unbuilt markers the editor renders. Includes every key, so a
+   *  plan document missing one still shows it as an off toggle. */
+  entitlementCatalog: typeof ENTITLEMENT_CATALOG;
+  /** Where the Monitor tab loads the backend's own ops UI from. */
+  backendUrl: string | null;
+  featureAdoption: FeatureAdoptionRow[];
+  /** Plan display name → monthly price in MAJOR units, for the console's MRR maths. */
+  price: Record<string, number>;
+  generatedAt: string;
+  counts: {
+    users: number;
+    payments: number;
+    plans: number;
+    /** Staff rows filtered out of every figure above. The backend does the
+     *  exclusion now, so from the client's side this is 0 (surfaced for shape
+     *  compatibility with the console's counts panel). */
+    excludedStaff: number;
+  };
+}
+
+// ── Backend response shapes (mirror src/plans/admin-analytics.service.ts and
+//    src/plans/plans.registry.ts) ──────────────────────────────────────────
+interface BackendUserRow {
+  uid: string;
+  name: string | null;
+  email: string | null;
+  planId: string;
+  planName: string;
+  status: string;                 // ACTIVE | TRIALING | EXPIRED | ...
+  storedStatus?: string;
+  subscriptionStartDate?: string | null;
+  subscriptionExpiryDate?: string | null;
+  daysRemaining?: number | null;
+  joinedDate?: string | null;
+  lastLogin?: string | null;
+  watchlists?: number;
+  holdings?: number;
+  apiCalls?: number;
+  alerts?: number;
+}
+interface BackendAdoptionRow {
+  feature: string;
+  opens: number;
+  users: number;
+  lastOpened: string | null;
+}
+interface BackendPaymentRow {
+  paymentId: string;
+  userId: string | null;
+  amount?: number;                // minor units
+  currency?: string;
+  paymentStatus?: string;         // SUCCESS | ...
+  paymentDate?: string | null;
+}
+interface BackendPlan {
+  id: string;
+  name: string;
+  amount?: number;                // minor units
+  currency?: string;
+  billingCycle?: string;
+  featureFlags?: Record<string, boolean>;
+  active?: boolean;
+  sortOrder?: number;
+}
+
+/** The console's status vocabulary, lower-case. */
+function toConsoleStatus(status: string): string {
+  switch ((status || "").toUpperCase()) {
+    case "ACTIVE": return "active";
+    case "TRIALING": return "trialing";
+    case "PAST_DUE": return "past_due";
+    case "CANCELLED": return "canceled";
+    case "EXPIRED": return "canceled";
+    default: return "active"; // free users with no subscription read as active
+  }
+}
+
+function initialsOf(name: string, email: string): string {
+  const src = (name || email || "?").trim();
+  const parts = src.split(/[\s@._-]+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
+/**
+ * Monthly-equivalent price in major units, so a yearly plan does not overstate
+ * MRR 12×. Rounded to 2dp so every downstream sum stays on clean cents.
+ */
+function monthlyMajor(amountMinor: number, billingCycle: string): number {
+  const major = (amountMinor ?? 0) / 100;
+  const monthly =
+    billingCycle === "yearly" ? major / 12 : billingCycle === "monthly" ? major : 0;
+  return Math.round(monthly * 100) / 100;
+}
+
+/**
+ * Names the backend's aggregated adoption rows and unions them with the full
+ * TRACKED_FEATURES catalog, so every tracked feature appears — including those
+ * with zero opens ("which features does nobody use" is the question this exists
+ * to answer). The backend does the aggregation + staff exclusion; label/group
+ * naming stays here in the catalog so a nav rename keeps a feature's history.
+ */
+function rollUpAdoption(rows: BackendAdoptionRow[]): FeatureAdoptionRow[] {
+  const byFeature = new Map(rows.map(r => [r.feature, r]));
+
+  const keys = new Set<string>([
+    ...TRACKED_FEATURES.map(f => f.key),
+    ...byFeature.keys(),
+  ]);
+
+  return [...keys]
+    .map(key => {
+      const agg = byFeature.get(key);
+      return {
+        feature: key,
+        label: FEATURE_LABEL.get(key) ?? key,
+        group: FEATURE_GROUP.get(key) ?? "Other",
+        opens: agg?.opens ?? 0,
+        users: agg?.users ?? 0,
+        lastOpened: agg?.lastOpened ?? null,
+        neverOpened: !agg || agg.opens === 0,
+      };
+    })
+    .sort((a, b) => b.opens - a.opens || a.label.localeCompare(b.label));
+}
+
+export async function buildAdminDataset(): Promise<ConsoleDataset> {
+  // UI → backend → Firebase → backend → UI. All three reads hit AdminGuard-
+  // protected (or public, for /plans) backend routes; the browser touches no
+  // Firestore. Payments may be empty → subscriptions falls back to [].
+  const [usersRes, subsRes, plansRes, adoptRes] = await Promise.all([
+    apiGet<{ users: BackendUserRow[] }>("/admin/users?limit=500"),
+    apiGet<{ subscriptions: BackendPaymentRow[] }>("/admin/subscriptions?limit=1000").catch(
+      () => ({ subscriptions: [] as BackendPaymentRow[] }),
+    ),
+    apiGet<{ plans: BackendPlan[] }>("/plans"),
+    apiGet<{ adoption: BackendAdoptionRow[] }>("/admin/feature-adoption").catch(
+      () => ({ adoption: [] as BackendAdoptionRow[] }),
+    ),
+  ]);
+
+  const backendUsers = usersRes.users ?? [];
+  const payments = subsRes.subscriptions ?? [];
+  const plans = plansRes.plans ?? [];
+  const adoption = adoptRes.adoption ?? [];
+
+  const price: Record<string, number> = {};
+  for (const p of plans) {
+    price[p.name ?? p.id] = monthlyMajor(p.amount ?? 0, p.billingCycle ?? "none");
+  }
+
+  // Lifetime value = what this user has actually paid (SUCCESS rows only). Not
+  // modelled — no payments yields 0, which is the truth.
+  const paidByUser = new Map<string, number>();
+  for (const p of payments) {
+    if (p.paymentStatus !== "SUCCESS" || !p.userId) continue;
+    paidByUser.set(p.userId, (paidByUser.get(p.userId) ?? 0) + (p.amount ?? 0) / 100);
+  }
+
+  const users: ConsoleUserRow[] = backendUsers.map((u, i) => {
+    const planId = u.planId ?? "free";
+    const planLabel = u.planName ?? (planId.charAt(0).toUpperCase() + planId.slice(1));
+    const status = toConsoleStatus(u.status);
+    const isPaying =
+      (status === "active" || status === "trialing" || status === "past_due") && planId !== "free";
+    const name = u.name ?? (u.email ?? u.uid).split("@")[0];
+    const email = u.email ?? "—";
+    const remaining = typeof u.daysRemaining === "number" && u.daysRemaining >= 0 ? u.daysRemaining : null;
+
+    return {
+      id: u.uid,
+      name,
+      email,
+      plan: planLabel,
+      status,
+      mrr: isPaying ? (price[planLabel] ?? 0) : 0,
+      color: AVATAR_COLORS[i % AVATAR_COLORS.length],
+      initials: initialsOf(name, email),
+      // The backend read-model does not carry country; shown as "—" rather than
+      // guessed. Add it to the /admin/users projection to populate this.
+      country: "—",
+      joined: u.joinedDate ?? new Date().toISOString(),
+      lastActive: u.lastLogin ?? u.joinedDate ?? new Date().toISOString(),
+      // Engagement counts computed server-side (watchlists/holdings real;
+      // apiCalls/alerts are 0 until api_usage + the alerts engine are built).
+      watchlists: u.watchlists ?? 0,
+      holdings: u.holdings ?? 0,
+      apiCalls: u.apiCalls ?? 0,
+      alerts: u.alerts ?? 0,
+      renewsIn: status === "active" || status === "trialing" ? remaining : null,
+      ltv: Math.round(paidByUser.get(u.uid) ?? 0),
+    };
+  });
+
+  const planRows: ConsolePlanRow[] = plans
+    .map(p => ({
+      id: p.id,
+      name: p.name ?? p.id,
+      amount: p.amount ?? 0,
+      currency: p.currency ?? "USD",
+      billingCycle: p.billingCycle ?? "none",
+      // Every catalog key present, defaulting to false — a key absent from the
+      // plan must render as an off toggle, not vanish from the editor.
+      featureFlags: Object.fromEntries(
+        ENTITLEMENT_CATALOG.map(e => [e.key, p.featureFlags?.[e.key] === true]),
+      ),
+      active: p.active ?? true,
+      sortOrder: p.sortOrder ?? 0,
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  return {
+    users,
+    plans: planRows,
+    entitlementCatalog: ENTITLEMENT_CATALOG,
+    backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? null,
+    // Aggregated + staff-excluded server-side (GET /admin/feature-adoption);
+    // named/unioned with the full catalog here so every tracked feature shows,
+    // including zero-open ones.
+    featureAdoption: rollUpAdoption(adoption),
+    price,
+    generatedAt: new Date().toISOString(),
+    counts: {
+      users: users.length,
+      payments: payments.length,
+      plans: plans.length,
+      excludedStaff: 0, // backend already filters staff from /admin/users
+    },
+  };
+}
+
+export const ADMIN_DATA_KEY = "admin:data";

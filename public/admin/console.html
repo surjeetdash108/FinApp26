@@ -1,0 +1,1505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MarketCatalyst — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#090d16; --bg2:#0c111d; --surface:#111a2b; --surface2:#0f1626; --border:#1e2840; --border2:#2b3858;
+  --text:#e8eef8; --hi:#f4f7fc; --dim:#8b97af; --dim2:#5d6a82;
+  --brand:#7c6cf5; --brand2:#9d8dff; --up:#2fe6a6; --down:#ff5d7a; --warn:#ffb547; --info:#38d6e6;
+  --f-disp:'Space Grotesk',system-ui,sans-serif; --f-body:'Inter',system-ui,sans-serif; --f-mono:'JetBrains Mono',ui-monospace,monospace;
+  --r:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--f-body);font-size:14px;-webkit-font-smoothing:antialiased;overflow:hidden}
+.app{display:grid;grid-template-columns:236px 1fr;height:100vh}
+
+/* ---------- sidebar ---------- */
+.side{background:linear-gradient(180deg,var(--bg2),var(--bg));border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 14px;gap:4px}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 18px}
+.brand .mk{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),var(--info));display:grid;place-items:center;font-family:var(--f-disp);font-weight:700;color:#fff;font-size:15px;box-shadow:0 4px 14px -4px var(--brand)}
+.brand b{font-family:var(--f-disp);font-weight:700;font-size:16px;color:var(--hi);letter-spacing:-.01em}
+.brand small{display:block;font:600 9px/1 var(--f-mono);letter-spacing:.18em;color:var(--dim2);margin-top:3px}
+.navlbl{font:600 10px/1 var(--f-mono);letter-spacing:.16em;color:var(--dim2);text-transform:uppercase;padding:14px 10px 6px}
+.nav{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:var(--dim);cursor:pointer;font-weight:500;transition:background .12s,color .12s;position:relative}
+.nav svg{width:17px;height:17px;flex:none}
+.nav:hover{background:#ffffff08;color:var(--text)}
+.nav.on{background:linear-gradient(90deg,#7c6cf522,#7c6cf508);color:var(--hi)}
+.nav.on::before{content:"";position:absolute;left:-14px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--brand)}
+.nav .badge{margin-left:auto;font:600 10px var(--f-mono);background:#ff5d7a22;color:var(--down);padding:1px 6px;border-radius:20px}
+.side-foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-top:1px solid var(--border);margin-top:auto}
+.side-foot .av{width:30px;height:30px;border-radius:50%;background:#26304a;display:grid;place-items:center;font:600 12px var(--f-mono);color:var(--brand2);flex:none}
+.side-foot .who{min-width:0}
+.side-foot .who b{font-size:12.5px;color:var(--hi);display:block}
+.side-foot .who span{font-size:11px;color:var(--dim2)}
+
+/* ---------- main ---------- */
+.main{overflow-y:auto;min-width:0}
+.topbar{position:sticky;top:0;z-index:20;background:#090d16e8;backdrop-filter:blur(8px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:14px 26px}
+.topbar h1{font-family:var(--f-disp);font-size:19px;font-weight:600;margin:0;color:var(--hi);letter-spacing:-.01em}
+.topbar h1 span{color:var(--dim2);font-weight:500}
+.search{margin-left:auto;position:relative}
+.search input{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 12px 9px 34px;color:var(--text);width:250px;font-family:var(--f-body);font-size:13px;outline:none}
+.search input:focus{border-color:var(--brand)}
+.search svg{position:absolute;left:11px;top:9px;width:15px;height:15px;color:var(--dim2)}
+.env{font:600 10px var(--f-mono);letter-spacing:.1em;color:var(--warn);border:1px solid #ffb54744;background:#ffb5470f;padding:5px 9px;border-radius:7px}
+.icobtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;color:var(--dim);cursor:pointer}
+.icobtn:hover{color:var(--text);border-color:var(--border2)}
+.wrap{padding:22px 26px 60px}
+.view{display:none}
+.view.on{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ---------- kpi ---------- */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px 16px;position:relative;overflow:hidden}
+.kpi .k{font:600 10px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
+.kpi .v{font-family:var(--f-disp);font-size:26px;font-weight:700;color:var(--hi);margin:7px 0 3px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.kpi .d{font:600 11.5px var(--f-mono);display:flex;align-items:center;gap:5px}
+.kpi .d.up{color:var(--up)} .kpi .d.dn{color:var(--down)}
+.kpi .spark{position:absolute;right:12px;bottom:10px;opacity:.9}
+
+.grid2{display:grid;grid-template-columns:1.7fr 1fr;gap:16px;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px}
+.card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.card-h h3{font-family:var(--f-disp);font-size:14px;font-weight:600;margin:0;color:var(--hi)}
+.card-h .sub{font:500 11px var(--f-mono);color:var(--dim2)}
+.seg{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:2px}
+.seg button{background:none;border:none;color:var(--dim);font:600 11px var(--f-mono);padding:5px 10px;border-radius:6px;cursor:pointer}
+.seg button.on{background:var(--brand);color:#fff}
+
+/* donut legend */
+.legend{display:flex;flex-direction:column;gap:11px;margin-top:6px}
+.legend .row{display:flex;align-items:center;gap:9px;font-size:13px}
+.legend .dot{width:9px;height:9px;border-radius:3px;flex:none}
+.legend .row b{margin-left:auto;font-family:var(--f-mono);color:var(--hi);font-variant-numeric:tabular-nums}
+.legend .row span.p{font-family:var(--f-mono);color:var(--dim);width:44px;text-align:right}
+
+/* ---------- table ---------- */
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:600 12px var(--f-body);padding:7px 13px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--dim);cursor:pointer}
+.chip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.count{margin-left:auto;font:500 12px var(--f-mono);color:var(--dim2)}
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font:600 10px var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dim2);padding:0 14px 11px;border-bottom:1px solid var(--border)}
+thead th.num{text-align:right}
+tbody td{padding:12px 14px;border-bottom:1px solid #16203350;font-size:13.5px}
+tbody tr{cursor:pointer;transition:background .1s}
+tbody tr:hover{background:#ffffff06}
+td.num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.user{display:flex;align-items:center;gap:11px}
+.avatar{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:600 12px var(--f-mono);color:#fff;flex:none}
+.user .nm{font-weight:600;color:var(--hi)}
+.user .em{font-size:11.5px;color:var(--dim2);font-family:var(--f-mono)}
+.pill{display:inline-flex;align-items:center;gap:6px;font:600 11px var(--f-mono);padding:3px 9px;border-radius:20px;letter-spacing:.02em}
+.pill .pdot{width:6px;height:6px;border-radius:50%}
+.plan-Pro{color:var(--brand2);background:#7c6cf51c}
+.plan-Plus{color:var(--info);background:#38d6e618}
+.plan-Free{color:var(--dim);background:#ffffff0d}
+.st-active{color:var(--up);background:#2fe6a616} .st-active .pdot{background:var(--up)}
+.st-trialing{color:var(--info);background:#38d6e614} .st-trialing .pdot{background:var(--info)}
+.st-past_due{color:var(--warn);background:#ffb5471a} .st-past_due .pdot{background:var(--warn)}
+.st-canceled{color:var(--down);background:#ff5d7a16} .st-canceled .pdot{background:var(--down)}
+.muted{color:var(--dim2)}
+
+/* ---------- drawer ---------- */
+.scrim{position:fixed;inset:0;background:#04060cbb;backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:440px;max-width:92vw;background:var(--bg2);border-left:1px solid var(--border2);transform:translateX(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);z-index:50;overflow-y:auto}
+.drawer.on{transform:none}
+.dh{padding:22px 22px 18px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:center;position:sticky;top:0;background:var(--bg2);z-index:2}
+.dh .avatar{width:52px;height:52px;border-radius:13px;font-size:18px}
+.dh .nm{font-family:var(--f-disp);font-size:18px;font-weight:600;color:var(--hi)}
+.dh .em{font-family:var(--f-mono);font-size:12px;color:var(--dim2);margin-top:2px}
+.dh .x{margin-left:auto;width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--dim);cursor:pointer;display:grid;place-items:center;align-self:flex-start}
+.dsec{padding:18px 22px;border-bottom:1px solid var(--border)}
+.dsec h4{font:600 10px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim2);margin:0 0 12px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:9px 12px;font-size:13px}
+.kv .k{color:var(--dim)}
+.kv .v{text-align:right;font-family:var(--f-mono);color:var(--hi);font-variant-numeric:tabular-nums}
+.usebars{display:flex;flex-direction:column;gap:12px}
+.ftgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:8px}
+.ftrow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;
+  border:1px solid var(--border);border-radius:9px;background:var(--panel2,#0e131d)}
+.ftrow.busy{opacity:.5;pointer-events:none}
+.ftrow .fl{font-size:12.5px;color:var(--hi)}
+.ftrow .fd{font-size:11px;color:var(--dim);line-height:1.45;margin-top:3px}
+.ftsoon{font-size:10px;color:var(--dim2);font-family:var(--f-mono);border:1px solid var(--border);border-radius:4px;padding:1px 4px;margin-left:4px}
+.sw{position:relative;width:38px;height:21px;border-radius:99px;background:#28324a;
+  border:1px solid var(--border);cursor:pointer;flex-shrink:0;transition:background .15s}
+.sw.on{background:var(--brand)}
+.sw i{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;
+  background:#fff;transition:transform .15s}
+.sw.on i{transform:translateX(17px)}
+.ftlock{font-size:10px;color:var(--warn);font-family:var(--f-mono)}
+.ub .t{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px}
+.ub .t b{font-family:var(--f-mono);color:var(--hi)}
+.ub .bar{height:6px;border-radius:4px;background:#1a2338;overflow:hidden}
+.ub .bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--brand),var(--brand2))}
+.timeline{display:flex;flex-direction:column;gap:0}
+.tl{display:flex;gap:12px;padding:9px 0;font-size:12.5px}
+.tl .when{font-family:var(--f-mono);color:var(--dim2);width:66px;flex:none;font-size:11px}
+.tl .what{color:var(--text)}
+.tl .amt{margin-left:auto;font-family:var(--f-mono);color:var(--up)}
+.tl .amt.dn{color:var(--down)}
+.dactions{padding:18px 22px;display:flex;gap:10px}
+.btn{flex:1;padding:10px;border-radius:9px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;font-family:var(--f-body)}
+.btn:hover{border-color:var(--brand);color:var(--hi)}
+.btn.danger:hover{border-color:var(--down);color:var(--down)}
+
+/* subscriptions / revenue extras */
+.plancards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.plancard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px}
+.plancard .pt{display:flex;align-items:center;justify-content:space-between}
+.plancard .price{font-family:var(--f-disp);font-size:22px;font-weight:700;color:var(--hi);margin:10px 0 2px;font-variant-numeric:tabular-nums}
+.plancard .price small{font:500 12px var(--f-mono);color:var(--dim2)}
+.plancard .meta{font-size:12px;color:var(--dim);margin-top:8px;display:flex;justify-content:space-between;font-family:var(--f-mono)}
+.bars{display:flex;align-items:flex-end;gap:8px;height:150px;padding-top:8px}
+.bars .b{flex:1;background:linear-gradient(180deg,var(--brand2),var(--brand));border-radius:5px 5px 2px 2px;min-height:4px;position:relative}
+.bars .b:hover::after{content:attr(data-v);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;font:600 10px var(--f-mono);background:var(--bg2);border:1px solid var(--border2);padding:2px 6px;border-radius:5px;white-space:nowrap;color:var(--hi)}
+.barx{display:flex;gap:8px;margin-top:7px}
+.barx span{flex:1;text-align:center;font:500 9px var(--f-mono);color:var(--dim2)}
+/* ---------- social studio ---------- */
+.badge-ig{margin-left:auto;font:700 9px var(--f-mono);letter-spacing:.06em;color:#fff;background:linear-gradient(120deg,#f9ce34,#ee2a7b 45%,#6228d7);padding:2px 6px;border-radius:20px}
+.accts{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.acct{display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 13px;font-size:12.5px}
+.acct .ico{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:#fff;flex:none}
+.acct b{color:var(--hi);font-weight:600}
+.acct .h{color:var(--dim2);font-family:var(--f-mono);font-size:11px}
+.acct .ok{margin-left:6px;width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 0 3px #2fe6a622}
+.acct.off{opacity:.55} .acct.off .ok{background:var(--dim2);box-shadow:none}
+.studio{display:grid;grid-template-columns:1fr 380px;gap:16px;margin-bottom:16px;align-items:start}
+.compose .fl{display:block;font:600 10px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin:15px 0 7px}
+.compose .fl:first-of-type{margin-top:2px}
+.inp{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font-family:var(--f-body);font-size:13.5px;outline:none;resize:vertical}
+.inp:focus{border-color:var(--brand)}
+select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b97af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.cc{float:right;color:var(--dim2);font-family:var(--f-mono);font-weight:400;text-transform:none;letter-spacing:0}
+.plats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.plat{display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;padding:9px 10px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--dim);user-select:none}
+.plat .pi{width:20px;height:20px;flex:none}
+.plat.on{border-color:var(--brand);color:var(--hi);background:#7c6cf514}
+.plat .chk{margin-left:auto;width:15px;height:15px;border-radius:5px;border:1.5px solid var(--border2);display:grid;place-items:center}
+.plat.on .chk{background:var(--brand);border-color:var(--brand)}
+.plat.on .chk svg{display:block} .plat .chk svg{display:none;width:10px;height:10px;color:#fff}
+.sched{display:flex;gap:10px;align-items:center}
+.cta-row{display:flex;gap:10px;margin-top:18px}
+.btn-pub{flex:1;padding:12px;border:none;border-radius:10px;cursor:pointer;font-family:var(--f-body);font-weight:700;font-size:14px;color:#fff;background:linear-gradient(120deg,#f9ce34,#ee2a7b 46%,#6228d7);box-shadow:0 6px 18px -6px #ee2a7b88}
+.btn-pub:hover{filter:brightness(1.08)}
+.btn-pub.sch{background:var(--brand);box-shadow:0 6px 18px -6px var(--brand)}
+.preview-card{position:sticky;top:76px}
+.pv-stage{display:flex;justify-content:center;padding:6px 0 4px}
+/* instagram phone */
+.ig-phone{width:300px;border:1px solid var(--border2);border-radius:22px;overflow:hidden;background:#000;box-shadow:0 20px 50px -20px #000}
+.ig-top{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#0a0a0a}
+.ig-top .ava{width:30px;height:30px;border-radius:50%;padding:2px;background:linear-gradient(120deg,#f9ce34,#ee2a7b,#6228d7)}
+.ig-top .ava div{width:100%;height:100%;border-radius:50%;background:#111;display:grid;place-items:center;font:700 11px var(--f-disp);color:#fff}
+.ig-top .nm{font-size:12.5px;font-weight:600;color:#fff}
+.ig-top .nm span{display:block;font-size:10px;color:#8a8a8a;font-weight:400}
+.ig-top .more{margin-left:auto;color:#fff}
+.ig-media{width:300px;height:375px;background:#0b1020;overflow:hidden;position:relative}
+.ig-media svg{width:100%;height:100%;display:block}
+.ig-arrow{position:absolute;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:50%;border:none;background:#0009;color:#fff;font-size:17px;line-height:1;cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(2px)}
+.ig-arrow.l{left:8px}.ig-arrow.r{right:8px}.ig-arrow:disabled{opacity:.25;cursor:default}
+.ig-count{position:absolute;top:10px;right:10px;background:#000a;color:#fff;font:600 11px var(--f-mono);padding:3px 8px;border-radius:20px}
+.ig-dots{display:flex;justify-content:center;gap:5px;padding:8px 0 2px;background:#0a0a0a}
+.ig-dots i{width:6px;height:6px;border-radius:50%;background:#ffffff35}
+.ig-dots i.on{background:#4a9bff}
+.x-grid{display:grid;gap:3px;border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+.x-grid.g2{grid-template-columns:1fr 1fr}.x-grid.g3{grid-template-columns:1fr 1fr}.x-grid.g4{grid-template-columns:1fr 1fr}
+.x-grid.g3 .xg:first-child{grid-row:span 2}
+.x-grid .xg{overflow:hidden;background:#0b1020;aspect-ratio:1/1}
+.x-grid .xg svg{width:100%;height:100%;object-fit:cover;display:block}
+.x-more{font:500 11px var(--f-mono);color:var(--dim2);margin-top:6px}
+/* preview tabs */
+.pvtabs{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:270px}
+.pvtab{display:inline-flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border);color:var(--dim);font:600 11px var(--f-body);padding:5px 9px;border-radius:7px;cursor:pointer}
+.pvtab .ci{width:14px;height:14px}
+.pvtab.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.pvtab.on .ci{background:#ffffff28!important}
+.car-badge{position:absolute;top:9px;right:9px;display:inline-flex;align-items:center;gap:4px;background:#000a;color:#fff;font:600 10px var(--f-mono);padding:3px 7px;border-radius:20px}
+.car-badge svg{width:11px;height:11px}
+/* LinkedIn */
+.li-card,.fb-card{width:340px;background:#fff;border-radius:12px;overflow:hidden;color:#1c1c1c;box-shadow:0 12px 34px -14px #000}
+.li-head,.fb-head{display:flex;align-items:flex-start;gap:9px;padding:12px 12px 8px}
+.li-head .ava,.fb-head .ava{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#7c6cf5,#38d6e6);color:#fff;display:grid;place-items:center;font:700 15px var(--f-disp);flex:none}
+.li-head .who,.fb-head .who{min-width:0}
+.li-head .nm,.fb-head .nm{font-weight:700;font-size:13.5px;color:#1c1c1c}
+.li-head .sub,.fb-head .sub{font-size:11px;color:#5f6b7a;display:flex;align-items:center;gap:4px}
+.li-head .sub2{font-size:11px;color:#5f6b7a;display:flex;align-items:center;gap:4px}
+.li-head .more,.fb-head .more{margin-left:auto;color:#5f6b7a}
+.li-body,.fb-body{padding:2px 13px 10px;font-size:13px;line-height:1.5;color:#1c1c1c;white-space:pre-wrap;max-height:112px;overflow:hidden}
+.li-body .tags,.fb-body .tags{color:#0a66c2;font-weight:600}
+.li-body b,.fb-body b{color:#0a66c2}
+.li-media,.fb-media{position:relative;width:340px;height:300px;overflow:hidden;background:#0b1020}
+.li-media svg,.fb-media svg{width:100%;height:100%;object-fit:cover}
+.li-social,.fb-social{display:flex;justify-content:space-between;padding:9px 13px;font-size:11.5px;color:#5f6b7a;border-bottom:1px solid #e6e9ee}
+.react{display:flex;align-items:center;gap:4px}
+.rk{width:15px;height:15px;border-radius:50%;display:inline-grid;place-items:center;margin-right:-4px;border:1.5px solid #fff}
+.rk:last-of-type{margin-right:5px}
+.li-actions,.fb-actions{display:flex;padding:4px 6px}
+.lia,.fba{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:none;border:none;color:#5f6b7a;font-weight:600;font-size:12.5px;padding:9px 4px;border-radius:6px;cursor:pointer;font-family:var(--f-body)}
+.lia:hover,.fba:hover{background:#f2f4f7}
+/* Facebook tweaks */
+.fb-head .nm{color:#050505}.fb-body{color:#050505}
+/* Telegram */
+.tg-wrap{width:330px;background:linear-gradient(180deg,#8fb9d6,#a9c6dd);padding:16px 12px;border-radius:12px;display:flex;justify-content:flex-start}
+.tg-msg{max-width:280px;background:#fff;border-radius:12px 12px 12px 4px;overflow:hidden;box-shadow:0 3px 10px #0003}
+.tg-media{width:280px;height:300px;overflow:hidden;background:#0b1020}
+.tg-media svg{width:100%;height:100%;object-fit:cover}
+.tg-album{display:grid;gap:2px;width:280px}
+.tg-album.a2{grid-template-columns:1fr 1fr}.tg-album.a3,.tg-album.a4{grid-template-columns:1fr 1fr}
+.tg-album .ta{aspect-ratio:1/1;overflow:hidden;background:#0b1020}
+.tg-album .ta svg{width:100%;height:100%;object-fit:cover}
+.tg-cap{padding:8px 11px 4px;font-size:12.5px;line-height:1.45;color:#1c1c1c;white-space:pre-wrap;max-height:120px;overflow:auto}
+.tg-cap .tags{color:#168acd}.tg-cap b{color:#168acd}
+.tg-meta{display:flex;justify-content:space-between;padding:2px 11px 9px;font-size:11px;color:#8a96a5}
+.tg-meta .ch{color:#168acd;font-weight:600}
+.tg-meta .rt{display:inline-flex;align-items:center;gap:4px}
+/* slides tray */
+.slides-tray{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+.slide-thumb{position:relative;width:58px;height:72px;border-radius:8px;overflow:hidden;border:2px solid var(--border);cursor:pointer;background:#0b1020;flex:none}
+.slide-thumb.on{border-color:var(--brand);box-shadow:0 0 0 2px #7c6cf540}
+.slide-thumb svg{width:100%;height:100%;display:block}
+.slide-thumb .sn{position:absolute;top:3px;left:3px;font:700 9px var(--f-mono);background:#000a;color:#fff;border-radius:4px;padding:1px 4px;z-index:2}
+.slide-thumb .srm{position:absolute;top:2px;right:2px;width:16px;height:16px;border:none;border-radius:5px;background:#000a;color:#fff;font-size:12px;line-height:1;cursor:pointer;display:none;place-items:center;z-index:2}
+.slide-thumb:hover .srm{display:grid}
+.slide-add{width:58px;height:72px;border-radius:8px;border:1.5px dashed var(--border2);background:var(--surface2);color:var(--dim);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;flex:none;font:600 9px var(--f-body)}
+.slide-add:hover{border-color:var(--brand);color:var(--brand2)}
+.ig-actions{display:flex;align-items:center;gap:14px;padding:10px 12px 4px;color:#fff}
+.ig-actions .sp{margin-left:auto}
+.ig-likes{padding:0 12px;font-size:12px;color:#fff;font-weight:600}
+.ig-cap{padding:5px 12px 12px;font-size:12px;color:#e8e8e8;line-height:1.4;max-height:96px;overflow:auto}
+.ig-cap b{color:#fff}
+.ig-cap .tags{color:#5b8def}
+/* story */
+.story-frame{width:250px;height:445px;border-radius:20px;overflow:hidden;border:1px solid var(--border2);position:relative;background:#000}
+.story-frame svg{width:100%;height:100%}
+.story-bar{position:absolute;top:8px;left:10px;right:10px;height:3px;border-radius:3px;background:#ffffff55}
+.story-bar i{display:block;width:38%;height:100%;border-radius:3px;background:#fff}
+.story-head{position:absolute;top:18px;left:12px;display:flex;align-items:center;gap:8px;color:#fff;font-size:12px;font-weight:600}
+.story-head .ava{width:26px;height:26px;border-radius:50%;background:#7c6cf5;display:grid;place-items:center;font:700 10px var(--f-disp)}
+/* x preview */
+.x-card{width:340px;border:1px solid var(--border2);border-radius:16px;padding:14px;background:#0a0e17}
+.x-head{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+.x-head .ava{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--info));display:grid;place-items:center;font:700 13px var(--f-disp);color:#fff}
+.x-head .nm{font-weight:700;color:var(--hi);font-size:13px;display:flex;align-items:center;gap:4px}
+.x-head .h{color:var(--dim2);font-size:12px}
+.x-body{font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:10px;white-space:pre-wrap}
+.x-body .tags{color:#5b8def}
+.x-media{border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+.x-media svg{width:100%;display:block}
+.qthumb{width:40px;height:50px;border-radius:6px;overflow:hidden;border:1px solid var(--border);flex:none;background:#0b1020;position:relative}
+.qthumb svg{width:100%;height:100%}
+.qthumb.stacked{box-shadow:2px 2px 0 -1px var(--surface),3px 3px 0 -1px var(--border)}
+.qthumb .qcar{position:absolute;bottom:2px;right:2px;font:600 7px var(--f-mono);background:#000b;color:#fff;padding:1px 3px;border-radius:3px}
+/* setup modal */
+.modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-46%) scale(.97);width:520px;max-width:94vw;max-height:88vh;overflow:auto;background:var(--bg2);border:1px solid var(--border2);border-radius:16px;z-index:60;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;box-shadow:0 30px 80px -20px #000}
+.modal.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.modal .mh{display:flex;align-items:center;padding:18px 20px;border-bottom:1px solid var(--border)}
+.modal .mh h3{margin:0;font-family:var(--f-disp);font-size:16px;color:var(--hi)}
+.modal .mh .x{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--dim);cursor:pointer;display:grid;place-items:center}
+.modal .mb{padding:18px 20px}
+.modal .mnote{font-size:12.5px;line-height:1.55;color:var(--dim);background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin:0 0 14px}
+.modal .mnote code{font-family:var(--f-mono);color:var(--brand2);font-size:11.5px}
+.modal .fl{display:block;font:600 10px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin:14px 0 6px}
+.modal .fl:first-of-type{margin-top:0}
+.modal .opt{color:var(--dim2);font-weight:400}
+.mrow2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mstatus{margin-top:16px;font:600 12px var(--f-mono);color:var(--dim2);padding:9px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border)}
+.mstatus.ok{color:var(--up);border-color:#2fe6a633;background:#2fe6a610}
+.mstatus.err{color:var(--down);border-color:#ff5d7a33;background:#ff5d7a10}
+.modal .mf{display:flex;gap:10px;justify-content:flex-end;padding:16px 20px;border-top:1px solid var(--border)}
+.set-btn{margin-left:6px;font:600 12px var(--f-body);color:var(--brand2);background:none;border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer}
+.set-btn:hover{border-color:var(--brand)}
+.chan{display:inline-flex;gap:5px;align-items:center}
+.chan .ci{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;color:#fff}
+@media(max-width:980px){.studio{grid-template-columns:1fr}.preview-card{position:static}}
+@media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.plancards{grid-template-columns:1fr}}
+@media(max-width:720px){.app{grid-template-columns:1fr}.side{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="brand"><div class="mk">M</div><div><b>MarketCatalyst</b><small>ADMIN CONSOLE</small></div></div>
+    <div class="navlbl">Operate</div>
+    <div class="nav on" data-view="overview">
+      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="12" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="3" y="16" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>Overview</div>
+    <div class="nav" data-view="users"><svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 5.5a3 3 0 0 1 0 5.8M17 20a5.4 5.4 0 0 0-2-4.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Users</div>
+    <div class="nav" data-view="subs"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M3 9h18" stroke="currentColor" stroke-width="2"/></svg>Subscriptions<span class="badge" id="dunBadge">0</span></div>
+    <div class="nav" data-view="revenue"><svg viewBox="0 0 24 24" fill="none"><path d="M4 15l4-4 3 3 5-6 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Revenue</div>
+    <div class="nav" data-view="usage"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="0"/><path d="M4 13l3-3 4 4 5-6 4 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Usage &amp; API</div>
+    <div class="nav" data-view="monitor"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Monitor</div>
+    <div class="navlbl">Grow</div>
+    <div class="nav" data-view="studio"><svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.3" fill="currentColor"/></svg>Social Studio<span class="badge-ig">IG</span></div>
+    <div class="side-foot">
+      <div class="av" id="admAv">A</div>
+      <div class="who" style="flex:1"><b id="admName">admin</b><span id="admEmail">Owner · admin</span></div>
+      <button title="Change password" onclick="openPw()" style="background:none;border:none;color:var(--dim);cursor:pointer;padding:4px">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+      <button title="Log out" onclick="admLogout()" style="background:none;border:none;color:var(--dim);cursor:pointer;padding:4px">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M15 12H4m0 0 4-4m-4 4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 4h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <h1 id="pageTitle">Overview <span>· last 30 days</span></h1>
+      <div class="search"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><input id="globalSearch" placeholder="Search users, email…"></div>
+      <div class="env">PRODUCTION</div>
+      <div class="icobtn"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 19a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+    </div>
+
+    <div class="wrap">
+      <!-- OVERVIEW -->
+      <section class="view on" id="overview">
+        <div class="kpis" id="kpiRow"></div>
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><h3>Recurring revenue</h3>
+              <div class="seg"><button class="on">MRR</button><button>ARR</button></div>
+            </div>
+            <div id="mrrChart"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h3>Plan mix</h3><span class="sub" id="planTotal"></span></div>
+            <div style="display:flex;align-items:center;gap:18px">
+              <div id="donut"></div>
+              <div class="legend" id="planLegend" style="flex:1"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>Recent signups</h3><span class="sub">newest first</span></div>
+          <table><thead><tr><th>User</th><th>Plan</th><th>Status</th><th class="num">MRR</th><th class="num">Joined</th></tr></thead><tbody id="recentBody"></tbody></table>
+        </div>
+      </section>
+
+      <!-- USERS -->
+      <section class="view" id="users">
+        <div class="toolbar">
+          <div class="chips" id="planFilters">
+            <button class="chip on" data-f="plan" data-v="all">All plans</button>
+            <button class="chip" data-f="plan" data-v="Pro">Pro</button>
+            <button class="chip" data-f="plan" data-v="Plus">Plus</button>
+            <button class="chip" data-f="plan" data-v="Free">Free</button>
+          </div>
+          <div class="chips" id="statusFilters">
+            <button class="chip on" data-f="status" data-v="all">Any status</button>
+            <button class="chip" data-f="status" data-v="active">Active</button>
+            <button class="chip" data-f="status" data-v="trialing">Trialing</button>
+            <button class="chip" data-f="status" data-v="past_due">Past due</button>
+            <button class="chip" data-f="status" data-v="canceled">Canceled</button>
+          </div>
+          <span class="count" id="userCount"></span>
+        </div>
+        <div class="card" style="padding:6px 4px 4px">
+          <table>
+            <thead><tr><th>User</th><th>Plan</th><th>Status</th><th class="num">MRR</th><th class="num">Watchlists</th><th class="num">Joined</th><th class="num">Last active</th></tr></thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SUBSCRIPTIONS -->
+      <section class="view" id="subs">
+        <!-- Action-first ordering: the two lists that need a human decision
+             (a failing card, a renewal about to hit) come before the plan
+             breakdown, which is reference data and changes slowly. -->
+        <div class="grid2" style="margin-bottom:16px">
+          <div class="card">
+            <div class="card-h"><h3>Needs attention · failed payments</h3><span class="sub">dunning queue</span></div>
+            <table><thead><tr><th>User</th><th>Plan</th><th class="num">Amount</th><th class="num">Retry</th></tr></thead><tbody id="dunningBody"></tbody></table>
+          </div>
+          <div class="card">
+            <div class="card-h"><h3>Renewing soon</h3><span class="sub">next 15 days</span></div>
+            <table><thead><tr><th>User</th><th>Plan</th><th class="num">Renews</th></tr></thead><tbody id="renewBody"></tbody></table>
+          </div>
+        </div>
+        <div class="plancards" id="planCards"></div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-h">
+            <h3>Plan features</h3>
+            <span class="sub" id="planFeatSub">select a plan to enable or disable features</span>
+          </div>
+          <div style="padding:0 16px 8px;display:flex;gap:8px;flex-wrap:wrap" id="planFeatTabs"></div>
+          <div style="padding:0 16px 16px" id="planFeatGrid"></div>
+        </div>
+      </section>
+
+      <!-- REVENUE -->
+      <section class="view" id="revenue">
+        <div class="kpis" id="revKpis" style="grid-template-columns:repeat(4,1fr)"></div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-h"><h3>Net revenue by month</h3><span class="sub">last 12 months · USD</span></div>
+          <div class="bars" id="revBars"></div>
+          <div class="barx" id="revBarsX"></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>Recent transactions</h3><span class="sub">Stripe · live</span></div>
+          <table><thead><tr><th>User</th><th>Type</th><th>Plan</th><th class="num">Amount</th><th class="num">When</th></tr></thead><tbody id="txnBody"></tbody></table>
+        </div>
+      </section>
+
+      <!-- USAGE -->
+      <section class="view" id="usage">
+        <div class="kpis" id="usageKpis" style="grid-template-columns:repeat(4,1fr)"></div>
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><h3>Top users by API calls</h3><span class="sub">last 30 days</span></div>
+            <table><thead><tr><th>User</th><th>Plan</th><th class="num">API calls</th><th class="num">Alerts</th></tr></thead><tbody id="topApiBody"></tbody></table>
+          </div>
+          <div class="card">
+            <div class="card-h"><h3>Feature adoption</h3><span class="sub">% of active users</span></div>
+            <div class="usebars" id="adoption"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="monitor">
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="card-h" style="padding:14px 16px">
+            <h3>Backend services</h3>
+            <span class="sub" id="monitorSrc">market-catalyst-backend</span>
+          </div>
+          <div id="monitorWrap" style="height:calc(100vh - 190px);min-height:460px"></div>
+        </div>
+      </section>
+
+      <!-- SOCIAL STUDIO -->
+      <section class="view" id="studio">
+        <div class="accts" id="accts"></div>
+        <div class="studio">
+          <!-- composer -->
+          <div class="card compose">
+            <div class="card-h"><h3>Compose post</h3><span class="sub">from your data</span></div>
+            <label class="fl" style="margin-top:0">Slides <span class="cc" id="slideInfo"></span></label>
+            <div class="slides-tray" id="slidesTray"></div>
+            <label class="fl">Content type</label>
+            <div class="chips" id="ctypeChips"></div>
+            <label class="fl">Source</label>
+            <select id="srcSel" class="inp"></select>
+            <label class="fl">Headline</label>
+            <input id="hl" class="inp" maxlength="90">
+            <label class="fl">Key insight</label>
+            <textarea id="insight" class="inp" rows="3" maxlength="240"></textarea>
+            <label class="fl">Caption <span class="cc" id="capCount"></span></label>
+            <textarea id="caption" class="inp" rows="4" maxlength="2200"></textarea>
+            <label class="fl">Post to</label>
+            <div class="plats" id="plats"></div>
+            <label class="fl">Publishing</label>
+            <div class="sched">
+              <div class="seg" id="whenSeg"><button class="on" data-w="now">Publish now</button><button data-w="sch">Schedule</button></div>
+              <input type="datetime-local" id="schWhen" class="inp" style="display:none;flex:1">
+            </div>
+            <div class="cta-row">
+              <button class="btn-pub" id="publishBtn">Publish now</button>
+              <button class="btn" style="flex:none;padding:11px 14px" id="exportBtn" title="Download the graphic as PNG">Export PNG</button>
+            </div>
+          </div>
+          <!-- preview -->
+          <div class="card preview-card">
+            <div class="card-h"><h3>Preview</h3>
+              <div class="pvtabs" id="pvTabs"></div>
+            </div>
+            <div class="pv-stage" id="pvStage"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>Scheduled &amp; published</h3><span class="sub" id="queueCount"></span></div>
+          <table><thead><tr><th>Post</th><th>Channels</th><th>Status</th><th class="num">When</th><th class="num">Reach</th></tr></thead><tbody id="queueBody"></tbody></table>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+    </div>
+  </main>
+</div>
+
+<!-- PUBLISH SETUP MODAL -->
+<div class="scrim" id="setScrim" onclick="closeSetup()"></div>
+<div class="modal" id="setModal">
+  <div class="mh"><h3>Publishing setup</h3><button class="x" onclick="closeSetup()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
+  <div class="mb">
+    <p class="mnote">The browser can't safely hold API tokens, so live posting runs through your own <b>publish backend</b>. Point this at the included <code>publish-server.js</code> (or your own). Without an endpoint, posts stay in <b>demo mode</b> (queue only).</p>
+    <label class="fl">Publish backend endpoint</label>
+    <input id="cfgEndpoint" class="inp" placeholder="https://your-server.com/publish">
+    <label class="fl">Instagram Business account ID</label>
+    <input id="cfgIgUser" class="inp" placeholder="17841400000000000">
+    <div class="mrow">
+      <div><label class="fl">Meta access token <span class="opt">(server-side preferred)</span></label><input id="cfgIgToken" class="inp" placeholder="EAAG… (leave on server for security)"></div>
+    </div>
+    <div class="mrow2">
+      <div><label class="fl">X bearer <span class="opt">opt</span></label><input id="cfgXToken" class="inp" placeholder="optional"></div>
+      <div><label class="fl">LinkedIn token <span class="opt">opt</span></label><input id="cfgLiToken" class="inp" placeholder="optional"></div>
+    </div>
+    <div class="mstatus" id="cfgStatus">Not connected · demo mode</div>
+  </div>
+  <div class="mf"><button class="btn" style="flex:none" onclick="testEndpoint()">Test connection</button><button class="btn-pub" style="flex:none;padding:11px 20px" onclick="saveSetup()">Save</button></div>
+</div>
+
+<!-- DRAWER -->
+<div class="scrim" id="scrim" onclick="closeUser()"></div>
+<div class="drawer" id="drawer"></div>
+
+<script>
+/* ---------------- mock data ---------------- */
+const AV=['#7c6cf5','#38d6e6','#2fe6a6','#ffb547','#ff5d7a','#9d8dff','#5bd0ff','#ff8a5b'];
+const PRICE={Free:0,Plus:12,Pro:29};
+/* "Renewing soon" horizon: a subscription appears once its expiry date is
+   within this many days. 15 rather than 7 so a renewal is visible a full
+   fortnight ahead, leaving time to act on a failing card. */
+const RENEWAL_WINDOW_DAYS=15;
+const FIRST=['Arvind','Maya','Leo','Sofia','Daniel','Priya','Jonas','Emma','Ravi','Chloe','Marcus','Aisha','Noah','Lena','Omar','Grace','Ivan','Yuki','Diego','Hannah','Kofi','Sara','Ben','Nina','Tariq','Elena','Sam','Zoe','Hugo','Mira'];
+const LAST=['Kumar','Chen','Rossi','Silva','Weber','Patel','Berg','Novak','Menon','Dubois','Reed','Khan','Park','Adler','Haddad','Okafor','Petrov','Tanaka','Marin','Cole','Mensah','Ali','Frost','Volkov','Aziz','Marek','Lund','Wei','Costa','Shah'];
+const COUNTRY=['US','US','US','UK','IN','DE','CA','US','SG','AU','NL','US','BR','US','AE','US','FR','JP','ES','US'];
+function seeded(i){let x=Math.sin(i*97.13)*10000;return x-Math.floor(x);}
+function daysAgo(n){const d=new Date(Date.now()-n*864e5);return d;}
+function fmtDate(d){return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});}
+function rel(d){const days=Math.round((Date.now()-d)/864e5);if(days<=0)return 'today';if(days===1)return 'yesterday';if(days<30)return days+'d ago';return Math.round(days/30)+'mo ago';}
+
+/* ---------- Real data hand-off ----------
+   The React parent (app/admin/page.tsx) reads Firestore, shapes the rows to
+   match DEMO_USERS below, and stages them in sessionStorage BEFORE this iframe
+   loads. Same origin, so sessionStorage is shared.
+
+   Why staging rather than postMessage: every render below runs once at module
+   scope, so data arriving after load would be ignored. Reading it here, before
+   the first render, keeps the whole file's rendering code untouched.
+
+   The seeded generator is kept as a fallback so this page still opens standalone
+   (design review, no Firebase) — but when it is used, IS_DEMO drives a banner so
+   fabricated numbers are never mistaken for real ones. */
+let IS_DEMO = true;
+let REAL = null;
+try {
+  const raw = sessionStorage.getItem('admin:data');
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.users)) {
+      REAL = parsed;
+      IS_DEMO = false;
+    }
+  }
+} catch (e) { /* malformed or blocked storage → demo */ }
+
+if (REAL && REAL.price) { for (const k in REAL.price) PRICE[k] = REAL.price[k]; }
+
+const DEMO_USERS=[];
+for(let i=0;i<30;i++){
+  const r=seeded(i+1), r2=seeded(i+50), r3=seeded(i+120);
+  let plan = r<0.42?'Free':(r<0.74?'Plus':'Pro');
+  let status;
+  if(plan==='Free'){status = r2<0.86?'active':'canceled';}
+  else{status = r2<0.62?'active':(r2<0.8?'trialing':(r2<0.92?'past_due':'canceled'));}
+  const fn=FIRST[i%FIRST.length], ln=LAST[(i*3)%LAST.length];
+  const joined=daysAgo(Math.round(4+ r*520));
+  const lastActiveDays = status==='canceled'?Math.round(20+r3*60):Math.round(r3*9);
+  const mrr = (status==='active'||status==='trialing'||status==='past_due')?PRICE[plan]:0;
+  DEMO_USERS.push({
+    id:'usr_'+(1000+i).toString(36),
+    name:fn+' '+ln,
+    email:(fn[0]+ln).toLowerCase()+'@'+['gmail.com','proton.me','outlook.com','hey.com','icloud.com'][i%5],
+    plan, status, mrr,
+    color:AV[i%AV.length], initials:(fn[0]+ln[0]).toUpperCase(),
+    country:COUNTRY[i%COUNTRY.length],
+    joined, lastActive:daysAgo(lastActiveDays),
+    watchlists:Math.round(1+r*9), holdings:Math.round(r2*22),
+    apiCalls:Math.round((plan==='Pro'?4000:plan==='Plus'?1200:120)*(0.4+r3)),
+    alerts:Math.round(r*(plan==='Pro'?40:12)),
+    renewsIn: (status==='active')?Math.round(1+r3*30):null,
+    ltv: Math.round(PRICE[plan]* (3+r*20))
+  });
+}
+/* Real rows arrive as JSON, so `joined` / `lastActive` are ISO strings; the
+   render code sorts and date-formats them, which needs real Date objects. */
+const USERS = IS_DEMO ? DEMO_USERS : REAL.users.map(u => ({
+  ...u,
+  joined: new Date(u.joined),
+  lastActive: new Date(u.lastActive),
+}));
+
+const money=n=>'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money2=n=>'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+/* ---------- KPIs ---------- */
+const paying=USERS.filter(u=>u.mrr>0);
+const mrr=paying.reduce((a,u)=>a+u.mrr,0);
+const activeSubs=USERS.filter(u=>u.plan!=='Free'&&(u.status==='active'||u.status==='trialing')).length;
+const trials=USERS.filter(u=>u.status==='trialing').length;
+const canceled30=USERS.filter(u=>u.status==='canceled').length;
+const churn=USERS.length?(canceled30/USERS.length*100):0;
+const arpu=mrr/Math.max(1,paying.length);
+
+function spark(seed,up){const pts=[];let v=50;for(let i=0;i<16;i++){v+=(seeded(seed+i)-0.42)*16;v=Math.max(8,Math.min(92,v));pts.push(v);} const w=70,h=26;const step=w/(pts.length-1);const d=pts.map((p,i)=>(i?'L':'M')+(i*step).toFixed(1)+' '+(h-(p/100*h)).toFixed(1)).join(' ');const c=up?'#2fe6a6':'#ff5d7a';return `<svg width="${w}" height="${h}"><path d="${d}" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/></svg>`;}
+
+
+/* Trend chrome. The deltas and sparklines below were invented — hardcoded
+   percentages and a seeded PRNG. Harmless when every number on the page was
+   obviously fake; actively misleading now that the VALUES are real, because
+   "+11.2%" reads as genuine month-over-month growth.
+
+   There is no history to compute a real trend from yet (payments and
+   revenue_summary are empty), so on real data these render as an explicit
+   "no history" dash instead. They return when a rollup exists to compare to. */
+function deltaHtml(d, up){
+  if (!IS_DEMO) return '<div class="d" style="color:var(--dim2)">— no trend history</div>';
+  return '<div class="d ' + (up?'up':'dn') + '">' + (up?'▲':'▼') + ' ' + d + '</div>';
+}
+function sparkHtml(seed, up){
+  return IS_DEMO ? '<div class="spark">' + spark(seed, up) + '</div>' : '';
+}
+
+const KPIS=[
+  {k:'Total users',v:USERS.length.toLocaleString(),d:'+8.4%',up:true,s:1},
+  {k:'Active subs',v:activeSubs,d:'+5.1%',up:true,s:5},
+  {k:'MRR',v:money(mrr),d:'+11.2%',up:true,s:9},
+  {k:'Churn (30d)',v:churn.toFixed(1)+'%',d:'-0.6%',up:true,s:13},
+  {k:'ARPU',v:money2(arpu),d:'+2.3%',up:true,s:17},
+];
+document.getElementById('kpiRow').innerHTML=KPIS.map(x=>`
+  <div class="kpi"><div class="k">${x.k}</div><div class="v">${x.v}</div>
+  ${deltaHtml(x.d, x.up)}
+  ${sparkHtml(x.s, x.up)}</div>`).join('');
+
+/* ---------- MRR area chart ---------- */
+(function(){
+  /* On real data this chart cannot be drawn: it back-casts 12 months of MRR
+     from a seeded PRNG and pins the last point to the true figure, so it looks
+     like a year of measured growth that was never measured. Nothing in
+     Firestore records historical MRR yet (revenue_summary is the intended
+     home). Show the current value and say so, rather than draw a fiction. */
+  if (!IS_DEMO) {
+    document.getElementById('mrrChart').innerHTML =
+      '<div style="height:180px;display:flex;flex-direction:column;align-items:center;'
+      + 'justify-content:center;gap:6px;color:var(--dim2);text-align:center">'
+      + '<div style="font:700 22px/1 JetBrains Mono,monospace;color:#f4f7fc">' + money(mrr) + '</div>'
+      + '<div style="font-size:12px">current MRR</div>'
+      + '<div style="font-size:11px;max-width:280px">No historical series yet — a monthly '
+      + 'revenue_summary rollup is needed before a trend can be charted.</div></div>';
+    return;
+  }
+  const months=['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
+  let base=mrr*0.55; const data=months.map((m,i)=>{base=base*(1+0.03+seeded(i+3)*0.05);return Math.round(base);});
+  data[data.length-1]=mrr;
+  const W=560,H=180,pad=6, max=Math.max(...data)*1.12, min=Math.min(...data)*0.8;
+  const x=i=>pad+i*((W-2*pad)/(data.length-1));
+  const y=v=>H-18-((v-min)/(max-min))*(H-34);
+  const line=data.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)).join(' ');
+  const area=line+` L ${x(data.length-1).toFixed(1)} ${H-18} L ${x(0).toFixed(1)} ${H-18} Z`;
+  const grid=[0,.5,1].map(g=>{const yy=18+g*(H-52);return `<line x1="${pad}" y1="${yy}" x2="${W-pad}" y2="${yy}" stroke="#1e2840" stroke-width="1"/>`;}).join('');
+  const dots=data.map((v,i)=>i===data.length-1?`<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="#9d8dff" stroke="#0c111d" stroke-width="2"/>`:'').join('');
+  const labels=months.map((m,i)=>i%2===0?`<text x="${x(i)}" y="${H-3}" fill="#5d6a82" font-size="9" font-family="JetBrains Mono" text-anchor="middle">${m}</text>`:'').join('');
+  document.getElementById('mrrChart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">
+    <defs><linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c6cf5" stop-opacity=".38"/><stop offset="1" stop-color="#7c6cf5" stop-opacity="0"/></linearGradient></defs>
+    ${grid}<path d="${area}" fill="url(#mg)"/><path d="${line}" fill="none" stroke="#9d8dff" stroke-width="2.4" stroke-linejoin="round"/>${dots}${labels}
+    <text x="${x(data.length-1)}" y="${y(data[data.length-1])-12}" fill="#f4f7fc" font-size="12" font-weight="700" font-family="JetBrains Mono" text-anchor="end">${money(mrr)}</text></svg>`;
+})();
+
+/* ---------- donut ---------- */
+(function(){
+  const counts={Pro:0,Plus:0,Free:0};USERS.forEach(u=>counts[u.plan]++);
+  const total=USERS.length;
+  const color={Pro:'#9d8dff',Plus:'#38d6e6',Free:'#39445e'};
+  const R=52,C=2*Math.PI*R;let off=0;const segs=['Pro','Plus','Free'].map(p=>{const frac=counts[p]/total;const seg=`<circle cx="70" cy="70" r="${R}" fill="none" stroke="${color[p]}" stroke-width="16" stroke-dasharray="${(frac*C).toFixed(1)} ${C}" stroke-dashoffset="${(-off*C).toFixed(1)}" transform="rotate(-90 70 70)" stroke-linecap="butt"/>`;off+=frac;return seg;}).join('');
+  document.getElementById('donut').innerHTML=`<svg width="140" height="140" viewBox="0 0 140 140">${segs}
+    <text x="70" y="66" text-anchor="middle" fill="#f4f7fc" font-family="Space Grotesk" font-size="24" font-weight="700">${total}</text>
+    <text x="70" y="84" text-anchor="middle" fill="#5d6a82" font-family="JetBrains Mono" font-size="9" letter-spacing="1">USERS</text></svg>`;
+  document.getElementById('planLegend').innerHTML=['Pro','Plus','Free'].map(p=>`<div class="row"><span class="dot" style="background:${color[p]}"></span>${p}<b>${counts[p]}</b><span class="p">${(counts[p]/total*100).toFixed(0)}%</span></div>`).join('');
+  document.getElementById('planTotal').textContent=paying.length+' paying';
+})();
+
+/* ---------- recent signups ---------- */
+function rowPlan(p){return `<span class="pill plan-${p}">${p}</span>`;}
+function rowStatus(s){return `<span class="pill st-${s}"><span class="pdot"></span>${s.replace('_',' ')}</span>`;}
+function avatarEl(u,cls=''){return `<div class="avatar ${cls}" style="background:${u.color}">${u.initials}</div>`;}
+(function(){
+  const recent=[...USERS].sort((a,b)=>b.joined-a.joined).slice(0,6);
+  document.getElementById('recentBody').innerHTML=recent.map(u=>`<tr onclick="openUser('${u.id}')">
+    <td><div class="user">${avatarEl(u)}<div><div class="nm">${u.name}</div><div class="em">${u.email}</div></div></div></td>
+    <td>${rowPlan(u.plan)}</td><td>${rowStatus(u.status)}</td>
+    <td class="num">${u.mrr?money(u.mrr):'<span class="muted">—</span>'}</td>
+    <td class="num muted">${fmtDate(u.joined)}</td></tr>`).join('');
+})();
+
+/* ---------- users table + filters + search ---------- */
+let filt={plan:'all',status:'all',q:''};
+function renderUsers(){
+  let rows=USERS.filter(u=>
+    (filt.plan==='all'||u.plan===filt.plan)&&
+    (filt.status==='all'||u.status===filt.status)&&
+    (filt.q===''||(u.name+u.email).toLowerCase().includes(filt.q)));
+  document.getElementById('userCount').textContent=rows.length+' of '+USERS.length+' users';
+  document.getElementById('usersBody').innerHTML=rows.map(u=>`<tr onclick="openUser('${u.id}')">
+    <td><div class="user">${avatarEl(u)}<div><div class="nm">${u.name}</div><div class="em">${u.email} · ${u.country}</div></div></div></td>
+    <td>${rowPlan(u.plan)}</td><td>${rowStatus(u.status)}</td>
+    <td class="num">${u.mrr?money(u.mrr):'<span class="muted">—</span>'}</td>
+    <td class="num">${u.watchlists}</td>
+    <td class="num muted">${fmtDate(u.joined)}</td>
+    <td class="num muted">${rel(u.lastActive)}</td></tr>`).join('')||`<tr><td colspan="7" style="padding:26px;text-align:center;color:var(--dim2)">No users match these filters.</td></tr>`;
+}
+document.querySelectorAll('#planFilters .chip,#statusFilters .chip').forEach(c=>c.onclick=()=>{
+  const grp=c.dataset.f; document.querySelectorAll(`[data-f="${grp}"]`).forEach(x=>x.classList.remove('on'));
+  c.classList.add('on'); filt[grp]=c.dataset.v; renderUsers();
+});
+document.getElementById('globalSearch').addEventListener('input',e=>{
+  filt.q=e.target.value.toLowerCase().trim(); renderUsers();
+  if(filt.q && document.querySelector('.view.on').id!=='users') switchView('users');
+});
+renderUsers();
+
+/* ---------- subscriptions ---------- */
+(function(){
+  const counts={Free:0,Plus:0,Pro:0};USERS.forEach(u=>counts[u.plan]++);
+  const activeBy=p=>USERS.filter(u=>u.plan===p&&(u.status==='active'||u.status==='trialing')).length;
+  document.getElementById('planCards').innerHTML=['Free','Plus','Pro'].map(p=>`
+    <div class="plancard"><div class="pt">${rowPlan(p)}<span class="sub" style="font:500 11px var(--f-mono);color:var(--dim2)">${counts[p]} users</span></div>
+    <div class="price">${PRICE[p]?'$'+PRICE[p]:'Free'}${PRICE[p]?'<small>/mo</small>':''}</div>
+    <div class="meta"><span>${activeBy(p)} active</span><span>${money(activeBy(p)*PRICE[p])}/mo</span></div></div>`).join('');
+
+  /* ---------- Per-plan entitlement editor ----------
+     Toggling writes to plans/{id}.featureFlags. This iframe has no Firebase
+     SDK, so the write is delegated to the React parent over postMessage; the
+     parent holds the admin session and Firestore rules authorise it there.
+
+     The switch is updated OPTIMISTICALLY and reverted if the parent reports a
+     failure — a toggle that visibly does nothing until a round-trip completes
+     feels broken, and these writes are near-instant in practice. */
+  const PLANS = (!IS_DEMO && REAL.plans) ? REAL.plans : [];
+  const CATALOG = (!IS_DEMO && REAL.entitlementCatalog) ? REAL.entitlementCatalog : [];
+  /* Staff capabilities are not purchasable: granting adminDashboard to a paying
+     tier would be privilege escalation, not an upsell. Shown, but locked. */
+  const plan_on = (pl, key) => pl.featureFlags[key] === true;
+  let activePlan = PLANS.length ? PLANS[0].id : null;
+  const pendingFlag = {};
+
+  function renderPlanFeatures(){
+    const tabs = document.getElementById('planFeatTabs');
+    const grid = document.getElementById('planFeatGrid');
+    if (!tabs || !grid) return;
+
+    if (!PLANS.length) {
+      tabs.innerHTML = '';
+      grid.innerHTML = '<div style="color:var(--dim2);font-size:12px;padding:6px 0">'
+        + (IS_DEMO ? 'Connect to Firestore to edit plan features.' : 'No plans found.')
+        + '</div>';
+      return;
+    }
+
+    tabs.innerHTML = PLANS.map(pl => {
+      const granted = CATALOG.filter(c => plan_on(pl, c.key)).length;
+      return `<button class="chip${pl.id===activePlan?' on':''}"
+         onclick="selectPlanFeat('${pl.id}')">${pl.name}
+         <span style="opacity:.7;font-family:var(--f-mono);font-size:11px">${granted}</span>
+       </button>`;
+    }).join('');
+
+    const plan = PLANS.find(x => x.id === activePlan);
+    const on = CATALOG.filter(c => plan.featureFlags[c.key]).length;
+    document.getElementById('planFeatSub').textContent =
+      plan.name + ' · ' + on + ' of ' + CATALOG.length + ' features enabled';
+
+    /* Grouped, and every row carries a plain-English line saying what the user
+       gets when it is ON. The key alone (`chartsIntraday`) told an engineer
+       what it was and told nobody else. */
+    const groups = [];
+    CATALOG.forEach(c => {
+      let g = groups.find(x => x.name === (c.group || 'Other'));
+      if (!g) { g = { name: c.group || 'Other', items: [] }; groups.push(g); }
+      g.items.push(c);
+    });
+
+    grid.innerHTML = groups.map(g =>
+      '<div style="margin-bottom:14px">'
+      + '<div style="font:600 10px var(--f-mono);letter-spacing:.09em;text-transform:uppercase;'
+      + 'color:var(--dim2);margin-bottom:7px">' + g.name + '</div>'
+      + '<div class="ftgrid">' + g.items.map(c => {
+          const enabled = plan.featureFlags[c.key] === true;
+          const locked = c.staffOnly;
+          const unbuilt = c.unbuilt;
+          const busy = pendingFlag[plan.id + '.' + c.key];
+          const tags = (locked ? '<span class="ftlock">staff only</span>' : '')
+                     + (unbuilt ? '<span class="ftsoon">not built yet</span>' : '');
+          return '<div class="ftrow' + (busy ? ' busy' : '') + '" id="ft_' + c.key + '">'
+            + '<div style="min-width:0"><div class="fl">' + c.label + ' ' + tags + '</div>'
+            + '<div class="fd">' + c.description + '</div></div>'
+            + (locked
+                ? '<div class="sw" style="opacity:.3;cursor:not-allowed" title="Staff capability — never sold with a plan"><i></i></div>'
+                : '<div class="sw' + (enabled ? ' on' : '') + '" onclick="togglePlanFeat(\'' + c.key + '\')"><i></i></div>')
+            + '</div>';
+        }).join('') + '</div></div>').join('');
+  }
+
+  window.selectPlanFeat = function(id){ activePlan = id; renderPlanFeatures(); };
+
+  window.togglePlanFeat = function(key){
+    const plan = PLANS.find(x => x.id === activePlan);
+    const def = CATALOG.find(c => c.key === key);
+    if (!plan || !def || def.staffOnly) return;
+    const next = !(plan.featureFlags[key] === true);
+    plan.featureFlags[key] = next;              // optimistic
+    pendingFlag[plan.id + '.' + key] = true;
+    renderPlanFeatures();
+    parent.postMessage({ type:'admin:setPlanFlag', planId: plan.id, key: key, value: next }, '*');
+  };
+
+  window.addEventListener('message', function(e){
+    const d = e.data || {};
+    if (d.type !== 'admin:setPlanFlagResult') return;
+    const plan = PLANS.find(x => x.id === d.planId);
+    if (!plan) return;
+    delete pendingFlag[d.planId + '.' + d.key];
+    if (!d.ok) {
+      plan.featureFlags[d.key] = !d.value;      // revert on failure
+      alert('Could not update ' + d.key + ': ' + (d.error || 'unknown error'));
+    }
+    renderPlanFeatures();
+  });
+
+  renderPlanFeatures();
+
+  const dun=USERS.filter(u=>u.status==='past_due');
+  document.getElementById('dunBadge').textContent=dun.length;
+  document.getElementById('dunningBody').innerHTML=dun.map(u=>`<tr onclick="openUser('${u.id}')">
+    <td><div class="user">${avatarEl(u)}<div><div class="nm">${u.name}</div><div class="em">${u.email}</div></div></div></td>
+    <td>${rowPlan(u.plan)}</td><td class="num" style="color:var(--warn)">${money(PRICE[u.plan])}</td>
+    <td class="num muted">in ${1+Math.round(seeded(u.apiCalls)*3)}d</td></tr>`).join('')||emptyRow(4,'No failed payments. ');
+
+  const ren=USERS.filter(u=>(u.status==='active'||u.status==='trialing')&&u.renewsIn!=null&&u.renewsIn<=RENEWAL_WINDOW_DAYS).sort((a,b)=>a.renewsIn-b.renewsIn);
+  document.getElementById('renewBody').innerHTML=ren.map(u=>`<tr onclick="openUser('${u.id}')">
+    <td><div class="user">${avatarEl(u)}<div><div class="nm">${u.name}</div><div class="em">${u.email}</div></div></div></td>
+    <td>${rowPlan(u.plan)}</td><td class="num muted">${u.renewsIn===0?'today':'in '+u.renewsIn+'d'}</td></tr>`).join('')||emptyRow(3,'Nothing renewing in the next '+RENEWAL_WINDOW_DAYS+' days.');
+})();
+function emptyRow(c,t){return `<tr><td colspan="${c}" style="padding:22px;text-align:center;color:var(--dim2)">${t}</td></tr>`;}
+
+/* ---------- revenue ---------- */
+(function(){
+  const arr=mrr*12;
+  const rk=[
+    {k:'MRR',v:money(mrr),d:'+11.2%',up:true,s:2},
+    {k:'ARR',v:money(arr),d:'+11.2%',up:true,s:6},
+    {k:'Avg LTV',v:money(USERS.length?Math.round(USERS.reduce((a,u)=>a+u.ltv,0)/USERS.length):0),d:'+4.0%',up:true,s:10},
+    {k:'Failed (30d)',v:money(USERS.filter(u=>u.status==='past_due').reduce((a,u)=>a+PRICE[u.plan],0)),d:'2 accounts',up:false,s:14},
+  ];
+  document.getElementById('revKpis').innerHTML=rk.map(x=>`<div class="kpi"><div class="k">${x.k}</div><div class="v">${x.v}</div>${deltaHtml(x.d, x.up)}${sparkHtml(x.s, x.up)}</div>`).join('');
+  const months=['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
+  let base=mrr*0.55;const data=months.map((m,i)=>{base=base*(1+0.03+seeded(i+3)*0.05);return Math.round(base);});data[11]=mrr;
+  const mx=Math.max(...data);
+  document.getElementById('revBars').innerHTML=data.map(v=>`<div class="b" data-v="${money(v)}" style="height:${(v/mx*100).toFixed(0)}%"></div>`).join('');
+  document.getElementById('revBarsX').innerHTML=months.map(m=>`<span>${m}</span>`).join('');
+  const types=['payment','payment','payment','upgrade','payment','refund','payment','trial→paid','payment'];
+  const tx=[...USERS].filter(u=>u.mrr>0).sort((a,b)=>a.lastActive-b.lastActive).slice(0,9).map((u,i)=>({u,type:types[i%types.length]}));
+  document.getElementById('txnBody').innerHTML=tx.map(({u,type},i)=>{const refund=type==='refund';return `<tr onclick="openUser('${u.id}')">
+    <td><div class="user">${avatarEl(u)}<div><div class="nm">${u.name}</div><div class="em">${u.email}</div></div></div></td>
+    <td><span class="muted" style="font-family:var(--f-mono);font-size:12px">${type}</span></td>
+    <td>${rowPlan(u.plan)}</td>
+    <td class="num" style="color:${refund?'var(--down)':'var(--up)'}">${refund?'-':'+'}${money2(PRICE[u.plan])}</td>
+    <td class="num muted">${rel(u.lastActive)}</td></tr>`;}).join('');
+})();
+
+/* ---------- usage ---------- */
+(function(){
+  const totalCalls=USERS.reduce((a,u)=>a+u.apiCalls,0);
+  const uk=[
+    {k:'API calls (30d)',v:(totalCalls/1000).toFixed(1)+'K',d:'+18%',up:true,s:3},
+    {k:'Watchlists',v:USERS.reduce((a,u)=>a+u.watchlists,0),d:'+6%',up:true,s:7},
+    {k:'Price alerts',v:USERS.reduce((a,u)=>a+u.alerts,0),d:'+9%',up:true,s:11},
+    {k:'Avg session',v:'7m 42s',d:'+31s',up:true,s:15},
+  ];
+  document.getElementById('usageKpis').innerHTML=uk.map(x=>`<div class="kpi"><div class="k">${x.k}</div><div class="v">${x.v}</div>${deltaHtml(x.d, true)}${sparkHtml(x.s, true)}</div>`).join('');
+  const top=[...USERS].sort((a,b)=>b.apiCalls-a.apiCalls).slice(0,8);
+  document.getElementById('topApiBody').innerHTML=top.map(u=>`<tr onclick="openUser('${u.id}')">
+    <td><div class="user">${avatarEl(u)}<div><div class="nm">${u.name}</div><div class="em">${u.email}</div></div></div></td>
+    <td>${rowPlan(u.plan)}</td><td class="num">${u.apiCalls.toLocaleString()}</td><td class="num muted">${u.alerts}</td></tr>`).join('');
+  /* Feature adoption. The seven hardcoded percentages this replaced were
+     invented, and named features the product does not have. Real rows come
+     from the feature_adoption collection, keyed per (feature, user). */
+  if (IS_DEMO) {
+    const feats=[['Watchlists',88],['Stock detail charts',76],['Themes',54],['Screener',47],['Ask Copilot (AI)',39],['Price alerts',33],['Options view',18]];
+    document.getElementById('adoption').innerHTML=feats.map(([n,p])=>`<div class="ub"><div class="t">${n}<b>${p}%</b></div><div class="bar"><i style="width:${p}%"></i></div></div>`).join('');
+  } else {
+    const rows = REAL.featureAdoption || [];
+    const denom = Math.max(1, USERS.length);
+    const used = rows.filter(r => r.opens > 0);
+    const never = rows.filter(r => r.neverOpened);
+
+    /* Grouped, because the catalog is now 40+ entries spanning screens and
+       in-screen actions — one flat bar list would be unreadable and would bury
+       the comparison that matters (how a feature does against its siblings). */
+    const byGroup = new Map();
+    used.forEach(r => {
+      if (!byGroup.has(r.group)) byGroup.set(r.group, []);
+      byGroup.get(r.group).push(r);
+    });
+
+    const bar = r => {
+      /* Reach — share of users who opened it at least once. Raw opens are shown
+         alongside but do not drive the bar: one user refreshing fifty times is
+         not adoption. */
+      const pct = Math.round((r.users / denom) * 100);
+      return '<div class="ub"><div class="t">' + r.label
+        + '<b>' + pct + '% · ' + r.opens + ' opens</b></div>'
+        + '<div class="bar"><i style="width:' + Math.min(100, pct) + '%"></i></div></div>';
+    };
+
+    const sections = [...byGroup.entries()]
+      .sort((a, b) => {
+        const top = g => Math.max(...g[1].map(r => r.users));
+        return top(b) - top(a);
+      })
+      .map(([group, items]) =>
+        '<div style="margin-bottom:16px">'
+        + '<div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;'
+        + 'color:var(--dim2);margin-bottom:8px">' + group + '</div>'
+        + '<div style="display:flex;flex-direction:column;gap:10px">'
+        + items.map(bar).join('') + '</div></div>')
+      .join('');
+
+    /* Unused features are the actionable half of this panel: they are what you
+       cut, fix, or promote. Listing them explicitly beats omitting them. */
+    const neverHtml = never.length
+      ? '<div style="margin-top:6px;padding-top:12px;border-top:1px solid var(--border)">'
+        + '<div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;'
+        + 'color:var(--dim2);margin-bottom:6px">Never opened (' + never.length + ' of '
+        + rows.length + ')</div>'
+        + '<div style="font-size:12px;color:var(--dim);line-height:1.8">'
+        + never.map(r => r.label).join(' · ') + '</div></div>'
+      : '';
+
+    document.getElementById('adoption').innerHTML =
+      (sections || '<div style="color:var(--dim2);font-size:12px;padding:8px 0">No feature opens recorded yet.</div>')
+      + neverHtml;
+  }
+})();
+
+/* ---------- drawer ---------- */
+function openUser(id){
+  const u=USERS.find(x=>x.id===id);if(!u)return;
+  const timeline=[
+    {when:fmtDate(u.joined),what:'Account created',amt:''},
+    {when:fmtDate(daysAgo(Math.round((Date.now()-u.joined)/864e5*0.7))),what:u.plan==='Free'?'Signed up (Free)':'Started '+u.plan+' trial',amt:''},
+    u.plan!=='Free'?{when:fmtDate(daysAgo(Math.round((Date.now()-u.joined)/864e5*0.5))),what:'Upgraded to '+u.plan,amt:'+'+money2(PRICE[u.plan])}:null,
+    u.status==='past_due'?{when:'today',what:'Payment failed — retrying',amt:'-'+money2(PRICE[u.plan]),dn:true}:
+      (u.mrr?{when:rel(u.lastActive),what:'Subscription renewed',amt:'+'+money2(PRICE[u.plan])}:null),
+    u.status==='canceled'?{when:rel(u.lastActive),what:'Subscription canceled',amt:'',dn:true}:null,
+  ].filter(Boolean);
+  const d=document.getElementById('drawer');
+  d.innerHTML=`
+    <div class="dh">${avatarEl(u)}<div><div class="nm">${u.name}</div><div class="em">${u.email}</div></div>
+      <button class="x" onclick="closeUser()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
+    <div class="dsec"><div style="display:flex;gap:8px;flex-wrap:wrap">${rowPlan(u.plan)} ${rowStatus(u.status)} <span class="pill" style="background:#ffffff0d;color:var(--dim)">${u.country}</span> <span class="pill" style="background:#ffffff0d;color:var(--dim)">ID ${u.id}</span></div></div>
+    <div class="dsec"><h4>Subscription</h4><div class="kv">
+      <div class="k">Plan</div><div class="v">${u.plan} · ${u.mrr?money(u.mrr)+'/mo':'no charge'}</div>
+      <div class="k">Status</div><div class="v">${u.status.replace('_',' ')}</div>
+      <div class="k">MRR</div><div class="v">${u.mrr?money(u.mrr):'—'}</div>
+      <div class="k">Lifetime value</div><div class="v">${money(u.ltv)}</div>
+      <div class="k">Member since</div><div class="v">${fmtDate(u.joined)}</div>
+      <div class="k">${u.renewsIn!=null?'Renews':'Last active'}</div><div class="v">${u.renewsIn!=null?('in '+u.renewsIn+'d'):rel(u.lastActive)}</div>
+    </div></div>
+    <div class="dsec"><h4>Usage · last 30 days</h4><div class="usebars">
+      ${ubar('API calls',u.apiCalls,4000)}
+      ${ubar('Watchlists',u.watchlists,10)}
+      ${ubar('Holdings tracked',u.holdings,22)}
+      ${ubar('Price alerts',u.alerts,40)}
+    </div></div>
+    <div class="dsec"><h4>Billing & activity</h4><div class="timeline">
+      ${timeline.map(t=>`<div class="tl"><span class="when">${t.when}</span><span class="what">${t.what}</span>${t.amt?`<span class="amt ${t.dn?'dn':''}">${t.amt}</span>`:''}</div>`).join('')}
+    </div></div>
+    <div class="dactions">
+      <button class="btn">Message</button>
+      <button class="btn">${u.plan==='Free'?'Comp Pro':'Manage plan'}</button>
+      <button class="btn danger">${u.status==='canceled'?'Reactivate':'Suspend'}</button>
+    </div>`;
+  d.classList.add('on');document.getElementById('scrim').classList.add('on');
+}
+function ubar(label,v,max){const p=Math.min(100,v/max*100);return `<div class="ub"><div class="t">${label}<b>${v.toLocaleString()}</b></div><div class="bar"><i style="width:${p.toFixed(0)}%"></i></div></div>`;}
+function closeUser(){document.getElementById('drawer').classList.remove('on');document.getElementById('scrim').classList.remove('on');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUser();});
+
+/* ================= SOCIAL STUDIO ================= */
+const PLATFORMS={
+  ig:{n:'Instagram',col:'linear-gradient(120deg,#f9ce34,#ee2a7b 46%,#6228d7)',icon:'<rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.3" fill="currentColor"/>',fill:false},
+  x:{n:'X',col:'#000',icon:'<path d="M15.5 3h2.7l-5.9 6.7L19 21h-5.4l-4.2-5.5L4.5 21H1.8l6.3-7.2L1 3h5.5l3.8 5.1L15.5 3Z" fill="currentColor"/>',fill:true},
+  li:{n:'LinkedIn',col:'#0A66C2',icon:'<path d="M4.98 3.5A2.5 2.5 0 1 1 0 3.5a2.5 2.5 0 0 1 4.98 0ZM.5 8h4V21h-4V8Zm6.5 0h3.8v1.8h.1c.5-1 1.8-2 3.7-2 4 0 4.7 2.6 4.7 6V21h-4v-5.8c0-1.4 0-3.2-1.9-3.2s-2.3 1.5-2.3 3.1V21h-4V8Z" fill="currentColor"/>',fill:true},
+  fb:{n:'Facebook',col:'#1877F2',icon:'<path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z" fill="currentColor"/>',fill:true},
+  tg:{n:'Telegram',col:'#229ED9',icon:'<path d="M21 4 2.5 11.2c-.9.3-.9.8-.2 1l4.8 1.5L18 6.5c.5-.3.9-.1.6.2l-8.8 8-0.3 4.2c.4 0 .6-.2.8-.4l1.9-1.9 4 3c.7.4 1.3.2 1.5-.7L22 5.2c.3-1.1-.4-1.6-1-1.2Z" fill="currentColor"/>',fill:true}
+};
+const CONTENT=[
+  {type:'Stock News', ticker:'NVDA', name:'NVIDIA', price:1181.75, chg:8.23, headline:'NVIDIA beats and raises full-year guidance', insight:'EPS topped estimates by 18% and management lifted the FY outlook on data-center demand. The guidance raise — not the beat — is what moved the stock.'},
+  {type:'Research', ticker:'CRM', name:'Salesforce', price:289.40, chg:4.21, headline:'Why the Street is warming to Salesforce', insight:'Third upgrade this week as the margin-expansion story takes hold. A cluster of upgrades usually front-runs a sentiment shift.'},
+  {type:'Market Recap', ticker:'SPY', name:'S&P 500', price:562.10, chg:1.18, headline:'Cooler CPI sparks a broad risk-on rally', insight:'Softer inflation revived September rate-cut bets. Megacap tech and semis led; breadth was firmly positive and volatility eased.'},
+  {type:'Earnings', ticker:'ZIM', name:'ZIM Integrated', price:22.40, chg:10.0, headline:'ZIM jumps on a blowout and a reinstated dividend', insight:'A much stronger quarter as container freight rates spiked. Bringing back the payout signals management confidence in cash flows.'},
+  {type:'Price Alert', ticker:'SMCI', name:'Super Micro', price:812.40, chg:5.6, headline:'Super Micro breaks out on record volume', insight:'Shares cleared resistance at the top of the AI-hardware relative-strength leaderboard, up on 4.8x average volume.'},
+  {type:'Research', ticker:'AAPL', name:'Apple', price:189.98, chg:1.02, headline:'Apple: services growth is the quiet story', insight:'High-margin services keep compounding while hardware stabilises — a mix shift the market still under-appreciates.'}
+];
+let ST={slides:[{type:'Stock News',item:CONTENT[0],hl:CONTENT[0].headline,insight:CONTENT[0].insight}], cur:0, plats:new Set(['ig','x','li']), mode:'ig', when:'now', caption:'', capEdited:false};
+function CS(){return ST.slides[ST.cur];}
+const MAX_SLIDES=10;
+
+function wrapText(str,max){const w=String(str).split(' '),L=[];let ln='';w.forEach(x=>{const t=ln?ln+' '+x:x;if(t.length>max){if(ln)L.push(ln);ln=x;}else ln=t;});if(ln)L.push(ln);return L;}
+function xesc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function cardSpark(seed,up,x,y,w,h){let v=50,pts=[];for(let i=0;i<18;i++){v+=(seeded(seed+i)-(up?0.4:0.58))*14;v=Math.max(10,Math.min(90,v));pts.push(v);}const st=w/(pts.length-1);const d=pts.map((p,i)=>(i?'L':'M')+(x+i*st).toFixed(0)+' '+(y+h-(p/100*h)).toFixed(0)).join(' ');const c=up?'#2fe6a6':'#ff5d7a';return `<path d="${d}" fill="none" stroke="${c}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>`;}
+
+/* branded post graphic — W×H canvas */
+function buildCardSVG(item,W,H,over){
+  over=over||{};
+  const hl=over.hl||item.headline, ins=(over.insight!==undefined?over.insight:item.insight), up=item.chg>=0;
+  const acc=up?'#2fe6a6':'#ff5d7a';
+  const kicker=((over.type||item.type)||'').toUpperCase();
+  const pad=84;
+  let y=150;
+  const parts=[];
+  parts.push(`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">`);
+  parts.push(`<defs><linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#0e1526"/><stop offset="1" stop-color="#070a12"/></linearGradient>
+    <radialGradient id="gl" cx="0.85" cy="0.1" r="0.6"><stop offset="0" stop-color="${acc}" stop-opacity="0.20"/><stop offset="1" stop-color="${acc}" stop-opacity="0"/></radialGradient></defs>`);
+  parts.push(`<rect width="${W}" height="${H}" fill="url(#bg)"/><rect width="${W}" height="${H}" fill="url(#gl)"/>`);
+  parts.push(`<rect x="0" y="0" width="12" height="${H}" fill="${acc}"/>`);
+  // header
+  parts.push(`<rect x="${pad}" y="86" width="52" height="52" rx="13" fill="#7c6cf5"/><text x="${pad+26}" y="123" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="30" fill="#fff">M</text>`);
+  parts.push(`<text x="${pad+70}" y="110" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="27" fill="#f4f7fc">MarketCatalyst</text>`);
+  parts.push(`<text x="${pad+70}" y="132" font-family="JetBrains Mono,monospace" font-weight="600" font-size="15" letter-spacing="4" fill="${acc}">${xesc(kicker)}</text>`);
+  // headline
+  y=270;
+  wrapText(hl,26).slice(0,4).forEach(l=>{parts.push(`<text x="${pad}" y="${y}" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="62" fill="#ffffff">${xesc(l)}</text>`);y+=76;});
+  // ticker row
+  y+=26;
+  parts.push(`<rect x="${pad}" y="${y-46}" width="360" height="70" rx="16" fill="#ffffff0e" stroke="#ffffff18"/>`);
+  parts.push(`<text x="${pad+22}" y="${y}" font-family="JetBrains Mono,monospace" font-weight="700" font-size="34" fill="#fff">$${xesc(item.ticker)}</text>`);
+  parts.push(`<text x="${pad+22+ (item.ticker.length*22)+20}" y="${y}" font-family="Inter,sans-serif" font-size="24" fill="#8b97af">${xesc(item.name)}</text>`);
+  parts.push(`<text x="${W-pad}" y="${y-14}" text-anchor="end" font-family="JetBrains Mono,monospace" font-weight="700" font-size="40" fill="#fff">$${item.price.toLocaleString()}</text>`);
+  parts.push(`<text x="${W-pad}" y="${y+22}" text-anchor="end" font-family="JetBrains Mono,monospace" font-weight="700" font-size="26" fill="${acc}">${up?'▲':'▼'} ${up?'+':''}${item.chg.toFixed(2)}%</text>`);
+  // sparkline
+  y+=70;
+  parts.push(cardSpark(item.ticker.charCodeAt(0),up,pad,y,W-2*pad,150));
+  y+=150+70;
+  // insight
+  wrapText(ins,44).slice(0,5).forEach(l=>{parts.push(`<text x="${pad}" y="${y}" font-family="Inter,sans-serif" font-size="33" fill="#c7d0e0">${xesc(l)}</text>`);y+=46;});
+  // footer
+  parts.push(`<line x1="${pad}" y1="${H-92}" x2="${W-pad}" y2="${H-92}" stroke="#ffffff14" stroke-width="2"/>`);
+  parts.push(`<text x="${pad}" y="${H-56}" font-family="JetBrains Mono,monospace" font-size="22" fill="#7e8ca8">@marketcatalyst · May 21, 2026</text>`);
+  parts.push(`<text x="${W-pad}" y="${H-56}" text-anchor="end" font-family="Inter,sans-serif" font-size="20" fill="#5d6a82">Not investment advice</text>`);
+  parts.push('</svg>');
+  return parts.join('');
+}
+function platIcon(id,sz=18){const p=PLATFORMS[id];if(!p)return '';return `<span class="ci" style="background:${p.col}"><svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${p.fill?'none':'currentColor'}">${p.icon}</svg></span>`;}
+
+function genCaption(slide){
+  const item=slide.item, up=item.chg>=0, hl=slide.hl||item.headline, ins=slide.insight||item.insight;
+  const tags=['stocks','stockmarket','investing','trading','fintech',item.ticker.toLowerCase(),'marketcatalyst'];
+  return `${hl}.\n\n${ins}\n\n$${item.ticker} ${up?'▲':'▼'} ${up?'+':''}${item.chg.toFixed(2)}%\n\n${tags.map(t=>'#'+t).join(' ')}`;
+}
+
+function renderAccts(){
+  const list=[['ig','@marketcatalyst',true],['x','@marketcatalyst',true],['li','MarketCatalyst',true],['fb','MarketCatalyst',true],['tg','Not connected',false]];
+  document.getElementById('accts').innerHTML=list.map(([id,h,on])=>`<div class="acct ${on?'':'off'}">${platIcon(id,15)}<div><b>${PLATFORMS[id].n}</b><div class="h">${h}</div></div><span class="ok"></span></div>`).join('');
+}
+function renderCtypes(){
+  const types=[...new Set(CONTENT.map(c=>c.type))];
+  document.getElementById('ctypeChips').innerHTML=types.map(t=>`<button class="chip ${t===CS().type?'on':''}" data-t="${t}">${t}</button>`).join('');
+  document.querySelectorAll('#ctypeChips .chip').forEach(c=>c.onclick=()=>{CS().type=c.dataset.t;const first=CONTENT.find(x=>x.type===CS().type);applyItem(first);renderCtypes();renderSource();});
+}
+function renderSource(){
+  const opts=CONTENT.filter(c=>c.type===CS().type);
+  const sel=document.getElementById('srcSel');
+  sel.innerHTML=opts.map(c=>`<option value="${CONTENT.indexOf(c)}" ${c===CS().item?'selected':''}>$${c.ticker} — ${c.headline}</option>`).join('');
+  sel.onchange=()=>applyItem(CONTENT[+sel.value]);
+}
+function applyItem(item){const s=CS();s.item=item;s.hl=item.headline;s.insight=item.insight;s.type=item.type;
+  document.getElementById('hl').value=s.hl;
+  document.getElementById('insight').value=s.insight;
+  if(ST.cur===0 && !ST.capEdited){ST.caption=genCaption(s);document.getElementById('caption').value=ST.caption;updateCapCount();}
+  renderSlides();renderPreview();
+}
+/* ---- slides (carousel) ---- */
+function renderSlides(){
+  const tray=document.getElementById('slidesTray');if(!tray)return;
+  tray.innerHTML=ST.slides.map((s,i)=>`<div class="slide-thumb ${i===ST.cur?'on':''}" onclick="selectSlide(${i})">
+      <span class="sn">${i+1}</span>${buildCardSVG(s.item,1080,1350,s)}
+      ${ST.slides.length>1?`<button class="srm" title="Remove slide" onclick="event.stopPropagation();removeSlide(${i})">×</button>`:''}
+    </div>`).join('')
+    +(ST.slides.length<MAX_SLIDES?`<button class="slide-add" onclick="addSlide()"><svg width="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg><span>Add slide</span></button>`:'');
+  document.getElementById('slideInfo').textContent=ST.slides.length>1?`carousel · ${ST.slides.length} slides`:'single post';
+}
+function selectSlide(i){ST.cur=i;const s=CS();
+  document.getElementById('hl').value=s.hl||s.item.headline;
+  document.getElementById('insight').value=s.insight||s.item.insight;
+  renderCtypes();renderSource();renderSlides();renderPreview();
+}
+function addSlide(){
+  if(ST.slides.length>=MAX_SLIDES){toast('Instagram allows up to 10 slides');return;}
+  const used=new Set(ST.slides.map(s=>s.item));
+  const next=CONTENT.find(c=>!used.has(c))||CONTENT[ST.slides.length%CONTENT.length];
+  ST.slides.push({type:next.type,item:next,hl:next.headline,insight:next.insight});
+  ST.cur=ST.slides.length-1;selectSlide(ST.cur);
+}
+function removeSlide(i){
+  if(ST.slides.length<=1)return;
+  ST.slides.splice(i,1);
+  if(ST.cur>=ST.slides.length)ST.cur=ST.slides.length-1;
+  selectSlide(ST.cur);
+}
+function updateCapCount(){document.getElementById('capCount').textContent=(document.getElementById('caption').value.length)+' / 2200';}
+
+function renderPlats(){
+  document.getElementById('plats').innerHTML=Object.keys(PLATFORMS).map(id=>`<div class="plat ${ST.plats.has(id)?'on':''}" data-p="${id}">${platIcon(id,13)}${PLATFORMS[id].n}<span class="chk"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12l4 4L19 6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>`).join('');
+  document.querySelectorAll('#plats .plat').forEach(p=>p.onclick=()=>{const id=p.dataset.p;ST.plats.has(id)?ST.plats.delete(id):ST.plats.add(id);renderPlats();});
+}
+function capHTML(txt){return xesc(txt).replace(/\n/g,'<br>').replace(/(#[a-z0-9]+)/gi,'<span class="tags">$1</span>').replace(/(\$[A-Z]+)/g,'<b>$1</b>');}
+const PV=[['ig','Feed','ig'],['story','Story','ig'],['x','X','x'],['li','LinkedIn','li'],['fb','Facebook','fb'],['tg','Telegram','tg']];
+function renderPvTabs(){
+  document.getElementById('pvTabs').innerHTML=PV.map(([m,label,ic])=>`<button class="pvtab ${ST.mode===m?'on':''}" data-p="${m}">${platIcon(ic,11)}${label}</button>`).join('');
+  document.querySelectorAll('#pvTabs .pvtab').forEach(b=>b.onclick=()=>{ST.mode=b.dataset.p;renderPvTabs();renderPreview();});
+}
+function renderPreview(){
+  const s=CS(), cap=document.getElementById('caption').value;
+  const stage=document.getElementById('pvStage');
+  const n=ST.slides.length, carousel=n>1;
+  const media=buildCardSVG(s.item,1080,1350,s);
+  const carBadge=carousel?`<span class="car-badge"><svg width="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="4" width="13" height="13" rx="2"/><path d="M4 8v10a2 2 0 0 0 2 2h10"/></svg>${ST.cur+1}/${n}</span>`:'';
+  if(ST.mode==='ig'){
+    const nav=carousel?`
+      <button class="ig-arrow l" ${ST.cur===0?'disabled':''} onclick="flipSlide(-1)">‹</button>
+      <button class="ig-arrow r" ${ST.cur===n-1?'disabled':''} onclick="flipSlide(1)">›</button>
+      <span class="ig-count">${ST.cur+1}/${n}</span>`:'';
+    const dots=carousel?`<div class="ig-dots">${ST.slides.map((_,i)=>`<i class="${i===ST.cur?'on':''}"></i>`).join('')}</div>`:'';
+    stage.innerHTML=`<div class="ig-phone">
+      <div class="ig-top"><div class="ava"><div>M</div></div><div class="nm">marketcatalyst<span>Sponsored</span></div>
+        <span class="more">${carousel?'<svg width="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="4" width="13" height="13" rx="2"/><path d="M4 8v10a2 2 0 0 0 2 2h10"/></svg>':'<svg width="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>'}</span></div>
+      <div class="ig-media">${media}${nav}</div>
+      ${dots}
+      <div class="ig-actions">
+        <svg width="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-4.4-9.5-8.5C1 9.5 2.5 6 6 6c2 0 3.2 1.2 4 2 .8-.8 2-2 4-2 3.5 0 5 3.5 3.5 6.5C19 16.6 12 21 12 21Z"/></svg>
+        <svg width="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8 8 0 0 1-11.5 7.2L3 20l1.3-6.4A8 8 0 1 1 21 11.5Z"/></svg>
+        <svg width="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 3 11 14M22 3l-7 18-4-8-8-4 19-6Z"/></svg>
+        <span class="sp"></span><svg width="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3v18l6-4 6 4V3H6Z"/></svg></div>
+      <div class="ig-likes">2,418 likes</div>
+      <div class="ig-cap"><b>marketcatalyst</b> ${capHTML(cap)}</div></div>`;
+  } else if(ST.mode==='story'){
+    stage.innerHTML=`<div class="story-frame">${buildCardSVG(s.item,1080,1920,s)}
+      <div class="story-bar"><i></i></div>
+      <div class="story-head"><span class="ava">M</span> marketcatalyst</div></div>`;
+  } else if(ST.mode==='x'){
+    const imgs=ST.slides.slice(0,4);
+    const grid=imgs.length>1?`<div class="x-grid g${imgs.length}">${imgs.map(sl=>`<div class="xg">${buildCardSVG(sl.item,1080,1350,sl)}</div>`).join('')}</div>`:`<div class="x-media">${media}</div>`;
+    stage.innerHTML=`<div class="x-card"><div class="x-head"><div class="ava">M</div><div><div class="nm">MarketCatalyst <svg width="14" viewBox="0 0 24 24" fill="#1d9bf0"><path d="M12 2l2.4 2.1 3.1-.5 1 3 2.9 1.3-1 3 1 3-2.9 1.3-1 3-3.1-.5L12 22l-2.4-2.1-3.1.5-1-3L2.6 15l1-3-1-3 2.9-1.3 1-3 3.1.5L12 2Z"/><path d="M8 12l3 3 5-6" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="h">@marketcatalyst · now</div></div></div>
+      <div class="x-body">${capHTML(cap.split('\n\n').slice(0,3).join('\n\n'))}</div>${grid}${n>4?`<div class="x-more">+${n-4} more — X shows up to 4 images</div>`:''}</div>`;
+  } else if(ST.mode==='li'){
+    stage.innerHTML=`<div class="li-card">
+      <div class="li-head"><div class="ava">M</div><div class="who"><div class="nm">MarketCatalyst</div><div class="sub">Market data &amp; stock intelligence · 24,918 followers</div><div class="sub2">Promoted · <svg width="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg></div></div>
+        <span class="more"><svg width="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span></div>
+      <div class="li-body">${capHTML(cap)}</div>
+      <div class="li-media">${media}${carBadge}</div>
+      <div class="li-social"><span class="react"><i class="rk" style="background:#378fe9"><svg width="8" viewBox="0 0 24 24" fill="#fff"><path d="M2 10h4v11H2zM7 21V10l5-7c1.1 0 2 .9 2 2l-1 4h6c1.1 0 2 .9 2 2l-2.2 7c-.2.8-.9 1-1.8 1H7z"/></svg></i><i class="rk" style="background:#df704d"><svg width="8" viewBox="0 0 24 24" fill="#fff"><path d="M12 21s-7-4.4-9.5-8.5C1 9.5 2.5 6 6 6c2 0 3.2 1.2 4 2 .8-.8 2-2 4-2 3.5 0 5 3.5 3.5 6.5C19 16.6 12 21 12 21Z"/></svg></i> 1,284</span><span>96 comments · 41 reposts</span></div>
+      <div class="li-actions">${liAct('M12 21s-7-4.4-9.5-8.5C1 9.5 2.5 6 6 6c2 0 3.2 1.2 4 2 .8-.8 2-2 4-2 3.5 0 5 3.5 3.5 6.5C19 16.6 12 21 12 21Z','Like')}${liAct('M21 11.5a8 8 0 0 1-11.5 7.2L3 20l1.3-6.4A8 8 0 1 1 21 11.5Z','Comment')}${liAct('M17 2l4 4-4 4M21 6H9a5 5 0 0 0-5 5v3','Repost')}${liAct('M22 3 11 14M22 3l-7 18-4-8-8-4 19-6Z','Send')}</div></div>`;
+  } else if(ST.mode==='fb'){
+    stage.innerHTML=`<div class="fb-card">
+      <div class="fb-head"><div class="ava">M</div><div class="who"><div class="nm">MarketCatalyst</div><div class="sub">Sponsored · <svg width="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg></div></div>
+        <span class="more"><svg width="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span></div>
+      <div class="fb-body">${capHTML(cap.split('\n\n').slice(0,2).join('\n\n'))}</div>
+      <div class="fb-media">${media}${carBadge}</div>
+      <div class="fb-social"><span class="react"><i class="rk" style="background:#1877f2"><svg width="8" viewBox="0 0 24 24" fill="#fff"><path d="M2 10h4v11H2zM7 21V10l5-7c1.1 0 2 .9 2 2l-1 4h6c1.1 0 2 .9 2 2l-2.2 7c-.2.8-.9 1-1.8 1H7z"/></svg></i><i class="rk" style="background:#f33e58"><svg width="8" viewBox="0 0 24 24" fill="#fff"><path d="M12 21s-7-4.4-9.5-8.5C1 9.5 2.5 6 6 6c2 0 3.2 1.2 4 2 .8-.8 2-2 4-2 3.5 0 5 3.5 3.5 6.5C19 16.6 12 21 12 21Z"/></svg></i> 3.4K</span><span>212 comments · 88 shares</span></div>
+      <div class="fb-actions">${fbAct('M12 21s-7-4.4-9.5-8.5C1 9.5 2.5 6 6 6c2 0 3.2 1.2 4 2 .8-.8 2-2 4-2 3.5 0 5 3.5 3.5 6.5C19 16.6 12 21 12 21Z','Like')}${fbAct('M21 11.5a8 8 0 0 1-11.5 7.2L3 20l1.3-6.4A8 8 0 1 1 21 11.5Z','Comment')}${fbAct('M22 3 11 14M22 3l-7 18-4-8-8-4 19-6Z','Share')}</div></div>`;
+  } else if(ST.mode==='tg'){
+    const album=carousel?`<div class="tg-album a${Math.min(4,n)}">${ST.slides.slice(0,4).map(sl=>`<div class="ta">${buildCardSVG(sl.item,1080,1350,sl)}</div>`).join('')}</div>`:`<div class="tg-media">${media}</div>`;
+    stage.innerHTML=`<div class="tg-wrap"><div class="tg-msg">
+      ${album}
+      <div class="tg-cap">${capHTML(cap)}</div>
+      <div class="tg-meta"><span class="ch">MarketCatalyst</span><span class="rt">3.1K <svg width="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="2.5"/></svg> · 12:04 PM</span></div>
+    </div></div>`;
+  }
+}
+function liAct(d,label){return `<button class="lia"><svg width="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="${d}"/></svg>${label}</button>`;}
+function fbAct(d,label){return `<button class="fba"><svg width="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="${d}"/></svg>${label}</button>`;}
+function flipSlide(d){const n=ST.slides.length;let i=ST.cur+d;if(i<0)i=0;if(i>n-1)i=n-1;selectSlide(i);}
+
+/* queue */
+const QUEUE=[
+  {hl:'Semis lead every group, +3.1%',ticker:'SMH',chg:3.1,plats:['ig','x','li'],status:'Published',when:'2h ago',reach:'12.4K'},
+  {hl:'Cooler CPI sparks risk-on rally',ticker:'SPY',chg:1.18,plats:['ig','x'],status:'Published',when:'yesterday',reach:'21.8K'},
+  {hl:'CRM upgraded to Overweight',ticker:'CRM',chg:4.21,plats:['ig','li'],status:'Scheduled',when:'today 4:30 PM',reach:'—'},
+  {hl:'Weekly market wrap',ticker:'SPY',chg:1.84,plats:['ig','x','li','fb'],status:'Scheduled',when:'Fri 9:00 AM',reach:'—',slides:5}
+];
+function miniCard(q){return `<div class="qthumb${q.slides>1?' stacked':''}">${buildCardSVG({ticker:q.ticker,name:'',price:0,chg:q.chg,headline:q.hl,insight:'',type:''},1080,1350)}${q.slides>1?`<span class="qcar">▤ ${q.slides}</span>`:''}</div>`;}
+function chanChips(list){return `<span class="chan">${list.map(id=>platIcon(id,11)).join('')}</span>`;}
+function renderQueue(){
+  document.getElementById('queueCount').textContent=QUEUE.filter(q=>q.status==='Scheduled').length+' scheduled · '+QUEUE.filter(q=>q.status==='Published').length+' published';
+  document.getElementById('queueBody').innerHTML=QUEUE.map(q=>`<tr>
+    <td><div class="user">${miniCard(q)}<div><div class="nm">${xesc(q.hl)}${q.slides>1?` <span class="muted" style="font-family:var(--f-mono);font-size:11px">· ${q.slides}-slide carousel</span>`:''}</div><div class="em">$${q.ticker}</div></div></div></td>
+    <td>${chanChips(q.plats)}</td>
+    <td><span class="pill ${q.status==='Published'?'st-active':'st-trialing'}"><span class="pdot"></span>${q.status}</span></td>
+    <td class="num muted">${q.when}</td><td class="num">${q.reach}</td></tr>`).join('');
+}
+function toast(msg){let t=document.getElementById('adToast');if(!t){t=document.createElement('div');t.id='adToast';t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(14px);background:#162034;border:1px solid #2b3858;color:#f4f7fc;padding:12px 18px;border-radius:12px;font-weight:600;font-size:13.5px;box-shadow:0 16px 40px rgba(0,0,0,.5);z-index:999;opacity:0;transition:.2s;display:flex;gap:9px;align-items:center';document.body.appendChild(t);}t.innerHTML='<svg width="17" viewBox="0 0 24 24" fill="none" stroke="#2fe6a6" stroke-width="2.4"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>'+msg;requestAnimationFrame(()=>{t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';});clearTimeout(window._adT);window._adT=setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(-50%) translateY(14px)';},2800);}
+
+/* ---- config (in-memory; tokens never persisted client-side) ---- */
+let CFG={endpoint:'',igUser:'',igToken:'',xToken:'',liToken:'',status:'demo'};
+
+/* rasterize the current SVG card to a PNG blob (SVG -> canvas -> PNG) */
+function rasterize(svgString,w,h,type){
+  type=type||'image/png';
+  return new Promise((res,rej)=>{
+    const blob=new Blob([svgString],{type:'image/svg+xml;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');ctx.fillStyle='#070a12';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);c.toBlob(b=>b?res(b):rej(new Error('encode failed')),type,0.95);};
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('render failed'));};
+    img.src=url;
+  });
+}
+function cardDims(){return ST.mode==='story'?[1080,1920]:[1080,1350];}
+async function exportPNG(){
+  try{
+    const [w,h]=cardDims();const multi=ST.slides.length>1;
+    for(let i=0;i<ST.slides.length;i++){
+      const s=ST.slides[i];
+      const png=await rasterize(buildCardSVG(s.item,w,h,s),w,h);
+      const a=document.createElement('a');a.href=URL.createObjectURL(png);
+      a.download='marketcatalyst-'+s.item.ticker.toLowerCase()+(multi?('-slide'+(i+1)):'')+'-'+ST.mode+'.png';
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+      if(multi)await new Promise(r=>setTimeout(r,350));
+    }
+    toast(multi?(ST.slides.length+' slides downloaded'):'Graphic downloaded as PNG');
+  }catch(e){toast('Export failed: '+e.message);}
+}
+
+/* ---- setup modal ---- */
+function openSetup(){
+  document.getElementById('cfgEndpoint').value=CFG.endpoint;
+  document.getElementById('cfgIgUser').value=CFG.igUser;
+  document.getElementById('cfgIgToken').value=CFG.igToken;
+  document.getElementById('cfgXToken').value=CFG.xToken;
+  document.getElementById('cfgLiToken').value=CFG.liToken;
+  refreshCfgStatus();
+  document.getElementById('setModal').classList.add('on');document.getElementById('setScrim').classList.add('on');
+}
+function closeSetup(){document.getElementById('setModal').classList.remove('on');document.getElementById('setScrim').classList.remove('on');}
+function refreshCfgStatus(){
+  const s=document.getElementById('cfgStatus');const ep=document.getElementById('cfgEndpoint').value.trim();
+  if(ep){s.textContent='Endpoint set · live publishing enabled';s.className='mstatus ok';}
+  else{s.textContent='No endpoint · demo mode (queue only)';s.className='mstatus';}
+}
+document.getElementById('cfgEndpoint')&&document.getElementById('cfgEndpoint').addEventListener('input',refreshCfgStatus);
+function saveSetup(){
+  CFG.endpoint=document.getElementById('cfgEndpoint').value.trim();
+  CFG.igUser=document.getElementById('cfgIgUser').value.trim();
+  CFG.igToken=document.getElementById('cfgIgToken').value.trim();
+  CFG.xToken=document.getElementById('cfgXToken').value.trim();
+  CFG.liToken=document.getElementById('cfgLiToken').value.trim();
+  CFG.status=CFG.endpoint?'live':'demo';
+  renderAccts();closeSetup();
+  toast(CFG.endpoint?'Saved · live publishing enabled':'Saved · demo mode');
+}
+async function testEndpoint(){
+  const ep=document.getElementById('cfgEndpoint').value.trim();const s=document.getElementById('cfgStatus');
+  if(!ep){s.textContent='Enter an endpoint URL first';s.className='mstatus err';return;}
+  s.textContent='Pinging…';s.className='mstatus';
+  try{const r=await fetch(ep.replace(/\/publish$/,'')+'/health',{method:'GET'});
+    if(r.ok){s.textContent='Connected · backend reachable';s.className='mstatus ok';}
+    else{s.textContent='Reached endpoint but got HTTP '+r.status;s.className='mstatus err';}
+  }catch(e){s.textContent='Could not reach endpoint (CORS or offline): '+e.message;s.className='mstatus err';}
+}
+
+/* ---- publish (real via backend, else demo) ---- */
+function addToQueue(item,scheduled,plats,when,reach,slideCount){
+  QUEUE.unshift({hl:CS().hl||item.headline,ticker:item.ticker,chg:item.chg,plats:[...plats],status:scheduled?'Scheduled':'Published',when,reach:reach||(scheduled?'—':'live'),slides:slideCount||1});
+  renderQueue();
+}
+async function doPublish(scheduled){
+  if(ST.plats.size===0){toast('Pick at least one channel first');return;}
+  const lead=ST.slides[0].item, plats=[...ST.plats], names=plats.map(id=>PLATFORMS[id].n);
+  const caption=document.getElementById('caption').value;
+  const schVal=scheduled?document.getElementById('schWhen').value:'';
+  const whenLabel=scheduled?(schVal?new Date(schVal).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'scheduled'):'just now';
+  const pubBtn=document.getElementById('publishBtn');const orig=pubBtn.textContent;
+  const nSlides=ST.slides.length;
+
+  if(CFG.endpoint){
+    pubBtn.textContent='Publishing…';pubBtn.disabled=true;
+    try{
+      const [w,h]=cardDims();
+      const fd=new FormData();
+      fd.append('caption',caption);
+      fd.append('platforms',JSON.stringify(plats));
+      fd.append('mediaType',nSlides>1?'carousel':'single');
+      fd.append('scheduleAt',schVal);
+      fd.append('igUser',CFG.igUser);
+      if(CFG.igToken)fd.append('igToken',CFG.igToken);
+      if(CFG.xToken)fd.append('xToken',CFG.xToken);
+      if(CFG.liToken)fd.append('liToken',CFG.liToken);
+      for(let i=0;i<nSlides;i++){const s=ST.slides[i];const jpg=await rasterize(buildCardSVG(s.item,w,h,s),w,h,'image/jpeg');fd.append('image',jpg,'slide'+(i+1)+'.jpg');}
+      const r=await fetch(CFG.endpoint,{method:'POST',body:fd});
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok||data.ok===false)throw new Error(data.error||('HTTP '+r.status));
+      addToQueue(lead,scheduled,plats,whenLabel,data.reach,nSlides);
+      const okList=(data.results?Object.entries(data.results).filter(([,v])=>v&&v.ok).map(([k])=>PLATFORMS[k]?PLATFORMS[k].n:k):names);
+      toast((scheduled?'Scheduled via API · ':'Published via API · ')+(nSlides>1?nSlides+'-slide carousel · ':'')+(okList.join(', ')||names.join(', ')));
+    }catch(e){toast('Publish failed: '+e.message);}
+    finally{pubBtn.textContent=orig;pubBtn.disabled=false;}
+  }else{
+    addToQueue(lead,scheduled,plats,whenLabel,scheduled?'—':((Math.random()*8+2).toFixed(1)+'K'),nSlides);
+    toast((scheduled?'Scheduled (demo) · ':'Published (demo) · ')+(nSlides>1?nSlides+'-slide carousel · ':'')+names.join(', ')+' — add an endpoint in Setup to go live');
+  }
+}
+function initStudio(){
+  renderAccts();renderCtypes();renderSource();renderPlats();renderSlides();renderQueue();
+  const s0=CS();document.getElementById('hl').value=s0.hl;document.getElementById('insight').value=s0.insight;
+  ST.caption=genCaption(s0);document.getElementById('caption').value=ST.caption;updateCapCount();renderPreview();
+  document.getElementById('hl').oninput=e=>{CS().hl=e.target.value;renderSlides();renderPreview();};
+  document.getElementById('insight').oninput=e=>{CS().insight=e.target.value;renderSlides();renderPreview();};
+  document.getElementById('caption').oninput=()=>{ST.capEdited=true;renderPreview();updateCapCount();};
+  renderPvTabs();
+  document.querySelectorAll('#whenSeg button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#whenSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');ST.when=b.dataset.w;const sch=ST.when==='sch';document.getElementById('schWhen').style.display=sch?'block':'none';const pb=document.getElementById('publishBtn');pb.textContent=sch?'Schedule post':'Publish now';pb.classList.toggle('sch',sch);});
+  document.getElementById('publishBtn').onclick=()=>doPublish(ST.when==='sch');
+  document.getElementById('exportBtn').onclick=exportPNG;
+}
+initStudio();
+
+/* ---------- nav ---------- */
+const TITLES={overview:'Overview <span>· last 30 days</span>',users:'Users',subs:'Subscriptions',revenue:'Revenue',usage:'Usage &amp; API',monitor:'Monitor <span>· backend services</span>',studio:'Social Studio <span>· push to Instagram &amp; more</span>'};
+/* The backend monitor is loaded LAZILY, on first visit to the Monitor tab.
+   Mounting its iframe at page load would fire a cross-origin request on every
+   admin session — including the ones that never open this tab — and, since the
+   backend may be unreachable, would surface a console error each time. */
+let monitorLoaded = false;
+function renderMonitor(){
+  if (monitorLoaded) return;
+  monitorLoaded = true;
+  const wrap = document.getElementById('monitorWrap');
+  const base = (!IS_DEMO && REAL && REAL.backendUrl) ? String(REAL.backendUrl).replace(/\/$/,'') : null;
+
+  const message = (title, detail) =>
+    '<div style="height:100%;display:flex;flex-direction:column;align-items:center;'
+    + 'justify-content:center;gap:8px;text-align:center;padding:32px">'
+    + '<div style="font:600 14px/1.4 var(--f-disp),system-ui;color:var(--hi)">' + title + '</div>'
+    + '<div style="font-size:12.5px;color:var(--dim);max-width:440px;line-height:1.6">' + detail + '</div></div>';
+
+  if (!base) {
+    wrap.innerHTML = message('Backend URL not configured',
+      'Set NEXT_PUBLIC_BACKEND_URL so the console knows where the monitor lives. '
+      + 'Locally this is http://localhost:4100.');
+    return;
+  }
+
+  wrap.innerHTML = message('Connecting to ' + base + ' …', 'Checking /health.');
+
+  /* Probe before embedding. An iframe to an unreachable or 403 origin renders
+     a blank white box with no explanation — a health check lets us say WHY it
+     is empty, which for a private Cloud Run service is the usual case. */
+  fetch(base + '/health', { mode: 'cors' })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(() => {
+      const f = document.createElement('iframe');
+      f.src = base + '/';
+      f.style.cssText = 'border:0;width:100%;height:100%;display:block;background:#080B11';
+      f.title = 'Backend monitor';
+      wrap.innerHTML = '';
+      wrap.appendChild(f);
+      document.getElementById('monitorSrc').textContent = base;
+    })
+    .catch(err => {
+      wrap.innerHTML = message('Backend not reachable from the browser',
+        'Could not reach <code style="color:var(--hi)">' + base + '/health</code> — ' + err.message
+        + '.<br><br>Cloud Run runs with <code style="color:var(--hi)">--no-allow-unauthenticated</code>, '
+        + 'so the browser cannot call it directly. A Firebase Hosting rewrite to the service '
+        + 'would fix this and the other endpoint-backed features at the same time.');
+    });
+}
+
+function switchView(name){
+  document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.view===name));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id===name));
+  if (name === 'monitor') renderMonitor();
+  document.getElementById('pageTitle').innerHTML=TITLES[name]||name;
+  document.querySelector('.main').scrollTo({top:0});
+}
+document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>switchView(n.dataset.view));
+</script>
+
+<!-- Change-password modal (admin) -->
+<div class="scrim" id="pwScrim" onclick="closePw()"></div>
+<div class="modal" id="pwModal" style="max-width:380px">
+  <div style="padding:20px 22px">
+    <h3 style="font-family:var(--f-disp);margin:0 0 4px;color:var(--hi)">Change password</h3>
+    <p style="color:var(--dim);font-size:12.5px;margin:0 0 16px">Username (admin) is fixed. Set a new password below.</p>
+    <input id="pwNew" class="inp" type="password" placeholder="New password (min 6 chars)" style="width:100%;margin-bottom:10px">
+    <input id="pwConf" class="inp" type="password" placeholder="Confirm new password" style="width:100%;margin-bottom:8px">
+    <div id="pwMsg" style="font-size:12px;min-height:16px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="chip" onclick="closePw()">Cancel</button>
+      <button class="chip on" onclick="submitPw()">Update password</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Auth bridge: the admin console runs in an iframe inside the Next.js app,
+   which owns the Firebase session. Logout + password-change are delegated to
+   the parent via postMessage; the parent calls Firebase and reports back. */
+function admLogout(){ parent.postMessage({ type:'admin:logout' }, '*'); }
+function openPw(){ document.getElementById('pwModal').classList.add('on'); document.getElementById('pwScrim').classList.add('on'); document.getElementById('pwMsg').textContent=''; }
+function closePw(){ document.getElementById('pwModal').classList.remove('on'); document.getElementById('pwScrim').classList.remove('on'); }
+function submitPw(){
+  var a=document.getElementById('pwNew').value, b=document.getElementById('pwConf').value, m=document.getElementById('pwMsg');
+  if(a.length<6){ m.style.color='var(--down)'; m.textContent='Password must be at least 6 characters.'; return; }
+  if(a!==b){ m.style.color='var(--down)'; m.textContent='Passwords do not match.'; return; }
+  m.style.color='var(--dim)'; m.textContent='Updating…';
+  parent.postMessage({ type:'admin:changePassword', password:a }, '*');
+}
+/* Sample-data banner. Only shown when the seeded generator supplied the rows —
+   an admin must never mistake 30 fabricated users for their real customer base.
+   Real data suppresses it entirely. */
+/* Staff-exclusion note. Without it, an admin comparing this page to the
+   Firebase console sees one fewer user here and has no way to tell whether
+   that is a filter or a bug. */
+if (!IS_DEMO && REAL.counts && REAL.counts.excludedStaff > 0) {
+  var note = document.createElement('div');
+  note.textContent = REAL.counts.excludedStaff === 1
+    ? 'Staff account excluded from all metrics'
+    : REAL.counts.excludedStaff + ' staff accounts excluded from all metrics';
+  note.style.cssText = 'position:fixed;bottom:0;right:0;z-index:9999;padding:5px 12px;'
+    + 'background:rgba(124,108,245,.14);color:#9d8dff;border-top-left-radius:8px;'
+    + 'border:1px solid rgba(124,108,245,.3);border-right:0;border-bottom:0;'
+    + 'font:600 11px/1.4 system-ui,sans-serif';
+  document.body.appendChild(note);
+}
+
+if (IS_DEMO) {
+  var warn = document.createElement('div');
+  warn.textContent = '⚠ Sample data — not connected to Firestore. Figures below are fabricated.';
+  warn.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:7px 14px;'
+    + 'background:rgba(255,181,71,.16);color:#ffb547;border-top:1px solid rgba(255,181,71,.4);'
+    + 'font:600 12px/1.4 system-ui,sans-serif;letter-spacing:.02em;text-align:center';
+  document.body.appendChild(warn);
+}
+
+/* Parent tells us who is logged in + password results. */
+window.addEventListener('message', function(e){
+  var d=e.data||{};
+  if(d.type==='admin:identity'){
+    var email=d.email||'admin'; document.getElementById('admEmail').textContent=email;
+    document.getElementById('admName').textContent=email.split('@')[0]||'admin';
+    document.getElementById('admAv').textContent=(email[0]||'A').toUpperCase();
+  }
+  if(d.type==='admin:passwordResult'){
+    var m=document.getElementById('pwMsg');
+    if(d.ok){ m.style.color='var(--up)'; m.textContent='Password updated.'; setTimeout(closePw,900); }
+    else { m.style.color='var(--down)'; m.textContent=d.error||'Update failed.'; }
+  }
+});
+</script>
+</body>
+</html>

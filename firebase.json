@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "market-catalyst-502415",
+    "site": "marketcatalyst",
     "public": "out",
     "ignore": [
       "firebase.json",
@@ -18,6 +18,30 @@
       },
       {
         "source": "/live/**",
+        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
+      },
+      {
+        "source": "/admin/users",
+        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
+      },
+      {
+        "source": "/admin/subscriptions",
+        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
+      },
+      {
+        "source": "/admin/revenue",
+        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
+      },
+      {
+        "source": "/admin/feature-adoption",
+        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
+      },
+      {
+        "source": "/admin/plans/**",
+        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
+      },
+      {
+        "source": "/plans",
         "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
       },
       {
