@@ -9,6 +9,7 @@ import {
   signInWithRedirect,
 } from "firebase/auth";
 import { firebaseAuth, googleAuthProvider } from "../../firebase";
+import { postLoginPath } from "../../admin/admin-email";
 import {
   checkAndRedirectIfLoggedIn,
   completeGoogleLogin,
@@ -82,7 +83,8 @@ export function LoginForm() {
     setError(""); setIsSubmitting(true);
     try {
       await signInWithEmailAndPassword(firebaseAuth, email, password);
-      window.location.href = "/dashboard";
+      // The admin account lands on the admin console, everyone else on the app.
+      window.location.href = postLoginPath(email);
     } catch (err) {
       const msg = getAuthErrorMessage(err);
       setError(msg); showError(msg);

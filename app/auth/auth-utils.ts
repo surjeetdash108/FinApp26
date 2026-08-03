@@ -3,6 +3,7 @@ import { UserCredential } from "firebase/auth";
 import { firebaseAuth } from "../firebase";
 import { apiGet, apiPatch } from "../iq/backend";
 import { emptyInvestorProfile } from "../profile/profile-fields";
+import { postLoginPath } from "../admin/admin-email";
 
 export function getAuthErrorMessage(error: unknown): string {
   if (error instanceof FirebaseError) {
@@ -57,12 +58,12 @@ export async function completeGoogleLogin(userCredential: UserCredential) {
     return;
   }
 
-  window.location.href = "/dashboard";
+  window.location.href = postLoginPath(userCredential.user.email);
 }
 
 export async function checkAndRedirectIfLoggedIn() {
   await firebaseAuth.authStateReady();
   if (firebaseAuth.currentUser) {
-    window.location.href = "/dashboard";
+    window.location.href = postLoginPath(firebaseAuth.currentUser.email);
   }
 }

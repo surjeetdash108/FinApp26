@@ -1,6 +1,7 @@
 import { apiGet } from "../iq/backend";
 import { TRACKED_FEATURES, FEATURE_LABEL, FEATURE_GROUP } from "../iq/feature-adoption";
 import { ENTITLEMENTS } from "./entitlement-catalog";
+import { ADMIN_EMAIL } from "./admin-email";
 
 /**
  * Builds the admin console's dataset — sourced ENTIRELY from the backend.
@@ -34,14 +35,10 @@ const AVATAR_COLORS = [
   "#7c6cf5", "#38d6e6", "#2fe6a6", "#ffb547", "#ff5d7a", "#9d8dff", "#5bd0ff", "#ff8a5b",
 ];
 
-/**
- * The single fixed admin account. One definition, imported by page.tsx, so the
- * gate and the metric exclusion can never disagree about who the admin is.
- * Mirrors ADMIN_EMAIL in the backend's deploy/env.production.yaml.
- */
-export const ADMIN_EMAIL = (
-  process.env.NEXT_PUBLIC_ADMIN_EMAIL || "admin@marketcatalyst.ai"
-).toLowerCase();
+// ADMIN_EMAIL lives in ./admin-email (a tiny module the login flow can import
+// without pulling in this file). Re-exported so page.tsx's existing
+// `import { ADMIN_EMAIL } from "./admin-data"` keeps working.
+export { ADMIN_EMAIL };
 
 /**
  * Staff accounts are excluded from every metric. The BACKEND already filters
