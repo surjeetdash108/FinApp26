@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { signOut, updatePassword } from "firebase/auth";
 import { firebaseAuth } from "../firebase";
-import { apiPatch } from "../iq/backend";
+import { apiGet, apiPatch } from "../iq/backend";
 import { buildAdminDataset, ADMIN_DATA_KEY, ADMIN_EMAIL } from "./admin-data";
 
 /**
@@ -93,6 +93,19 @@ export default function AdminPage() {
           reply({ ok: true });
         } catch (err) {
           reply({ ok: false, error: (err as Error).message });
+        }
+      }
+      if (d.type === "admin:apiHealth") {
+        // Live re-check for the Monitor tab. The iframe has no token, so it asks
+        // here; we hit GET /admin/api-health (AdminGuard) and post the fresh
+        // report back for the console to re-render.
+        const post = (m: Record<string, unknown>) =>
+          iframeRef.current?.contentWindow?.postMessage({ type: "admin:apiHealthResult", ...m }, "*");
+        try {
+          const data = await apiGet("/admin/api-health");
+          post({ ok: true, data });
+        } catch (err) {
+          post({ ok: false, error: (err as Error).message });
         }
       }
       if (d.type === "admin:changePassword") {

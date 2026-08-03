@@ -97,6 +97,30 @@ export interface ConsolePlanRow {
   sortOrder: number;
 }
 
+export interface ApiHealthEndpoint {
+  method: string;
+  path: string;
+  controller: string;
+  guarded: boolean;
+  probe:
+    | { status: number; ok: boolean; up: boolean; ms: number; error?: string }
+    | { skipped: true; reason: string };
+}
+export interface ApiHealthReport {
+  service: string;
+  generatedAt: string;
+  summary: {
+    total: number;
+    byMethod: Record<string, number>;
+    probed: number;
+    ok: number;
+    needsInput: number;
+    down: number;
+    skipped: number;
+  };
+  endpoints: ApiHealthEndpoint[];
+}
+
 export interface ConsoleDataset {
   users: ConsoleUserRow[];
   /** Full plans, so the console can render and edit per-plan entitlements. */
@@ -107,6 +131,9 @@ export interface ConsoleDataset {
   entitlementCatalog: typeof ENTITLEMENT_CATALOG;
   /** Where the Monitor tab loads the backend's own ops UI from. */
   backendUrl: string | null;
+  /** Backend route inventory + health probe for the Monitor tab (null if the
+   *  endpoint is unreachable). */
+  apiHealth: ApiHealthReport | null;
   featureAdoption: FeatureAdoptionRow[];
   /** Plan display name → monthly price in MAJOR units, for the console's MRR maths. */
   price: Record<string, number>;
@@ -231,7 +258,7 @@ export async function buildAdminDataset(): Promise<ConsoleDataset> {
   // UI → backend → Firebase → backend → UI. All three reads hit AdminGuard-
   // protected (or public, for /plans) backend routes; the browser touches no
   // Firestore. Payments may be empty → subscriptions falls back to [].
-  const [usersRes, subsRes, plansRes, adoptRes] = await Promise.all([
+  const [usersRes, subsRes, plansRes, adoptRes, apiHealthRes] = await Promise.all([
     apiGet<{ users: BackendUserRow[] }>("/admin/users?limit=500"),
     apiGet<{ subscriptions: BackendPaymentRow[] }>("/admin/subscriptions?limit=1000").catch(
       () => ({ subscriptions: [] as BackendPaymentRow[] }),
@@ -240,12 +267,14 @@ export async function buildAdminDataset(): Promise<ConsoleDataset> {
     apiGet<{ adoption: BackendAdoptionRow[] }>("/admin/feature-adoption").catch(
       () => ({ adoption: [] as BackendAdoptionRow[] }),
     ),
+    apiGet<ApiHealthReport>("/admin/api-health").catch(() => null),
   ]);
 
   const backendUsers = usersRes.users ?? [];
   const payments = subsRes.subscriptions ?? [];
   const plans = plansRes.plans ?? [];
   const adoption = adoptRes.adoption ?? [];
+  const apiHealth = apiHealthRes ?? null;
 
   const price: Record<string, number> = {};
   for (const p of plans) {
@@ -318,6 +347,7 @@ export async function buildAdminDataset(): Promise<ConsoleDataset> {
     plans: planRows,
     entitlementCatalog: ENTITLEMENT_CATALOG,
     backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? null,
+    apiHealth,
     // Aggregated + staff-excluded server-side (GET /admin/feature-adoption);
     // named/unioned with the full catalog here so every tracked feature shows,
     // including zero-open ones.

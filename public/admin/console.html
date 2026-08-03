@@ -1375,49 +1375,80 @@ const TITLES={overview:'Overview <span>· last 30 days</span>',users:'Users',sub
    admin session — including the ones that never open this tab — and, since the
    backend may be unreachable, would surface a console error each time. */
 let monitorLoaded = false;
-function renderMonitor(){
-  if (monitorLoaded) return;
-  monitorLoaded = true;
-  const wrap = document.getElementById('monitorWrap');
-  const base = (!IS_DEMO && REAL && REAL.backendUrl) ? String(REAL.backendUrl).replace(/\/$/,'') : null;
-
-  const message = (title, detail) =>
-    '<div style="height:100%;display:flex;flex-direction:column;align-items:center;'
+/* The Monitor tab lists the backend's API surface (GET /admin/api-health,
+   staged in REAL.apiHealth) and health-checks the safely-probeable endpoints.
+   The iframe has no Firebase token, so a live Re-check is delegated to the
+   React parent, which calls the endpoint and posts the fresh report back. */
+function ahEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function ahMethodColor(m){ return ({GET:'#2fe6a6',POST:'#5bd0ff',PUT:'#9d8dff',PATCH:'#ffb547',DELETE:'#ff5d7a'})[m] || 'var(--dim)'; }
+function ahChip(label,val,color){
+  return '<span style="display:inline-flex;gap:6px;align-items:center;font-size:12px;'
+    + 'background:#131a24;border:1px solid #1e2a38;border-radius:8px;padding:4px 10px">'
+    + '<b style="color:'+(color||'var(--hi)')+'">'+val+'</b><span style="color:var(--dim)">'+label+'</span></span>';
+}
+function ahMonMsg(title, detail){
+  return '<div style="height:100%;display:flex;flex-direction:column;align-items:center;'
     + 'justify-content:center;gap:8px;text-align:center;padding:32px">'
     + '<div style="font:600 14px/1.4 var(--f-disp),system-ui;color:var(--hi)">' + title + '</div>'
-    + '<div style="font-size:12.5px;color:var(--dim);max-width:440px;line-height:1.6">' + detail + '</div></div>';
-
-  if (!base) {
-    wrap.innerHTML = message('Backend URL not configured',
-      'Set NEXT_PUBLIC_BACKEND_URL so the console knows where the monitor lives. '
-      + 'Locally this is http://localhost:4100.');
-    return;
-  }
-
-  wrap.innerHTML = message('Connecting to ' + base + ' …', 'Checking /health.');
-
-  /* Probe before embedding. An iframe to an unreachable or 403 origin renders
-     a blank white box with no explanation — a health check lets us say WHY it
-     is empty, which for a private Cloud Run service is the usual case. */
-  fetch(base + '/health', { mode: 'cors' })
-    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(() => {
-      const f = document.createElement('iframe');
-      f.src = base + '/';
-      f.style.cssText = 'border:0;width:100%;height:100%;display:block;background:#080B11';
-      f.title = 'Backend monitor';
-      wrap.innerHTML = '';
-      wrap.appendChild(f);
-      document.getElementById('monitorSrc').textContent = base;
-    })
-    .catch(err => {
-      wrap.innerHTML = message('Backend not reachable from the browser',
-        'Could not reach <code style="color:var(--hi)">' + base + '/health</code> — ' + err.message
-        + '.<br><br>Cloud Run runs with <code style="color:var(--hi)">--no-allow-unauthenticated</code>, '
-        + 'so the browser cannot call it directly. A Firebase Hosting rewrite to the service '
-        + 'would fix this and the other endpoint-backed features at the same time.');
-    });
+    + '<div style="font-size:12.5px;color:var(--dim);max-width:460px;line-height:1.6">' + detail + '</div></div>';
 }
+function ahRecheckBtn(mt){
+  return '<button id="apiRecheck" style="'+(mt?'margin-top:10px;':'')+'font:600 12px/1 var(--f-disp),system-ui;'
+    + 'color:#05222a;background:#38d6e6;border:0;border-radius:8px;padding:8px 14px;cursor:pointer">Re-check</button>';
+}
+function ahHtml(h){
+  const s = h.summary || {};
+  const rows = (h.endpoints||[]).map(e=>{
+    const p = e.probe||{};
+    let status;
+    if (p.skipped) status = '<span style="color:var(--dim)">— '+ahEsc(p.reason)+'</span>';
+    else if (p.ok) status = '<span style="color:#2fe6a6">'+p.status+' OK · '+p.ms+'ms</span>';
+    else if (p.up) status = '<span style="color:#ffb547" title="reachable — 4xx because the probe sent no params">'+p.status+' · needs params · '+p.ms+'ms</span>';
+    else status = '<span style="color:#ff5d7a">'+(p.status||'DOWN')+(p.error?' · '+ahEsc(p.error):' · 5xx')+' · '+p.ms+'ms</span>';
+    return '<div style="display:grid;grid-template-columns:60px 1fr auto;gap:12px;align-items:center;'
+      + 'padding:9px 12px;border-bottom:1px solid #1e2a38;font-size:12.5px">'
+      + '<span style="font:700 11px/1 var(--f-mono,ui-monospace,monospace);color:'+ahMethodColor(e.method)+'">'+ahEsc(e.method)+'</span>'
+      + '<span style="min-width:0"><span style="font-family:var(--f-mono,ui-monospace,monospace);color:var(--hi)">'+ahEsc(e.path)+'</span>'
+      + (e.guarded?' <span title="requires admin token">🔒</span>':'')
+      + ' <span style="color:var(--dim);font-size:11px">· '+ahEsc(e.controller)+'</span></span>'
+      + '<span style="text-align:right;white-space:nowrap">'+status+'</span></div>';
+  }).join('');
+  return '<div style="height:100%;display:flex;flex-direction:column">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0 0 12px">'
+    + ahChip('endpoints', s.total||0)
+    + ahChip('OK (2xx)', s.ok||0, '#2fe6a6')
+    + ahChip('needs params', s.needsInput||0, (s.needsInput?'#ffb547':'var(--dim)'))
+    + ahChip('down', s.down||0, (s.down?'#ff5d7a':'var(--hi)'))
+    + ahChip('not probed', s.skipped||0, 'var(--dim)')
+    + '<span style="flex:1"></span>' + ahRecheckBtn(false)
+    + '</div>'
+    + '<div style="flex:1;overflow:auto;border:1px solid #1e2a38;border-radius:10px;background:#0d131b">' + rows + '</div>'
+    + '<div style="font-size:11px;color:var(--dim);padding:8px 2px 0">'+ahEsc(h.service)+' · '
+    + (h.endpoints||[]).length+' routes · probed = public no-param GETs only · '+ahEsc(h.generatedAt)+'</div></div>';
+}
+function paintApiHealth(){
+  const wrap = document.getElementById('monitorWrap');
+  const h = REAL && REAL.apiHealth;
+  document.getElementById('monitorSrc').textContent = (h && h.service) || 'market-catalyst backend';
+  if (IS_DEMO || !h){
+    wrap.innerHTML = ahMonMsg('Live API health needs the backend',
+      (IS_DEMO ? 'Sign in as the admin to load the real endpoint inventory and health.'
+        : 'GET /admin/api-health did not return — the service may be starting or unreachable.')
+      + '<br>' + ahRecheckBtn(true));
+  } else {
+    wrap.innerHTML = ahHtml(h);
+  }
+  const btn = document.getElementById('apiRecheck');
+  if (btn) btn.onclick = function(){ btn.textContent='Checking…'; btn.disabled=true; parent.postMessage({ type:'admin:apiHealth' }, '*'); };
+}
+function renderMonitor(){ paintApiHealth(); }
+window.addEventListener('message', function(e){
+  const d = e.data || {};
+  if (d.type !== 'admin:apiHealthResult') return;
+  if (d.ok && d.data){ if (!REAL) REAL = {}; REAL.apiHealth = d.data; IS_DEMO = false; }
+  paintApiHealth();
+  if (!d.ok) document.getElementById('monitorSrc').textContent = 'Re-check failed: ' + (d.error || 'error');
+});
 
 function switchView(name){
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.view===name));
