@@ -598,32 +598,10 @@ try {
 
 if (REAL && REAL.price) { for (const k in REAL.price) PRICE[k] = REAL.price[k]; }
 
+/* Sample/demo users removed: the admin screens show ONLY real backend data.
+   When not connected (no staged dataset) the tables render empty, never a
+   fabricated customer base. */
 const DEMO_USERS=[];
-for(let i=0;i<30;i++){
-  const r=seeded(i+1), r2=seeded(i+50), r3=seeded(i+120);
-  let plan = r<0.42?'Free':(r<0.74?'Plus':'Pro');
-  let status;
-  if(plan==='Free'){status = r2<0.86?'active':'canceled';}
-  else{status = r2<0.62?'active':(r2<0.8?'trialing':(r2<0.92?'past_due':'canceled'));}
-  const fn=FIRST[i%FIRST.length], ln=LAST[(i*3)%LAST.length];
-  const joined=daysAgo(Math.round(4+ r*520));
-  const lastActiveDays = status==='canceled'?Math.round(20+r3*60):Math.round(r3*9);
-  const mrr = (status==='active'||status==='trialing'||status==='past_due')?PRICE[plan]:0;
-  DEMO_USERS.push({
-    id:'usr_'+(1000+i).toString(36),
-    name:fn+' '+ln,
-    email:(fn[0]+ln).toLowerCase()+'@'+['gmail.com','proton.me','outlook.com','hey.com','icloud.com'][i%5],
-    plan, status, mrr,
-    color:AV[i%AV.length], initials:(fn[0]+ln[0]).toUpperCase(),
-    country:COUNTRY[i%COUNTRY.length],
-    joined, lastActive:daysAgo(lastActiveDays),
-    watchlists:Math.round(1+r*9), holdings:Math.round(r2*22),
-    apiCalls:Math.round((plan==='Pro'?4000:plan==='Plus'?1200:120)*(0.4+r3)),
-    alerts:Math.round(r*(plan==='Pro'?40:12)),
-    renewsIn: (status==='active')?Math.round(1+r3*30):null,
-    ltv: Math.round(PRICE[plan]* (3+r*20))
-  });
-}
 /* Real rows arrive as JSON, so `joined` / `lastActive` are ISO strings; the
    render code sorts and date-formats them, which needs real Date objects. */
 const USERS = IS_DEMO ? DEMO_USERS : REAL.users.map(u => ({
@@ -655,13 +633,11 @@ function spark(seed,up){const pts=[];let v=50;for(let i=0;i<16;i++){v+=(seeded(s
    There is no history to compute a real trend from yet (payments and
    revenue_summary are empty), so on real data these render as an explicit
    "no history" dash instead. They return when a rollup exists to compare to. */
-function deltaHtml(d, up){
-  if (!IS_DEMO) return '<div class="d" style="color:var(--dim2)">— no trend history</div>';
-  return '<div class="d ' + (up?'up':'dn') + '">' + (up?'▲':'▼') + ' ' + d + '</div>';
+function deltaHtml(){
+  // No fabricated trend: there is no historical rollup to compare against yet.
+  return '<div class="d" style="color:var(--dim2)">— no trend history</div>';
 }
-function sparkHtml(seed, up){
-  return IS_DEMO ? '<div class="spark">' + spark(seed, up) + '</div>' : '';
-}
+function sparkHtml(){ return ''; }
 
 const KPIS=[
   {k:'Total users',v:USERS.length.toLocaleString(),d:'+8.4%',up:true,s:1},
@@ -682,7 +658,9 @@ document.getElementById('kpiRow').innerHTML=KPIS.map(x=>`
      like a year of measured growth that was never measured. Nothing in
      Firestore records historical MRR yet (revenue_summary is the intended
      home). Show the current value and say so, rather than draw a fiction. */
-  if (!IS_DEMO) {
+  {
+    // Always the real view: no fabricated 12-month back-cast. A monthly
+    // revenue_summary rollup is needed before a trend can be charted.
     document.getElementById('mrrChart').innerHTML =
       '<div style="height:180px;display:flex;flex-direction:column;align-items:center;'
       + 'justify-content:center;gap:6px;color:var(--dim2);text-align:center">'
@@ -927,11 +905,8 @@ function emptyRow(c,t){return `<tr><td colspan="${c}" style="padding:22px;text-a
   /* Feature adoption. The seven hardcoded percentages this replaced were
      invented, and named features the product does not have. Real rows come
      from the feature_adoption collection, keyed per (feature, user). */
-  if (IS_DEMO) {
-    const feats=[['Watchlists',88],['Stock detail charts',76],['Themes',54],['Screener',47],['Ask Copilot (AI)',39],['Price alerts',33],['Options view',18]];
-    document.getElementById('adoption').innerHTML=feats.map(([n,p])=>`<div class="ub"><div class="t">${n}<b>${p}%</b></div><div class="bar"><i style="width:${p}%"></i></div></div>`).join('');
-  } else {
-    const rows = REAL.featureAdoption || [];
+  {
+    const rows = (REAL && REAL.featureAdoption) || [];
     const denom = Math.max(1, USERS.length);
     const used = rows.filter(r => r.opens > 0);
     const never = rows.filter(r => r.neverOpened);
@@ -1510,7 +1485,7 @@ if (!IS_DEMO && REAL.counts && REAL.counts.excludedStaff > 0) {
 
 if (IS_DEMO) {
   var warn = document.createElement('div');
-  warn.textContent = '⚠ Sample data — not connected to Firestore. Figures below are fabricated.';
+  warn.textContent = 'Not connected — sign in as the admin to load data. No sample data is shown.';
   warn.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:7px 14px;'
     + 'background:rgba(255,181,71,.16);color:#ffb547;border-top:1px solid rgba(255,181,71,.4);'
     + 'font:600 12px/1.4 system-ui,sans-serif;letter-spacing:.02em;text-align:center';
