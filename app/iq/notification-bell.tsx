@@ -20,6 +20,8 @@ export interface NotificationDoc {
   source: string | null;
   url: string | null;
   publishedAt: string;
+  /** How the news reads for the stock — colours the row +ve/-ve. */
+  direction?: "positive" | "negative" | "neutral";
   reasons: string[];
   read: boolean;
 }
@@ -138,7 +140,17 @@ export function NotificationBell() {
                         : <span className="notif-img-fallback">{(n.tickers[0] ?? "N")[0]}</span>}
                     </span>
                     <span className="notif-body">
-                      <span className="notif-header">{n.header}</span>
+                      <span className="notif-header">
+                        {n.direction && n.direction !== "neutral" && (
+                          <span
+                            title={n.direction === "positive" ? "Positive for the stock" : "Negative for the stock"}
+                            style={{ color: n.direction === "positive" ? "var(--up)" : "var(--down)", fontWeight: 700, marginRight: 6 }}
+                          >
+                            {n.direction === "positive" ? "▲" : "▼"}
+                          </span>
+                        )}
+                        {n.header}
+                      </span>
                       {n.tickers.length > 0 && (
                         <span className="notif-tickers">
                           {(n.matchedTickers?.length ? n.matchedTickers : n.tickers)
