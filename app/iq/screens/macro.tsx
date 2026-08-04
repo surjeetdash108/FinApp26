@@ -7,6 +7,7 @@ import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
 import { tapeItemsToIndexDocs } from "../live-market-indices";
 import type { MacroEventDoc, DividendDoc, DividendHistoryDoc, CompanyDoc } from "../types";
+import type { MarketStatusPayload } from "../types/market-status";
 import { rangeFor, inRange, fmtMonthDay, type RangeTabKey } from "../calendar-range";
 
 // ── Economic calendar ────────────────────────────────────────────────────────
@@ -293,6 +294,20 @@ export function MacroScreen() {
 
   const { data: liveDividends, loading: liveDividendsLoading } = useApiList<DividendDoc>("/market-data/dividends");
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: mktStatus } = useApiResource<MarketStatusPayload>("/live/market-status");
+  // Polygon /v1/marketstatus/upcoming — dedupe the per-exchange rows (NYSE +
+  // NASDAQ list the same holiday) by date+name; show the next handful.
+  const upcomingHolidays = (() => {
+    const seen = new Set<string>();
+    const out: MarketStatusPayload["upcoming"] = [];
+    for (const h of mktStatus?.upcoming ?? []) {
+      const key = h.date + h.name;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(h);
+    }
+    return out.slice(0, 6);
+  })();
   const { frame: tapeFrame } = useTapeStream();
   const liveVix = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items).find(i => i.label === "VIX") : null;
   // Real high-beta names (proxy for "VIX sensitive") — no live implied-vol
@@ -523,9 +538,30 @@ export function MacroScreen() {
       <div className="dash" style={{ alignItems: "stretch" }}>
         <div className="col-4" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div className="card">
-            <div className="card-h"><h3>Market regime</h3></div>
-            <div className="card-b" style={{ textAlign: "center", padding: "22px 15px" }}>
-              <DataState label="No live model computes a market-regime classification yet." />
+            <div className="card-h">
+              <h3>Market holidays</h3>
+              <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>
+            </div>
+            <div className="card-b" style={{ padding: "6px 13px 10px" }}>
+              {upcomingHolidays.length === 0 ? (
+                <DataState label="No upcoming market holidays." />
+              ) : upcomingHolidays.map(h => (
+                <div key={h.date + h.name} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "7px 0", borderBottom: "1px solid var(--border-soft)",
+                }}>
+                  <div>
+                    <div style={{ fontSize: ".82rem", color: "var(--text-hi)", fontWeight: 600 }}>{h.name}</div>
+                    <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", fontFamily: "var(--f-mono)" }}>
+                      {new Date(h.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    </div>
+                  </div>
+                  <span className="pill" style={{
+                    background: "var(--surface-3)", fontSize: ".58rem", textTransform: "capitalize",
+                    color: h.status === "closed" ? "var(--down)" : "var(--warn)",
+                  }}>{h.status === "early-close" ? "Early close" : h.status}</span>
+                </div>
+              ))}
             </div>
           </div>
           <div className="card vix" style={{ flex: 1 }}>
