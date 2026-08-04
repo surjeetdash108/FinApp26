@@ -12,7 +12,7 @@ export const menuItems = [
   { label: 'Options', slug: 'options', group: 'Intelligence', icon: '◈', badge: null },
   { label: 'Insider & Institutional', slug: 'insider', group: 'Intelligence', icon: '📄', badge: null },
   // ---- Context group ----
-  { label: 'Commentary', slug: 'commentary', group: 'Context', icon: '💬', badge: null },
+  { label: 'Live Feed', slug: 'commentary', group: 'Context', icon: '💬', badge: null },
   { label: 'Recaps', slug: 'recap', group: 'Context', icon: '🔖', badge: null },
   { label: 'Macro & VIX', slug: 'macro', group: 'Context', icon: '📅', badge: null },
   // ---- My Money group ----
