@@ -5,6 +5,7 @@ import { useIQActions } from "../shell";
 import { sign, heatCol, fmt, StockLogo, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { buildSectorList } from "../live-market-indices";
+import { INDEX_MEMBERS, HEATMAP_TAB_KEYS } from "../index-constituents";
 import type { CompanyDoc, SectorApiDoc } from "../types";
 
 const TABS = ["Stocks", "S&P 500", "Nasdaq", "Dow", "Russell 2000"];
@@ -53,9 +54,20 @@ export function HeatmapScreen() {
   const { openSector, openStockFull } = useIQActions();
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
-  const mergedSectorList = buildSectorList(companies, sectorsLive);
+  const fullSectorList = buildSectorList(companies, sectorsLive);
 
   const [tab, setTab]     = useState(0);
+
+  // Tab 0 = all synced stocks; 1-3 filter to the S&P 500 / Nasdaq-100 / Dow-30
+  // members that also exist in the live universe; 4 (Russell 2000) has no set.
+  const tabKey    = HEATMAP_TAB_KEYS[tab];
+  const memberSet = tabKey && tabKey !== "RUT" ? INDEX_MEMBERS[tabKey] : null;
+  const mergedSectorList = memberSet
+    ? fullSectorList
+        .map(g => ({ ...g, items: g.items.filter(([sym]) => memberSet.has(sym)) }))
+        .filter(g => g.items.length > 0)
+    : fullSectorList;
+  const membersShown = mergedSectorList.reduce((n, g) => n + g.items.length, 0);
   const [hover, setHover] = useState<HoverStock | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -91,6 +103,13 @@ export function HeatmapScreen() {
 
       <div className="fbar">
         <button className="chip on">Color: % change</button>
+        {tab !== 0 && (
+          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+            {tabKey === "RUT"
+              ? "Small-cap constituents aren't in the synced universe"
+              : `${membersShown} ${TABS[tab]} member${membersShown === 1 ? "" : "s"} in the live universe`}
+          </span>
+        )}
         <div className="spacer" />
         <div className="legend" style={{ gap: 4 }}>
           <span style={{ fontSize: ".66rem", color: "var(--down)" }}>−3%</span>
@@ -108,6 +127,22 @@ export function HeatmapScreen() {
         borderRadius: 10, overflow: "hidden",
         border: "1px solid var(--border)", background: "var(--bg)",
       }}>
+        {mergedSectorList.length === 0 && (
+          <div style={{
+            position: "absolute", inset: 0, display: "flex",
+            flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: 8, textAlign: "center", padding: 24,
+          }}>
+            <div style={{ fontSize: ".92rem", fontWeight: 700, color: "var(--text-hi)" }}>
+              No {TABS[tab]} constituents available
+            </div>
+            <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", maxWidth: 460, lineHeight: 1.55 }}>
+              {tabKey === "RUT"
+                ? "The Russell 2000 is a small-cap index. The synced universe is large-cap, so there are no overlapping names to plot. The data plan doesn't include index constituents to source them dynamically."
+                : "None of this index's members are in the currently synced universe yet."}
+            </div>
+          </div>
+        )}
         {sorted.map(g => {
           const lr = sectorRectMap[g.name];
           if (!lr) return null;
