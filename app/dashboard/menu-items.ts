@@ -13,17 +13,16 @@ export const menuItems = [
   { label: 'Themes', slug: 'themes', group: 'Research', icon: '◈', badge: null },
   { label: 'IPOs', slug: 'ipos', group: 'Research', icon: '🚀', badge: null },
   { label: 'Insider & Institutional', slug: 'insider', group: 'Research', icon: '📄', badge: null },
+  { label: 'Search', slug: 'stock', group: 'Research', icon: '📊', badge: null },
   // ---- Market Recaps ----
   { label: 'Daily/Weekly Recaps', slug: 'recap', group: 'Market Recaps', icon: '🔖', badge: null },
   // ---- My Workspace ----
   { label: 'Portfolio', slug: 'portfolio', group: 'My Workspace', icon: '💼', badge: null },
   { label: 'Watchlist', slug: 'watchlist', group: 'My Workspace', icon: '⭐', badge: null },
-  // ---- Hidden: route kept (static export + ⌘K search), not shown in the nav.
-  //      Options is hidden "for now"; Search (stock detail) is reached via ⌘K
-  //      and by clicking a ticker, not a nav item. The 'Hidden' group is not in
-  //      the shell's rendered group order, so these never appear in the menu. ----
+  // ---- Hidden: route kept (static export), not shown in the nav. Options is
+  //      hidden "for now". The 'Hidden' group is not in the shell's rendered
+  //      group order, so it never appears in the menu. ----
   { label: 'Options', slug: 'options', group: 'Hidden', icon: '◈', badge: null },
-  { label: 'Search', slug: 'stock', group: 'Hidden', icon: '📊', badge: null },
 ] as const;
 
 export type MenuItem = (typeof menuItems)[number];
