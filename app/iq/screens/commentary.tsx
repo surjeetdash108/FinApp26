@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { useIQActions } from "../shell";
 import { StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
-import { useApiResource } from "../hooks/useApiResource";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
 import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc } from "../types";
@@ -42,102 +40,54 @@ function etTimeLabel(iso: string): string {
   const dayPeriod = (parts.find(p => p.type === "dayPeriod")?.value ?? "AM").toLowerCase()[0];
   return `${hour}:${minute}${dayPeriod}`;
 }
-function timeAgo(iso: string): string {
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
-}
 
-/* ── Feed item component ── */
-function FeedItem({ item, i, total, onClick }: {
-  item: NewsArticleDoc; i: number; total: number; onClick: (ticker: string) => void;
+/* ── Feed item ── the logo filters the feed by that ticker; the body opens the source article. */
+function FeedItem({ item, i, total, onTicker }: {
+  item: NewsArticleDoc; i: number; total: number; onTicker: (ticker: string) => void;
 }) {
   return (
     <div
-      onClick={() => onClick(item.ticker)}
       style={{
         display: "flex", gap: 12, padding: "12px 0",
         borderBottom: i < total - 1 ? "1px solid var(--border-soft)" : "none",
-        cursor: "pointer", borderRadius: 8, transition: "background .14s",
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "var(--surface-1)"; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
     >
       <div style={{ flexShrink: 0, width: 90, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 5 }}>
-        <StockLogo sym={item.ticker} size={28} />
+        <button
+          onClick={() => onTicker(item.ticker)}
+          title={`Filter the feed by ${item.ticker}`}
+          style={{ all: "unset", cursor: "pointer", borderRadius: 6 }}
+        >
+          <StockLogo sym={item.ticker} size={28} />
+        </button>
         <span className="pill" style={{ background: "var(--surface-3)", color: catCol(item.category) }}>{catLabel(item.category)}</span>
         <div className="mono" style={{ fontSize: ".66rem", color: "var(--text-dim-solid)" }}>{etTimeLabel(item.publishedAt)}</div>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: ".88rem", color: "var(--text)" }}><b>{item.ticker}</b> {item.headline}</div>
+      <a
+        href={item.url} target="_blank" rel="noreferrer"
+        style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit", borderRadius: 8 }}
+      >
+        <div style={{ fontSize: ".88rem", color: "var(--text)" }}>
+          <b
+            onClick={e => { e.preventDefault(); onTicker(item.ticker); }}
+            style={{ cursor: "pointer" }}
+            title={`Filter the feed by ${item.ticker}`}
+          >{item.ticker}</b> {item.headline}
+        </div>
         {item.summary && (
           <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)", borderLeft: `2px solid ${catCol(item.category)}55`, paddingLeft: 9, marginTop: 5 }}>
             {item.summary}
           </div>
         )}
         <div style={{ marginTop: 6, fontSize: ".68rem", color: "var(--brand-2)", fontWeight: 600 }}>
-          View {item.ticker} news history →
+          {item.source ? `Read at ${item.source}` : "Read source"} →
         </div>
-      </div>
+      </a>
     </div>
   );
 }
 
-/* ── News Drawer ── */
-function NewsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
-  const { openStockFull } = useIQActions();
-  const { data: tickerNews, loading: tickerNewsLoading } = useApiResource<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`);
-  const liveItems = [...(tickerNews ?? [])].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-
-  return (
-    <>
-      <div className="scrim" onClick={onClose} />
-      <div className="side-drawer">
-        <div className="drawer-h">
-          <StockLogo sym={sym} size={38} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)" }}>{sym}</div>
-            <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginTop: 2 }}>News history</div>
-          </div>
-          <button className="closebtn" onClick={onClose}>✕</button>
-        </div>
-
-        <div className="drawer-b">
-          {liveItems.length === 0 ? (
-            <DataState loading={tickerNewsLoading} label={`No live news synced for ${sym} yet.`} />
-          ) : (
-            liveItems.map(item => (
-              <a key={item.id} href={item.url} target="_blank" rel="noreferrer"
-                className="minirow" style={{ alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 12, textDecoration: "none" }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ lineHeight: 1.5 }}>
-                    <span className="pill" style={{ background: "var(--surface-3)", color: catCol(item.category), marginRight: 6, fontSize: ".66rem" }}>
-                      {catLabel(item.category)}
-                    </span>
-                    <span style={{ fontSize: ".84rem", color: "var(--text)" }}>{item.headline}</span>
-                  </div>
-                  <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 3 }}>
-                    {item.source} · {timeAgo(item.publishedAt)}
-                  </div>
-                </div>
-              </a>
-            ))
-          )}
-
-          <button className="btn primary" style={{ width: "100%", marginTop: 14 }}
-            onClick={() => { onClose(); openStockFull(sym); }}>
-            Open full stock page →
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-/* ── Main commentary screen ── */
+/* ── Main commentary / Live Feed screen ── */
 export function CommentaryScreen() {
   const router = useRouter();
   const uid = firebaseAuth.currentUser?.uid ?? null;
@@ -145,7 +95,6 @@ export function CommentaryScreen() {
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
-  const [newsDrawer,    setNewsDrawer]    = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [suggOpen, setSuggOpen] = useState(false);
 
@@ -163,21 +112,41 @@ export function CommentaryScreen() {
 
   const symbolList = [...companies].filter(c => !!c.ticker).sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).map(c => ({ s: c.ticker, n: c.name ?? c.ticker }));
   const topSymbols = symbolList.slice(0, 8).map(x => x.s);
+  const knownSet = new Set(symbolList.map(x => x.s.toUpperCase()));
+
+  /* Active ticker filters — comma-separated, e.g. "NVDA, AAPL". A token counts
+     as a committed filter only once it exactly matches a known ticker, so a
+     half-typed symbol never blanks out the feed while you type. */
+  const tokens = search.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+  const filterTickers = [...new Set(tokens.filter(t => knownSet.size === 0 || knownSet.has(t)))];
+  const filterSet = new Set(filterTickers);
+
+  /* The token after the last comma is what you're currently typing → drives suggestions. */
+  const currentToken = (search.split(",").pop() ?? "").trim();
+  const q = currentToken.toUpperCase();
+  const ql = q.toLowerCase();
+  const suggestions = q.length >= 1
+    ? symbolList.filter(x => !filterSet.has(x.s.toUpperCase()) && (x.s.includes(q) || x.n.toLowerCase().includes(ql))).slice(0, 8)
+    : [];
 
   const sorted = [...liveNews].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
   const premarket  = sorted.filter(n => etHour(n.publishedAt) < 9.5);
   const afterHours = sorted.filter(n => etHour(n.publishedAt) >= 16);
   const macro      = sorted.filter(n => n.category !== "company");
-  const myFeed      = sorted.filter(n => mySymbols.has(n.ticker));
+  const myFeed     = sorted.filter(n => mySymbols.has(n.ticker));
 
   const tabFeed: NewsArticleDoc[] = (() => {
-    if (activeTab === 0) return sorted;
     if (activeTab === 1) return premarket;
     if (activeTab === 2) return afterHours;
     if (activeTab === 3) return myFeed;
     if (activeTab === 4) return macro;
     return sorted;
   })();
+
+  /* Filter the feed by the searched tickers (applied on top of the active tab). */
+  const displayFeed = filterSet.size > 0
+    ? tabFeed.filter(n => filterSet.has((n.ticker ?? "").toUpperCase()))
+    : tabFeed;
 
   const feedLabel = (() => {
     if (activeTab === 0) return { title: "Intraday commentary", badge: <span className="live"><span className="dot" />Live · streaming</span> };
@@ -188,16 +157,25 @@ export function CommentaryScreen() {
     return { title: "Commentary", badge: null };
   })();
 
-  const q = search.trim().toUpperCase();
-  const ql = q.toLowerCase();
-  const suggestions = q.length >= 1
-    ? symbolList.filter(x => x.s.includes(q) || x.n.toLowerCase().includes(ql)).slice(0, 8)
-    : [];
-
-  function openNews(sym: string) {
-    setSearch("");
+  function addTicker(sym: string) {
+    const next = [...new Set([...filterTickers, sym.toUpperCase()])];
+    setSearch(next.join(", ") + ", ");
     setSuggOpen(false);
-    setNewsDrawer(sym);
+    searchRef.current?.focus();
+  }
+  function removeTicker(sym: string) {
+    const next = filterTickers.filter(t => t !== sym.toUpperCase());
+    setSearch(next.length ? next.join(", ") + ", " : "");
+  }
+  function onSearchKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && suggestions.length > 0) {
+      e.preventDefault();
+      addTicker(suggestions[0].s);
+    } else if (e.key === "Backspace" && currentToken === "" && filterTickers.length > 0) {
+      // Backspace on an empty token pops the last committed ticker.
+      e.preventDefault();
+      removeTicker(filterTickers[filterTickers.length - 1]);
+    }
   }
 
   return (
@@ -213,17 +191,18 @@ export function CommentaryScreen() {
 
       <div style={{ padding: "0 18px 18px" }}>
 
-        {/* Ticker search bar */}
-        <div className="fbar" style={{ marginBottom: 12, position: "relative" }}>
+        {/* Ticker filter bar — comma-separated multi-ticker filter for the feed */}
+        <div className="fbar" style={{ marginBottom: 12, position: "relative", flexWrap: "wrap", gap: 8 }}>
           <div style={{ position: "relative", minWidth: "8.125rem" }}>
             <input
               ref={searchRef}
               className="mv-sel"
-              placeholder="Search stock…"
+              placeholder="Filter feed by ticker(s)…"
               value={search}
               onChange={e => { setSearch(e.target.value); setSuggOpen(true); }}
               onFocus={() => setSuggOpen(true)}
               onBlur={() => setTimeout(() => setSuggOpen(false), 160)}
+              onKeyDown={onSearchKeyDown}
               autoComplete="off"
               style={{ width: "100%" }}
             />
@@ -238,7 +217,7 @@ export function CommentaryScreen() {
                   <div
                     key={x.s}
                     className="sugg-row"
-                    onMouseDown={() => openNews(x.s)}
+                    onMouseDown={() => addTicker(x.s)}
                     style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer" }}
                   >
                     <b style={{ fontFamily: "var(--f-mono)", color: "var(--text-hi)", minWidth: 52 }}>{x.s}</b>
@@ -247,20 +226,39 @@ export function CommentaryScreen() {
                 ))}
               </div>
             )}
-            {suggOpen && q.length >= 1 && suggestions.length === 0 && (
+            {suggOpen && q.length >= 1 && suggestions.length === 0 && !filterSet.has(q) && (
               <div style={{
                 position: "absolute", top: "100%", left: 0, zIndex: 30,
                 background: "var(--surface-1)", border: "1px solid var(--border)",
                 borderRadius: "var(--r-sm)", marginTop: 2, minWidth: 220, width: "100%",
                 padding: "10px 12px", fontSize: ".78rem", color: "var(--text-dim-solid)",
               }}>
-                No match for &ldquo;{search.toUpperCase()}&rdquo;
+                No match for &ldquo;{currentToken.toUpperCase()}&rdquo;
               </div>
             )}
           </div>
+
+          {/* Active filter chips */}
+          {filterTickers.map(t => (
+            <button
+              key={t}
+              className="chip"
+              onClick={() => removeTicker(t)}
+              title={`Remove ${t} from the filter`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              {t} <span aria-hidden style={{ color: "var(--text-dim-solid)", fontWeight: 700 }}>✕</span>
+            </button>
+          ))}
+          {filterTickers.length > 0 && (
+            <button className="chip ghost" onClick={() => setSearch("")} title="Clear all filters">Clear</button>
+          )}
+
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            Type a ticker, then click it to open a side panel of its news
+            {filterTickers.length > 0
+              ? `Showing ${displayFeed.length} item${displayFeed.length === 1 ? "" : "s"} for ${filterTickers.join(", ")}`
+              : "Type ticker(s), comma-separated, to filter the feed — e.g. NVDA, AAPL"}
           </span>
         </div>
 
@@ -270,31 +268,38 @@ export function CommentaryScreen() {
           <div className="col-8">
             <div className="card">
               <div className="card-h">
-                <h3>{feedLabel.title}</h3>
+                <h3>{feedLabel.title}{filterTickers.length > 0 ? ` · ${filterTickers.join(", ")}` : ""}</h3>
                 {feedLabel.badge}
               </div>
               <div className="card-b" style={{ paddingTop: 2, maxHeight: 620, overflowY: "auto" }}>
-                {tabFeed.length === 0 ? (
-                  <DataState loading={liveNewsLoading} label={activeTab === 3
-                    ? (uid ? "No live news matches your portfolio or watchlist names right now." : "Sign in and add names to your watchlist or portfolio to see this feed.")
-                    : "No live news items in this category right now."} />
-                ) : tabFeed.map((item, i) => (
-                  <FeedItem key={item.id} item={item} i={i} total={tabFeed.length} onClick={openNews} />
+                {displayFeed.length === 0 ? (
+                  <DataState loading={liveNewsLoading} label={
+                    filterTickers.length > 0
+                      ? `No commentary for ${filterTickers.join(", ")} in this tab.`
+                      : activeTab === 3
+                        ? (uid ? "No live news matches your portfolio or watchlist names right now." : "Sign in and add names to your watchlist or portfolio to see this feed.")
+                        : "No live news items in this category right now."} />
+                ) : displayFeed.map((item, i) => (
+                  <FeedItem key={item.id} item={item} i={i} total={displayFeed.length} onTicker={addTicker} />
                 ))}
               </div>
             </div>
 
-            {/* Quick news lookup — always visible at the bottom of the feed column */}
+            {/* Quick lookup — tap a ticker to add it to the feed filter */}
             <div className="card" style={{ marginTop: 14 }}>
               <div className="card-h">
-                <h3>{activeTab === 3 ? "Tracked names" : "Quick news lookup"}</h3>
-                <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>tap to open</span>
+                <h3>{activeTab === 3 ? "Tracked names" : "Quick filter"}</h3>
+                <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>tap to add to filter</span>
               </div>
               <div className="card-b" style={{ paddingTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {(activeTab === 3 ? [...mySymbols] : topSymbols).length === 0 ? (
                   <DataState loading={activeTab === 3 ? false : companiesLoading} label={activeTab === 3 ? "No tracked names yet." : "No live companies synced yet."} />
                 ) : (activeTab === 3 ? [...mySymbols] : topSymbols).map(sym => (
-                  <button key={sym} className="chip" onClick={() => openNews(sym)}>{sym}</button>
+                  <button
+                    key={sym}
+                    className={`chip${filterSet.has(sym.toUpperCase()) ? " on" : ""}`}
+                    onClick={() => (filterSet.has(sym.toUpperCase()) ? removeTicker(sym) : addTicker(sym))}
+                  >{sym}</button>
                 ))}
               </div>
             </div>
@@ -318,7 +323,7 @@ export function CommentaryScreen() {
                 </div>
               </div>
               <div className="wmn-body" style={{ padding: "6px 18px 14px" }}>
-                <DataState label="A pushed pre-market summary (futures, overnight moves, names reporting before the open) needs a scheduled digest job — not built yet. Live news for any ticker is available via the feed and search above." />
+                <DataState label="A pushed pre-market summary (futures, overnight moves, names reporting before the open) needs a scheduled digest job — not built yet. Live news for any ticker is available via the feed and filter above." />
               </div>
             </div>
 
@@ -347,11 +352,6 @@ export function CommentaryScreen() {
           </div>
         </div>
       </div>
-
-      {/* News history sliding drawer */}
-      {newsDrawer && (
-        <NewsDrawer sym={newsDrawer} onClose={() => setNewsDrawer(null)} />
-      )}
     </>
   );
 }
