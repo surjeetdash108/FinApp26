@@ -1,7 +1,7 @@
 "use client";
 
 // iq.css is imported globally via app/layout.tsx
-import { ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { ReactNode, createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -91,6 +91,41 @@ export function ExpandBtn({ title, node }: { title: string; node: ReactNode }) {
 }
 
 // ---- Nav icon SVG ----
+/**
+ * MarketCatalyst brand mark — inline SVG (ascending bar-chart + trend line +
+ * node) and the wordmark "Market" (light) + "Catalyst" (blue→purple gradient).
+ * Replaces the missing /logo-marketcatalyst.png; crisp at any size, theme-aware.
+ */
+function BrandLogo({ height = 28 }: { height?: number }) {
+  const gid = useId().replace(/:/g, "");
+  return (
+    <span className="brand-logo" style={{ display: "inline-flex", alignItems: "center", gap: Math.round(height * 0.3), lineHeight: 1 }}>
+      <svg viewBox="0 0 44 44" width={height} height={height} aria-hidden="true" style={{ flexShrink: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="4" y1="40" x2="40" y2="4" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#2fe6a6" />
+            <stop offset="0.5" stopColor="#38d6e6" />
+            <stop offset="1" stopColor="#5b8cff" />
+          </linearGradient>
+        </defs>
+        <rect x="5" y="27" width="6" height="12" rx="2" fill={`url(#${gid})`} />
+        <rect x="14" y="21" width="6" height="18" rx="2" fill={`url(#${gid})`} />
+        <rect x="23" y="15" width="6" height="24" rx="2" fill={`url(#${gid})`} />
+        <rect x="32" y="9" width="6" height="30" rx="2" fill={`url(#${gid})`} />
+        <path d="M7 30 L16 23 L25 17 L35 8" fill="none" stroke={`url(#${gid})`} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="35" cy="8" r="3.6" fill="#0b0f16" stroke={`url(#${gid})`} strokeWidth="2.4" />
+      </svg>
+      <span style={{
+        fontFamily: "var(--f-display), system-ui, sans-serif",
+        fontWeight: 800, fontSize: Math.round(height * 0.68), letterSpacing: "-0.02em", whiteSpace: "nowrap",
+      }}>
+        <span style={{ color: "#fff" }}>Market</span>
+        <span className="brand-word-grad">Catalyst</span>
+      </span>
+    </span>
+  );
+}
+
 function NavIcon({ slug }: { slug: string }) {
   const paths: Record<string, string> = {
     dashboard:   "M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z",
@@ -776,7 +811,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
             {/* Brand cell */}
             <div className="brandcell">
               <div className="brand-top">
-                <img src="/logo-marketcatalyst.png" alt="MarketCatalyst" className="brand-logo" />
+                <BrandLogo height={28} />
                 <button
                   className="nav-collapse-btn"
                   onClick={() => setNavCollapsed(c => { const next = !c; localStorage.setItem("iq-nav-collapsed", next ? "1" : "0"); return next; })}
@@ -807,7 +842,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
               </button>
               {/* Mobile brand — hidden on desktop via CSS */}
               <div className="mob-brand">
-                <img src="/logo-marketcatalyst.png" alt="MarketCatalyst" className="brand-logo" style={{ height: 22 }} />
+                <BrandLogo height={22} />
               </div>
               <div className="cmd-wrap" ref={cmdRef}>
                 <div className={`cmd${searchOpen ? " cmd-active" : ""}`}>
@@ -952,7 +987,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
             <nav ref={railRef} className={`rail${navOpen ? " mob-open" : ""}`}>
               {/* Mobile rail header — hidden on desktop via CSS */}
               <div className="mob-rail-head">
-                <img src="/logo-marketcatalyst.png" alt="MarketCatalyst" className="brand-logo" style={{ height: 22 }} />
+                <BrandLogo height={22} />
                 <button className="mob-nav-close" onClick={() => setNavOpen(false)} aria-label="Close navigation">✕</button>
               </div>
               {(["Home", "Markets", "Research", "Market Recaps", "My Workspace"] as const).map(group => (

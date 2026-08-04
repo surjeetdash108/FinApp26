@@ -1,7 +1,6 @@
 export const menuItems = [
   // ---- Home ----
   { label: 'Dashboard', slug: 'dashboard', group: 'Home', icon: '⬛', badge: null },
-  { label: 'Live Feed', slug: 'commentary', group: 'Home', icon: '💬', badge: null },
   // ---- Markets ----
   { label: 'Earnings Hub', slug: 'earnings', group: 'Markets', icon: '📋', badge: null },
   { label: 'Movers', slug: 'movers', group: 'Markets', icon: '📈', badge: null },
@@ -15,6 +14,7 @@ export const menuItems = [
   { label: 'Insider & Institutional', slug: 'insider', group: 'Research', icon: '📄', badge: null },
   // ---- Market Recaps ----
   { label: 'Daily/Weekly Recaps', slug: 'recap', group: 'Market Recaps', icon: '🔖', badge: null },
+  { label: 'Market Commentary', slug: 'commentary', group: 'Market Recaps', icon: '💬', badge: null },
   // ---- My Workspace ----
   { label: 'Portfolio', slug: 'portfolio', group: 'My Workspace', icon: '💼', badge: null },
   { label: 'Watchlist', slug: 'watchlist', group: 'My Workspace', icon: '⭐', badge: null },
