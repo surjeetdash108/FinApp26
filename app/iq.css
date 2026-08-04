@@ -737,7 +737,7 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .sd-about {
   margin-top: 12px; padding: 12px 14px;
   background: var(--surface-1); border: 1px solid var(--border-soft);
-  border-radius: var(--r-sm); max-width: 920px;
+  border-radius: var(--r-sm); width: 100%;
 }
 .sd-about-lbl {
   font-size: .66rem; font-weight: 700; letter-spacing: .09em;
