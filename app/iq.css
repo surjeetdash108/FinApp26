@@ -733,6 +733,20 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .sd-head .sd-px .p { font-family: var(--f-mono); font-size: 1.7rem; font-weight: 700; color: var(--text-hi); }
 .sd-head .sd-px .c { font-family: var(--f-mono); font-size: .86rem; font-weight: 600; }
 .sd-head .sd-actions { margin-left: auto; display: flex; gap: 8px; }
+/* About-the-company blurb under the ticker header (Polygon description). */
+.sd-about {
+  margin-top: 12px; padding: 12px 14px;
+  background: var(--surface-1); border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm); max-width: 920px;
+}
+.sd-about-lbl {
+  font-size: .66rem; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--text-dim-solid);
+}
+.sd-about p.clamp {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .fin-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
 .fin-row:last-child { border-bottom: none; }
 .fin-lbl { font-size: 0.7188rem; color: var(--text-dim-solid); }

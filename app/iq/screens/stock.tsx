@@ -405,6 +405,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSym]);
   const [search, setSearch] = useState("");
+  const [aboutOpen, setAboutOpen] = useState(false);
+  // Collapse the About blurb whenever the ticker changes.
+  useEffect(() => { setAboutOpen(false); }, [sym]);
   const [tfActive, setTfActive] = useState("3M");
   const [toneActive, setToneActive] = useState("Swing");
   const [showVol, setShowVol] = useState(true);
@@ -518,6 +521,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
   const data = {
     name: liveCompany?.name ?? sym,
+    description: liveCompany?.description ?? null,
+    homepageUrl: liveCompany?.homepageUrl ?? null,
     price: liveCompany?.price ?? 0,
     pctChange: liveCompany?.pctChange ?? 0,
     peRatio: liveCompany?.peRatio ?? null,
@@ -733,6 +738,36 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               <div className={`c ${cls(data.pctChange)}`}>{arr(data.pctChange)} {data.pctChange >= 0 ? "+" : ""}${fmt(dollar, 2)} ({sign(data.pctChange)})</div>
             </div>
           </div>
+
+          {/* About the company — Polygon /v3/reference/tickers description, wired
+              via /live/company. Clamps to a few lines with a Show more toggle. */}
+          {data.description && (
+            <div className="sd-about">
+              <div className="sd-about-lbl">About {data.name}</div>
+              <p
+                className={aboutOpen ? "" : "clamp"}
+                style={{ margin: "4px 0 0", fontSize: ".82rem", lineHeight: 1.6, color: "var(--text-dim-solid)" }}
+              >
+                {data.description}
+              </p>
+              <div style={{ marginTop: 6, display: "flex", gap: 12, alignItems: "center" }}>
+                {data.description.length > 220 && (
+                  <button
+                    onClick={() => setAboutOpen(o => !o)}
+                    style={{ all: "unset", cursor: "pointer", fontSize: ".72rem", fontWeight: 600, color: "var(--brand-2)" }}
+                  >
+                    {aboutOpen ? "Show less" : "Show more"}
+                  </button>
+                )}
+                {data.homepageUrl && (
+                  <a href={data.homepageUrl} target="_blank" rel="noreferrer"
+                    style={{ fontSize: ".72rem", fontWeight: 600, color: "var(--brand-2)", textDecoration: "none" }}>
+                    Company website ↗
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -11,6 +11,10 @@ export interface CompanyDoc {
   id: string;
   ticker: string;
   name: string | null;
+  // Polygon company profile blurb + IR homepage (from /v3/reference/tickers),
+  // populated on-demand by /live/company. Absent on bulk-synced docs.
+  description?: string | null;
+  homepageUrl?: string | null;
   price: number | null;
   pctChange: number | null;
   marketCap: number | null;
