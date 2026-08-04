@@ -279,7 +279,7 @@ export async function buildAdminDataset(): Promise<ConsoleDataset> {
     apiGet<{ adoption: BackendAdoptionRow[] }>("/admin/feature-adoption").catch(
       () => ({ adoption: [] as BackendAdoptionRow[] }),
     ),
-    apiGet<ApiHealthReport>("/admin/api-health").catch(() => null),
+    apiGet<ApiHealthReport>("/admin/apihealth").catch(() => null),
   ]);
 
   const backendUsers = usersRes.users ?? [];

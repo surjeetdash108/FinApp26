@@ -37,7 +37,7 @@
         "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
       },
       {
-        "source": "/admin/api-health",
+        "source": "/admin/apihealth",
         "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
       },
       {

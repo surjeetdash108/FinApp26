@@ -97,12 +97,12 @@ export default function AdminPage() {
       }
       if (d.type === "admin:apiHealth") {
         // Live re-check for the Monitor tab. The iframe has no token, so it asks
-        // here; we hit GET /admin/api-health (AdminGuard) and post the fresh
+        // here; we hit GET /admin/apihealth (AdminGuard) and post the fresh
         // report back for the console to re-render.
         const post = (m: Record<string, unknown>) =>
           iframeRef.current?.contentWindow?.postMessage({ type: "admin:apiHealthResult", ...m }, "*");
         try {
-          const data = await apiGet("/admin/api-health");
+          const data = await apiGet("/admin/apihealth");
           post({ ok: true, data });
         } catch (err) {
           post({ ok: false, error: (err as Error).message });
