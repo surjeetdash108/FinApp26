@@ -154,7 +154,8 @@
    toggle side by side. The toggle wins: it is the only way back out, whereas the
    logo is decorative and returns on expand. `margin-left: 0` undoes the
    right-push so it centres. */
-.app.nav-collapsed .logo { display: none; }
+.app.nav-collapsed .logo,
+.app.nav-collapsed .brand-logo { display: none; }
 .app.nav-collapsed .nav-collapse-btn { margin-left: 0; }
 .app.nav-collapsed .rail { padding: 10px 6px 8px; align-items: center; }
 .app.nav-collapsed .navitem { justify-content: center; padding: 7px; gap: 0; }
@@ -205,6 +206,10 @@
   box-shadow: 0 4px 14px -4px var(--brand);
 }
 .logo svg { width: 18px; height: 18px; }
+.brand-logo {
+  height: 28px; width: auto; max-width: 100%;
+  object-fit: contain; flex-shrink: 0;
+}
 .wordmark {
   font-family: var(--f-display); font-weight: 700; font-size: 0.9375rem;
   color: var(--text-hi); letter-spacing: -.3px;
@@ -378,7 +383,7 @@
   position: relative; z-index: 7;
 }
 .sec-lbl {
-  font-size: 0.625rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  font-size: 0.75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--text-dim-solid); padding: 10px 8px 4px; margin-top: 4px;
 }
 .sec-lbl:first-child { margin-top: 0; padding-top: 4px; }
