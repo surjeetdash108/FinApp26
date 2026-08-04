@@ -189,7 +189,7 @@
   z-index: 10;
   background: var(--surface-0);
 }
-.brand-top { display: flex; align-items: center; gap: 10px; }
+.brand-top { display: flex; align-items: center; gap: 6px; }
 .nav-clock {
   font-size: .72rem; color: var(--text-dim-solid);
   font-family: var(--f-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -211,9 +211,10 @@
 }
 .wordmark span {
   display: block;
-  font-family: var(--f-body); font-weight: 500; font-size: .58rem;
-  letter-spacing: .18em; text-transform: uppercase;
+  font-family: var(--f-body); font-weight: 500; font-size: .53rem;
+  letter-spacing: .08em; text-transform: uppercase;
   color: var(--text-dim-solid); margin-top: -2px;
+  white-space: nowrap;
 }
 
 /* topbar */
