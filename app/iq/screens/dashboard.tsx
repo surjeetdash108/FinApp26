@@ -4,12 +4,12 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { firebaseAuth } from "../../firebase";
 import { useIQActions, ExpandBtn } from "../shell";
-import { pulse as mockPulse, sectorList, type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem } from "../data";
+import { sectorList, type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
-import { mergePulse, tapeItemsToIndexDocs } from "../live-market-indices";
+import { pulseFromLive, tapeItemsToIndexDocs } from "../live-market-indices";
 import type {
   LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
   InsiderTxDoc, AnalystConsensusDoc, MarketSentimentDoc,
@@ -284,7 +284,7 @@ export function DashboardScreen() {
   const { data: consensusLive, loading: consensusLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   const { data: mostSearched, loading: mostSearchedLoading } = useApiResource<{ results: Array<{ ticker: string; count: number }> }>("/live/most-searched-tickers?limit=10");
 
-  const pulse = mergePulse(mockPulse, liveIndices);
+  const pulse = pulseFromLive(liveIndices);
   const movers = mergeMoversData(liveMovers, companies);
   const earnings = mergeEarningsData(liveEarnings);
   const mergedSectorList = mergeSectorListData(sectorList, companies, sectorsLive);
@@ -950,52 +950,13 @@ export function DashboardScreen() {
 
 /** Live Market Feed — real synced news, falling back to the original mock items if none are synced yet. */
 function LiveFeedList() {
-  const { data: news } = useApiList<NewsArticleDoc>("/market-data/news");
+  const { data: news, loading } = useApiList<NewsArticleDoc>("/market-data/news");
   const recent = [...news].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 5);
 
-  const MOCK_LIVE_FEED = [
-    {
-      cat: "Earnings", col: "var(--up)", time: "9:31a",
-      t: '<b style="color:var(--text-hi)">NVDA</b> beats EPS 18%, raises FY25',
-      why: "AI data-center demand still accelerating.",
-    },
-    {
-      cat: "Analyst", col: "var(--brand-2)", time: "9:18a",
-      t: 'MS upgrades <b style="color:var(--text-hi)">CRM</b> to Overweight, PT $340',
-      why: "Sell-side turning constructive on margins.",
-    },
-    {
-      cat: "Macro", col: "var(--warn)", time: "8:30a",
-      t: 'May core CPI <b style="color:var(--text-hi)">+0.2%</b> m/m, below est.',
-      why: "Lifts September rate-cut odds; yields fell.",
-    },
-  ];
-
+  // No mock fallback: when there's no live news, show an honest empty state
+  // rather than fabricated headlines that read as real market events.
   if (recent.length === 0) {
-    return <>
-      {MOCK_LIVE_FEED.map((f, i) => (
-        <div key={i} style={{
-          display: "flex", gap: 10, padding: "9px 0",
-          borderBottom: i < MOCK_LIVE_FEED.length - 1 ? "1px solid var(--border-soft)" : undefined,
-        }}>
-          <div style={{ flexShrink: 0, width: 62 }}>
-            <span className="pill" style={{ background: "var(--surface-3)", color: f.col }}>{f.cat}</span>
-            <div style={{ fontFamily: "var(--f-mono)", fontSize: ".6rem", color: "var(--text-dim-solid)", marginTop: 5 }}>
-              {f.time}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: ".8rem", color: "var(--text)" }} dangerouslySetInnerHTML={{ __html: f.t }} />
-            <div style={{
-              fontSize: ".72rem", color: "var(--text-dim-solid)",
-              borderLeft: `2px solid ${f.col}55`, paddingLeft: 8, marginTop: 4,
-            }}>
-              <b style={{ color: "var(--ai)", fontWeight: 600 }}>Why · </b>{f.why}
-            </div>
-          </div>
-        </div>
-      ))}
-    </>;
+    return <DataState loading={loading} label="No market-moving news right now." />;
   }
 
   return <>

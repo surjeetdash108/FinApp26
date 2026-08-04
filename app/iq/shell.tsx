@@ -17,14 +17,14 @@ import { apiGet, apiPatch, apiPost, apiDelete } from "./backend";
 import { useAppSelector } from "../store/hooks";
 import { AuthGuard } from "../dashboard/auth-guard";
 import { menuItems } from "../dashboard/menu-items";
-import { pulse, type PulseItem } from "./data";
+import { type PulseItem } from "./data";
 import { fmt, sign, cls, arr, SemiGauge, DataState, NotAvailable } from "./utils";
 import { NotificationBell } from "./notification-bell";
 import { useTickerSearch } from "./hooks/useTickerSearch";
 import { useTapeStream } from "./hooks/useTapeStream";
 import { useBackendMarketStatus } from "./hooks/useBackendMarketStatus";
 import { useApiList } from "./hooks/useApiList";
-import { mergePulse, tapeItemsToIndexDocs } from "./live-market-indices";
+import { pulseFromLive, tapeItemsToIndexDocs } from "./live-market-indices";
 import type { CompanyDoc, SectorApiDoc, LiveEarningsDoc, WatchlistDoc } from "./types";
 
 // ---- Route helpers ----
@@ -543,7 +543,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   // listener — one shared upstream Polygon call for every connected browser.
   const { frame: tapeFrame } = useTapeStream();
   const liveIndices = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items) : [];
-  const livePulse = mergePulse(pulse, liveIndices);
+  const livePulse = pulseFromLive(liveIndices);
   const tickerItems = [...livePulse, ...livePulse];
 
   // Shared live data for the shell-level drawers (stock/sector/earnings/index

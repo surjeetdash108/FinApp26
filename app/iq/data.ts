@@ -92,17 +92,6 @@ export interface RecapData {
 }
 
 // ---- Market Pulse (10 items) ----
-export const pulse: PulseItem[] = [
-  { label: 'S&P 500',      value: 5312.08,  change: 0.73,  open: 5281.4,  prevClose: 5273.66 },
-  { label: 'Nasdaq',       value: 16973.17, change: 1.02,  open: 16800.0, prevClose: 16801.7 },
-  { label: 'Dow',          value: 39872.4,  change: 0.41,  open: 39714.0, prevClose: 39709.6 },
-  { label: 'Russell 2K',   value: 2061.3,   change: -0.32, open: 2071.4,  prevClose: 2067.9  },
-  { label: 'VIX',          value: 14.18,    change: -2.51, open: 14.52,   prevClose: 14.54   },
-  { label: '10Y Yield',    value: 4.32,     change: -0.04, open: 4.36,    prevClose: 4.36    },
-  { label: 'WTI Crude',    value: 78.64,    change: -1.21, open: 79.42,   prevClose: 79.60   },
-  { label: 'Gold',         value: 2344.10,  change: 0.31,  open: 2337.0,  prevClose: 2336.8  },
-  { label: 'Dollar (DXY)', value: 104.21,   change: 0.12,  open: 104.08,  prevClose: 104.09  },
-];
 
 // ---- What Matters Now ----
 function _hash(s: string): number {

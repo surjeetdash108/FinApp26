@@ -44,31 +44,30 @@ export function tapeItemsToIndexDocs(items: TapeItem[]): IndexDoc[] {
 }
 
 /**
- * Shared by Dashboard's Market Pulse widget and the shell's top ticker strip
- * — keeps both merges identical instead of drifting apart.
- *
- * `mock` supplies only the STRUCTURE (which 9 indices exist and their
- * display labels — fixed configuration, not market data). Every numeric
- * field (value/change/open/prevClose) must come from a live match; an index
- * with no live doc yet is dropped from the result rather than rendered with
- * its old static price, which used to render as if it were a real quote.
+ * Builds the index strip (Dashboard Market Pulse + shell ticker strip) PURELY
+ * from live tape data — no static seed. `PULSE_INDEX_IDS` is display config
+ * (which indices to show and in what order), not market data: every label and
+ * value comes from the live IndexDoc, and an index with no live match is
+ * dropped rather than rendered with a fabricated number. Open/prevClose fall
+ * back to the current value ("flat"), never to any static number.
  */
-export function mergePulse(mock: PulseItem[], live: IndexDoc[]): PulseItem[] {
-  const liveById = new Map(live.map(l => [l.id, l]));
-  const merged: PulseItem[] = [];
-  for (const p of mock) {
-    const id = PULSE_LABEL_TO_INDEX_ID[p.label];
-    const l = id ? liveById.get(id) : undefined;
+const PULSE_INDEX_IDS = ["SPX", "NDX", "DJI", "RUT", "VIX", "US10Y", "WTI", "GOLD", "DXY"];
+
+export function pulseFromLive(live: IndexDoc[]): PulseItem[] {
+  const byId = new Map(live.map(l => [l.id, l]));
+  const out: PulseItem[] = [];
+  for (const id of PULSE_INDEX_IDS) {
+    const l = byId.get(id);
     if (!l) continue;
-    // open/prevClose aren't always on the live doc yet; fall back to the
-    // current value (reads as "flat"), never to the old mock's number.
-    // dayHigh/dayLow have no safe "flat" fallback — left undefined (renders
-    // NotAvailable) rather than guessed at from the current value.
-    merged.push({
-      ...p, value: l.value, change: l.pctChange,
-      open: l.open ?? l.value, prevClose: l.prevClose ?? l.value,
-      dayHigh: l.dayHigh, dayLow: l.dayLow,
+    out.push({
+      label: l.label,
+      value: l.value,
+      change: l.pctChange,
+      open: l.open ?? l.value,
+      prevClose: l.prevClose ?? l.value,
+      dayHigh: l.dayHigh,
+      dayLow: l.dayLow,
     });
   }
-  return merged;
+  return out;
 }
