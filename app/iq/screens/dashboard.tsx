@@ -4,12 +4,12 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { firebaseAuth } from "../../firebase";
 import { useIQActions, ExpandBtn } from "../shell";
-import { sectorList, type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem } from "../data";
+import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
-import { pulseFromLive, tapeItemsToIndexDocs } from "../live-market-indices";
+import { pulseFromLive, buildSectorList, tapeItemsToIndexDocs } from "../live-market-indices";
 import type {
   LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
   InsiderTxDoc, AnalystConsensusDoc, MarketSentimentDoc,
@@ -104,32 +104,6 @@ function mergeEarningsData(live: LiveEarningsDoc[]): Earning[] {
     guidanceStatus: null, priceReaction: null, impliedMove: null,
     tags: [], owned: false,
   }));
-}
-
-function mergeSectorListData(base: SectorRow[], companies: CompanyDoc[], sectorsLive: SectorApiDoc[]): SectorRow[] {
-  const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
-  const sectorPctByName = new Map(sectorsLive.map(s => [s.sector, s.pctChange]));
-  return base.map(row => {
-    const liveSectorPct = sectorPctByName.get(row.name);
-    // Sector *membership* (which tickers belong to which sector) is fixed
-    // editorial grouping, same category as Themes' curated lists — not
-    // fabricated market data. Only per-stock cap/%change must be live or
-    // dropped; an unmatched ticker is filtered out rather than shown with
-    // its old mock numbers.
-    const items = row.items
-      .map(([sym]): [string, number, number] | null => {
-        const c = companyByTicker.get(sym);
-        if (!c || c.marketCap == null || c.pctChange == null) return null;
-        return [sym, c.marketCap / 1e9, c.pctChange];
-      })
-      .filter((x): x is [string, number, number] => x !== null);
-    // Real: a direct live-sector match, else the average of this sector's
-    // own real per-company changes above — never the static base's number.
-    const pctChange = liveSectorPct
-      ?? (items.length > 0 ? items.reduce((s, [, , c]) => s + c, 0) / items.length : null);
-    const trend = pctChange == null ? null : pctChange > 0.5 ? "Improving" : pctChange < -0.5 ? "Deteriorating" : "Flat";
-    return { ...row, pctChange, trend, items };
-  });
 }
 
 function DashPopContent({
@@ -287,7 +261,7 @@ export function DashboardScreen() {
   const pulse = pulseFromLive(liveIndices);
   const movers = mergeMoversData(liveMovers, companies);
   const earnings = mergeEarningsData(liveEarnings);
-  const mergedSectorList = mergeSectorListData(sectorList, companies, sectorsLive);
+  const mergedSectorList = buildSectorList(companies, sectorsLive);
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
 
   // key = the Firestore doc id, not ticker+dir: a single ticker can have

@@ -94,51 +94,6 @@ export interface RecapData {
 // ---- Market Pulse (10 items) ----
 
 // ---- What Matters Now ----
-function _hash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
-const _bigCap: Record<string, number> = {
-  NVDA: 2910, MSFT: 3100, AAPL: 3000, AMZN: 1900, META: 1200,
-  AVGO: 612, GOOG: 2100, TSLA: 536, 'BRK.B': 860, JPM: 560,
-};
-function _mcap(t: string): number { return _bigCap[t] || (12 + _hash(t) % 270); }
-
-const SEC: [string, number, string[]][] = [
-  ['Semiconductors',   3.1,  ['NVDA','AVGO','TSM','QCOM','AMD','TXN','MU','AMAT','KLAC','LRCX','INTC','ON','MRVL','MPWR']],
-  ['Mega-Cap Tech',    2.4,  ['AAPL','MSFT','GOOG','AMZN','META','NFLX','ORCL','ADBE','CSCO','IBM','SAP','INTU']],
-  ['Cloud Software',   1.8,  ['CRM','NOW','SNOW','DDOG','MDB','WDAY','ADSK','VEEV','HUBS','OKTA','ZI','APP','TEAM']],
-  ['Social Media',     2.1,  ['META','SNAP','PINS','RDDT','YELP','MTCH','ZG','IAC','ANGI','BMBL','SOFI','HOOD']],
-  ['E-Commerce',       1.5,  ['AMZN','SHOP','BABA','MELI','JD','PDD','EBAY','ETSY','W','CHWY','WISH','CART']],
-  ['Cybersecurity',    0.9,  ['CRWD','PANW','ZS','FTNT','S','OKTA','CYBR','NET','GEN','TENB','QLYS','RPM']],
-  ['EV / Clean Energy',-1.3, ['TSLA','BYD','RIVN','NIO','LCID','GM','F','PLUG','FCEL','BLNK','BE','CHPT','NKLA']],
-  ['Consumer Disc.',   0.6,  ['AMZN','HD','MCD','NKE','SBUX','TGT','LULU','CMG','LOW','BKNG','MAR','HLT','DG']],
-  ['Financials',       0.8,  ['JPM','BAC','GS','MS','V','MA','AXP','BRK.B','WFC','C','SCHW','BX','KKR']],
-  ['Healthcare',       0.2,  ['UNH','JNJ','LLY','ABBV','MRK','TMO','DHR','PFE','BMY','GILD','CVS','CI','HUM']],
-  ['Energy',          -0.7,  ['XOM','CVX','COP','SLB','EOG','OXY','PSX','VLO','MPC','HAL','DVN','PXD','BKR']],
-  ['Industrials',      0.4,  ['CAT','GE','HON','RTX','UPS','LMT','NOC','GD','MMM','EMR','ETN','ITW','PH']],
-  ['Real Estate',     -0.5,  ['AMT','PLD','EQIX','SPG','O','WELL','DLR','PSA','VTR','AVB','EQR','ARE','WY']],
-  ['Utilities',       -0.3,  ['NEE','DUK','SO','AEP','EXC','D','PCG','SRE','ES','XEL','PEG','ED','WEC']],
-  ['Materials',        0.1,  ['LIN','APD','SHW','FCX','NEM','DOW','DD','NUE','ALB','MOS','IP','PKG','CE']],
-  ['Consumer Staples', 0.3,  ['PG','KO','PEP','WMT','COST','PM','MO','CL','GIS','KMB','KHC','SYY','MKC']],
-  ['Biotech',          1.2,  ['AMGN','BIIB','REGN','VRTX','MRNA','GILD','ILMN','ALNY','EXAS','SGEN','SAGE','SRPT']],
-  ['Med Devices',      0.5,  ['MDT','ABT','ISRG','BSX','SYK','EW','ZBH','BDX','IQV','TMO','RMD','HOLX']],
-  ['Insurance',        0.6,  ['CB','MET','AIG','PRU','AFL','TRV','ALL','MKL','HIG','LNC','GL','EQH']],
-  ['Banks',            0.9,  ['JPM','BAC','WFC','C','USB','PNC','TFC','FITB','KEY','RF','HBAN','CFG','MTB']],
-  ['Autos',           -0.8,  ['TSLA','TM','GM','F','STLA','HMC','RIVN','NIO','LCID','RACE','BWM','VWAGY']],
-];
-
-export const sectorList: SectorRow[] = SEC.map((row, i) => {
-  const [name, pctChange, tk] = row;
-  return {
-    name, rank: i + 1,
-    trend: pctChange > 0.5 ? 'Improving' : pctChange < -0.5 ? 'Deteriorating' : 'Flat',
-    pctChange,
-    items: tk.map(t => [t, _mcap(t), +(pctChange + ((_hash(t + name) % 9) - 4) * 0.35).toFixed(2)] as [string, number, number]),
-  };
-});
-
 export interface ScreenerPreset {
   name: string;
   desc: string;

@@ -1,5 +1,48 @@
-import type { PulseItem } from "./data";
+import type { PulseItem, SectorRow } from "./data";
 import type { TapeItem } from "./types/tape";
+import type { CompanyDoc } from "./types/companies";
+import type { SectorApiDoc } from "./types/sectors";
+
+/**
+ * Builds the sector treemap PURELY from live data — no static seed. Sector
+ * names + order come from the live `/market-data/sectors` response (the 11 GICS
+ * sectors); constituents are the live `companies` grouped by their own GICS
+ * `sector` field; every number (market cap, %) is live. A company whose sector
+ * isn't one of the 11 clean GICS names (a stale raw-SIC value, or null) is
+ * excluded rather than mis-bucketed — the map self-heals as company profiles
+ * re-sync to normalized sectors. Sector % is the live per-sector figure, else
+ * the average of that sector's own live constituents; never a fabricated value.
+ */
+export function buildSectorList(
+  companies: CompanyDoc[],
+  sectorsLive: SectorApiDoc[],
+): SectorRow[] {
+  const livePctByName = new Map(sectorsLive.map((s) => [s.sector, s.pctChange]));
+  const gics = sectorsLive.map((s) => s.sector);
+  const gicsSet = new Set(gics);
+
+  const bySector = new Map<string, [string, number, number][]>();
+  for (const c of companies) {
+    const sec = c.sector;
+    if (!sec || !gicsSet.has(sec) || c.marketCap == null || c.pctChange == null) continue;
+    let bucket = bySector.get(sec);
+    if (!bucket) { bucket = []; bySector.set(sec, bucket); }
+    bucket.push([c.ticker, c.marketCap / 1e9, c.pctChange]);
+  }
+
+  const rows: SectorRow[] = [];
+  gics.forEach((name, i) => {
+    const items = bySector.get(name);
+    if (!items || items.length === 0) return;
+    const pctChange =
+      livePctByName.get(name) ??
+      items.reduce((s, [, , p]) => s + p, 0) / items.length;
+    const trend =
+      pctChange == null ? null : pctChange > 0.5 ? "Improving" : pctChange < -0.5 ? "Deteriorating" : "Flat";
+    rows.push({ name, rank: i + 1, trend, pctChange, items });
+  });
+  return rows;
+}
 
 export interface IndexDoc {
   id: string; label: string; value: number; change: number; pctChange: number;

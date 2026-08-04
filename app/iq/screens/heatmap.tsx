@@ -2,9 +2,9 @@
 
 import { useRef, useState } from "react";
 import { useIQActions } from "../shell";
-import { sectorList, type SectorRow } from "../data";
 import { sign, heatCol, fmt, StockLogo, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
+import { buildSectorList } from "../live-market-indices";
 import type { CompanyDoc, SectorApiDoc } from "../types";
 
 const TABS = ["Stocks", "S&P 500", "Nasdaq", "Dow", "Russell 2000"];
@@ -49,48 +49,11 @@ interface HoverStock {
   peers: [string, number, number][];
 }
 
-/**
- * Sector *membership* (which tickers belong to which sector) is fixed
- * editorial grouping — same category as Themes' curated lists, not
- * fabricated market data — so sectors/tickers are never dropped here. Every
- * numeric field (price/%change/market cap) must be live or the ticker is
- * excluded from the treemap, rather than rendered with a stale mock number.
- */
-/**
- * pctChange/trend are always real: a direct match from /market-data/sectors,
- * or (when this finer-grained taxonomy has no such match) the average of
- * this sector's own real per-company changes below — never the static base's
- * placeholder number. null when neither real source is available.
- */
-function mergeSectorList(base: SectorRow[], companies: CompanyDoc[], sectorsLive: SectorApiDoc[]): SectorRow[] {
-  const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
-  const sectorPctByName = new Map(sectorsLive.map(s => [s.sector, s.pctChange]));
-
-  return base.map(row => {
-    const liveSectorPct = sectorPctByName.get(row.name);
-    const items = row.items
-      .map(([sym]): [string, number, number] | null => {
-        const c = companyByTicker.get(sym);
-        if (!c || c.marketCap == null || c.pctChange == null) return null;
-        return [sym, c.marketCap / 1e9, c.pctChange];
-      })
-      .filter((x): x is [string, number, number] => x !== null);
-    const pctChange = liveSectorPct
-      ?? (items.length > 0 ? items.reduce((s, [, , c]) => s + c, 0) / items.length : null);
-    const trend = pctChange == null ? null : pctChange > 0.5 ? "Improving" : pctChange < -0.5 ? "Deteriorating" : "Flat";
-    return {
-      ...row,
-      pctChange, trend,
-      items,
-    };
-  });
-}
-
 export function HeatmapScreen() {
   const { openSector, openStockFull } = useIQActions();
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
-  const mergedSectorList = mergeSectorList(sectorList, companies, sectorsLive);
+  const mergedSectorList = buildSectorList(companies, sectorsLive);
 
   const [tab, setTab]     = useState(0);
   const [hover, setHover] = useState<HoverStock | null>(null);
