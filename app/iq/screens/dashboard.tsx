@@ -4,12 +4,12 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { firebaseAuth } from "../../firebase";
 import { useIQActions, ExpandBtn } from "../shell";
-import { pulse as mockPulse, wmn, movers as mockMovers, earnings as mockEarnings, folio, analyst, watch, sectorList, screenerStocks, type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem } from "../data";
+import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem, type ScreenerStock, type WMNItem } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
-import { mergePulse, tapeItemsToIndexDocs } from "../live-market-indices";
+import { buildPulse, tapeItemsToIndexDocs } from "../live-market-indices";
 import type {
   LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
   InsiderTxDoc, AnalystConsensusDoc, MarketSentimentDoc,
@@ -106,59 +106,127 @@ function DpRow({ label, children }: { label: string; children: React.ReactNode }
 // UI→backend migration) ----
 
 
-function mergeMoversData(mock: Mover[], live: LiveMoverDoc[]): Mover[] {
-  const liveByTicker = new Map(live.map(l => [l.ticker, l]));
-  const merged = mock.map(m => {
-    const l = liveByTicker.get(m.ticker);
-    if (!l) return m;
-    liveByTicker.delete(m.ticker);
-    return { ...m, price: l.price, pctChange: l.pctChange, name: l.name ?? m.name, sector: l.sector ?? m.sector, cap: (l.cap as Mover["cap"]) ?? m.cap };
-  });
-  for (const l of liveByTicker.values()) {
-    merged.push({
-      ticker: l.ticker, name: l.name ?? l.ticker, price: l.price, pctChange: l.pctChange,
-      rvolRatio: 1, relativeStrength: 50, catalystLabel: "No known catalyst",
-      maPosture: l.pctChange >= 0 ? "Above 50/200" : "Below 50/200", owned: false,
-      sector: l.sector ?? "Unclassified", cap: (l.cap as Mover["cap"]) ?? "Mid", weekPct: l.pctChange,
-      techContext: `Live EOD data as of ${l.asOfDate}.`, newsContext: "Live market data.",
-    });
+/**
+ * Builds the mover row list directly from live Firestore market_movers data —
+ * there is no mock base anymore. Each live row is overlaid with real RVOL
+ * from companies.rvol when available; narrative fields with no live source
+ * yet (relative strength, catalyst, moving-average posture, weekly change,
+ * technical/news context) fall back to neutral/empty defaults. Mirrors
+ * MoversScreen's buildMovers in ../screens/movers.tsx (independent, per-file
+ * helper by design in this codebase).
+ */
+function buildMoversData(live: LiveMoverDoc[], companyRvol: Map<string, number | null>): Mover[] {
+  const rv = (ticker: string) => companyRvol.get(ticker) ?? 1;
+  return live.map(l => ({
+    ticker: l.ticker, name: l.name ?? l.ticker, price: l.price, pctChange: l.pctChange,
+    rvolRatio: rv(l.ticker), relativeStrength: 50, catalystLabel: "No known catalyst",
+    maPosture: l.pctChange >= 0 ? "Above 50/200" : "Below 50/200", owned: false,
+    sector: l.sector ?? "Unclassified", cap: (l.cap as Mover["cap"]) ?? "Mid", weekPct: l.pctChange,
+    techContext: `Live EOD data as of ${l.asOfDate}. RVOL/technical context not available for this synced name yet.`,
+    newsContext: "Live market data — catalyst not yet available from a connected news source.",
+  }));
+}
+
+/**
+ * Builds earnings rows directly from the live earnings_events feed — it only
+ * supplies ticker/date/epsEstimate/epsActual, so every richer mock field
+ * (name, sector, marketCap, tags, guidance, price reaction, implied move)
+ * gets a graceful "unknown" default rather than a fabricated value.
+ */
+function buildEarningsData(live: LiveEarningsDoc[]): Earning[] {
+  return live.map(l => ({
+    ticker: l.ticker, name: l.ticker, session: "—", marketCap: "—", sector: "—",
+    epsEstimate: l.epsEstimate, epsActual: l.epsActual,
+    revenueEstimate: null, revenueActual: null,
+    guidanceStatus: null, priceReaction: null,
+    tags: [], owned: false, impliedMove: null,
+  }));
+}
+
+function sectorTrend(pctChange: number): string {
+  return pctChange > 0.5 ? "Improving" : pctChange < -0.5 ? "Deteriorating" : "Flat";
+}
+
+/**
+ * Builds the sector list entirely from live data — companies grouped by their
+ * reported `sector`, sector-level %change from the sectors feed (or averaged
+ * from constituents when a sector doc hasn't synced yet). Mirrors
+ * HeatmapScreen's buildSectorList in ../screens/heatmap.tsx exactly
+ * (independent, per-file helper by design in this codebase).
+ */
+function buildSectorList(companies: CompanyDoc[], sectorsLive: SectorApiDoc[]): SectorRow[] {
+  const bySector = new Map<string, CompanyDoc[]>();
+  for (const c of companies) {
+    if (!c.sector) continue;
+    if (!bySector.has(c.sector)) bySector.set(c.sector, []);
+    bySector.get(c.sector)!.push(c);
   }
-  return merged;
-}
-
-function mergeEarningsData(mock: Earning[], live: LiveEarningsDoc[]): Earning[] {
-  const liveByTicker = new Map(live.map(l => [l.ticker, l]));
-  return mock.map(e => {
-    const l = liveByTicker.get(e.ticker);
-    if (!l) return e;
-    return { ...e, epsEstimate: l.epsEstimate ?? e.epsEstimate, epsActual: l.epsActual ?? e.epsActual };
-  });
-}
-
-function mergeSectorListData(base: SectorRow[], companies: CompanyDoc[], sectorsLive: SectorApiDoc[]): SectorRow[] {
-  const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
   const sectorPctByName = new Map(sectorsLive.map(s => [s.sector, s.pctChange]));
-  return base.map(row => {
-    const liveSectorPct = sectorPctByName.get(row.name);
-    const items: [string, number, number][] = row.items.map(([sym, mcap, chg]) => {
-      const c = companyByTicker.get(sym);
-      if (!c) return [sym, mcap, chg];
-      const liveMcap = c.marketCap != null ? c.marketCap / 1e9 : mcap;
-      return [sym, liveMcap, c.pctChange ?? chg];
-    });
-    return { ...row, pctChange: liveSectorPct ?? row.pctChange, items };
+  const names = new Set<string>([...bySector.keys(), ...sectorsLive.map(s => s.sector)]);
+
+  const rows = [...names].map(name => {
+    const members = bySector.get(name) ?? [];
+    const pctChange = sectorPctByName.get(name) ?? (
+      members.length > 0
+        ? members.reduce((s, c) => s + (c.pctChange ?? 0), 0) / members.length
+        : 0
+    );
+    const items: [string, number, number][] = members.map(c =>
+      [c.ticker, c.marketCap != null ? c.marketCap / 1e9 : 0, c.pctChange ?? 0]);
+    return { name, rank: 0, trend: sectorTrend(pctChange), pctChange, items };
   });
+
+  return rows
+    .sort((a, b) => b.pctChange - a.pctChange)
+    .map((row, i) => ({ ...row, rank: i + 1 }));
 }
 
-function DashPopContent({ sym, block, movers, earnings, watchlist, portfolio }: { sym: string; block: PopBlock; movers: Mover[]; earnings: Earning[]; watchlist: WatchItem[]; portfolio: FolioItem[] }) {
+function ratingLabel(n: number): string {
+  if (n >= 90) return "Strong Buy";
+  if (n >= 70) return "Buy";
+  if (n >= 40) return "Neutral";
+  if (n >= 20) return "Sell";
+  return "Strong Sell";
+}
+
+/**
+ * Builds the screener universe used by the Leaders/Laggards popovers and the
+ * heatmap peer-detail tooltip, directly from live companies — mirrors
+ * ScreenerScreen's buildScreenerStocks in ../screens/screener.tsx (independent,
+ * per-file helper by design in this codebase).
+ */
+function buildScreenerStocks(companies: CompanyDoc[]): ScreenerStock[] {
+  return companies
+    .filter(c =>
+      c.marketCap != null || c.peRatio != null || c.rsRating != null ||
+      c.techRating != null || c.rvol != null || c.revenueGrowthYoY != null)
+    .map(c => ({
+      ticker: c.ticker,
+      name: c.name ?? c.ticker,
+      sector: c.sector ?? "—",
+      marketCap: c.marketCap != null ? c.marketCap / 1e9 : 0,
+      peRatio: c.peRatio ?? 0,
+      relativeStrength: c.rsRating ?? 0,
+      techRating: c.techRating != null ? ratingLabel(c.techRating) : "Neutral",
+      rvolRatio: c.rvol ?? 0,
+      salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : 0,
+      epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : 0,
+      grossMargin: c.grossMargin != null ? c.grossMargin * 100 : 0,
+    }));
+}
+
+function DashPopContent({ sym, block, movers, earnings, watchlist, portfolio, screener, consensusByTicker }: {
+  sym: string; block: PopBlock; movers: Mover[]; earnings: Earning[]; watchlist: WatchItem[]; portfolio: FolioItem[];
+  screener: ScreenerStock[]; consensusByTicker: Map<string, AnalystConsensusDoc>;
+}) {
   const mv  = movers.find(x => x.ticker ===sym);
   const er  = earnings.find(x => x.ticker ===sym);
-  const an  = analyst.find(x => x.ticker ===sym);
+  const co  = consensusByTicker.get(sym);
   const w   = watchlist.find(x => x.ticker ===sym);
   const pf  = portfolio.find(x => x.ticker ===sym);
-  const scr = screenerStocks.find(x => x.ticker ===sym);
+  const scr = screener.find(x => x.ticker ===sym);
   const ins = INSIDER_MINI_MOCK.find(x => x.s === sym);
-  const name = mv?.name ?? er?.name ?? an?.name ?? w?.name ?? scr?.name ?? sym;
+  const name = mv?.name ?? er?.name ?? w?.name ?? scr?.name ?? sym;
 
   let body: React.ReactNode;
 
@@ -174,9 +242,15 @@ function DashPopContent({ sym, block, movers, earnings, watchlist, portfolio }: 
         </DpRow>
         {er.priceReaction != null
           ? <DpRow label="Reaction"><span className={cls(er.priceReaction)}>{sign(er.priceReaction)}</span></DpRow>
-          : <DpRow label="Implied move">±{er.impliedMove}%</DpRow>
+          : er.impliedMove != null
+          ? <DpRow label="Implied move">±{er.impliedMove}%</DpRow>
+          : null
         }
-        <div className="dp-note">Why it&apos;s here: reporting {er.session === "BMO" ? "before the open" : "after the close"}{er.guidanceStatus === "Raised" ? " — and raised guidance." : "."}</div>
+        <div className="dp-note">
+          {er.session === "BMO" || er.session === "AMC"
+            ? <>Why it&apos;s here: reporting {er.session === "BMO" ? "before the open" : "after the close"}{er.guidanceStatus === "Raised" ? " — and raised guidance." : "."}</>
+            : "On this week's earnings calendar."}
+        </div>
       </>;
     } else {
       body = <div className="dp-note">On this week&apos;s earnings calendar.</div>;
@@ -189,16 +263,16 @@ function DashPopContent({ sym, block, movers, earnings, watchlist, portfolio }: 
       <DpRow label="Technicals">{mv.maPosture} · RS {mv.relativeStrength}</DpRow>
       <div className="dp-note">Why it&apos;s moving: {mv.catalystLabel === "No known catalyst" ? "trading with its sector and the broad tape" : mv.catalystLabel.toLowerCase()}, on {mv.rvolRatio.toFixed(1)}× normal volume.</div>
     </>;
-  } else if (block === "analyst" && an) {
-    body = <>
-      <DpRow label="Action">
-        <span className={an.actionType === "up" ? "up" : an.actionType === "down" ? "down" : ""}>{an.actionType === "up" ? "Upgrade" : an.actionType === "down" ? "Downgrade" : "Reiterate"} · {an.firm}</span>
-      </DpRow>
-      <DpRow label="Rating">{an.previousRating} → {an.newRating}</DpRow>
-      <DpRow label="Price target">{an.prevPriceTarget ? `$${an.prevPriceTarget} → ` : ""}${an.newPriceTarget}</DpRow>
-      <DpRow label="Reaction"><span className={cls(an.priceChangeSince)}>{sign(an.priceChangeSince)}</span></DpRow>
-      <div className="dp-note">Why it&apos;s here: {an.firm} changed its call — {an.actionsLast30Days} firm(s) active in 30d.</div>
-    </>;
+  } else if (block === "analyst") {
+    if (co) {
+      body = <>
+        <DpRow label="Consensus"><span style={{ color: "var(--up)" }}>{co.consensus}</span></DpRow>
+        <DpRow label="Buy / Hold / Sell">{co.strongBuy + co.buy}B / {co.hold}H / {co.sell + co.strongSell}S</DpRow>
+        <div className="dp-note">Why it&apos;s here: aggregate analyst consensus synced live — per-firm upgrade/downgrade events aren&apos;t available from this feed.</div>
+      </>;
+    } else {
+      body = <div className="dp-note">No live analyst consensus data available for this ticker.</div>;
+    }
   } else if (block === "watchlist") {
     const px = w?.price ?? mv?.price;
     body = <>
@@ -209,7 +283,7 @@ function DashPopContent({ sym, block, movers, earnings, watchlist, portfolio }: 
       {scr && <DpRow label="RS rank">{scr.relativeStrength}/99</DpRow>}
       {scr && <DpRow label="Sector">{scr.sector}</DpRow>}
       <DpRow label="Next ER">{w?.nextEarningsDate ?? "—"}</DpRow>
-      {an && <DpRow label="Latest action"><span className={an.actionType === "up" ? "up" : an.actionType === "down" ? "down" : ""}>{an.actionType === "up" ? "▲" : an.actionType === "down" ? "▼" : "·"} {an.firm} → {an.newRating}</span></DpRow>}
+      {co && <DpRow label="Analyst consensus"><span style={{ color: "var(--up)" }}>{co.consensus}</span></DpRow>}
       {w?.latestHeadline && w.latestHeadline !== "—" && <div className="dp-note">{w.latestHeadline}</div>}
     </>;
   } else if (block === "portfolio" && pf) {
@@ -283,13 +357,6 @@ function MoverPopup({ m }: { m: Mover }) {
   );
 }
 
-function analystDir(type: string) {
-  if (type === "up"   || type === "upgrade")    return <span className="up">▲ Upg</span>;
-  if (type === "down" || type === "downgrade")  return <span className="down">▼ Dng</span>;
-  if (type === "init" || type === "initiation") return <span style={{ color: "var(--ai)" }}>◆ Init</span>;
-  return <span style={{ color: "var(--text-dim-solid)" }}>Reit</span>;
-}
-
 export function DashboardScreen() {
   const { openStock, openMoverModal, openEarnings, openSector, openIndex } = useIQActions();
 
@@ -309,13 +376,28 @@ export function DashboardScreen() {
   const fgVal = fearGreed?.value ?? 62;
   const fgLabel = fearGreed?.label ?? "Greed";
   const { data: consensusLive } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
+  // Same live news feed the Live Market Feed widget uses (below) — reused here
+  // to back "What Matters Now" now that its curated mock list is gone.
+  const { data: liveNews } = useApiList<NewsArticleDoc>("/market-data/news");
 
-  const pulse = mergePulse(mockPulse, liveIndices);
-  const movers = mergeMoversData(mockMovers, liveMovers);
-  const earnings = mergeEarningsData(mockEarnings, liveEarnings);
-  const mergedSectorList = mergeSectorListData(sectorList, companies, sectorsLive);
+  const pulse = buildPulse(liveIndices);
+  const companyRvol = new Map(companies.map(c => [c.ticker, c.rvol ?? null]));
+  const movers = buildMoversData(liveMovers, companyRvol);
+  const earnings = buildEarningsData(liveEarnings);
+  const mergedSectorList = buildSectorList(companies, sectorsLive);
+  const screenerUniverse = buildScreenerStocks(companies);
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
   const consensusByTicker = new Map(consensusLive.map(c => [c.ticker, c]));
+  const liveConsensusRows = [...consensusLive].sort((a, b) => (b.strongBuy + b.buy) - (a.strongBuy + a.buy));
+
+  const wmnItems: WMNItem[] = [...liveNews]
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, 8)
+    .map(n => ({
+      headline: n.headline,
+      body: n.summary ?? "",
+      tag: n.category === "earnings" ? "earn" : n.category === "sector" ? "sector" : "macro",
+    }));
 
   // key MUST come from the Firestore doc id, not ticker+dir: a single ticker can
   // have dozens of insider filings in the same direction (CRWD has 42 disposals),
@@ -332,9 +414,9 @@ export function DashboardScreen() {
   const insiderMock = INSIDER_MINI_MOCK.map(m => ({ ...m, key: `mock-${m.s}-${m.dir}` }));
   const INSIDER_MINI = liveInsiderMini.length > 0 ? [...liveInsiderMini, ...insiderMock] : insiderMock;
 
-  // Real watchlist/portfolio (signed-in user) — takes over from the demo
-  // mock arrays the moment either exists, exactly matching the pattern
-  // already used on the standalone Watchlist/Portfolio screens.
+  // Real watchlist/portfolio (signed-in user) — no mock fallback anymore;
+  // an empty backend result just means an empty list (same pattern as the
+  // standalone Watchlist/Portfolio screens).
   const uid = firebaseAuth.currentUser?.uid ?? null;
   const { data: watchlistDoc } = useApiResource<WatchlistDoc>(uid ? "/api/watchlist" : null);
   const { data: portfolioDoc } = useApiResource<{ holdings: HoldingDoc[] }>(uid ? "/api/portfolio" : null);
@@ -342,29 +424,28 @@ export function DashboardScreen() {
   const realHoldings = portfolioDoc?.holdings ?? [];
 
   const isRealWatch = realWatchTickers.length > 0;
-  const watchMini: WatchItem[] = isRealWatch
-    ? realWatchTickers.map(t => {
-        const c = companyByTicker.get(t);
-        return {
-          ticker: t, name: c?.name ?? t, price: c?.price ?? 0, pctChange: c?.pctChange ?? 0,
-          nextEarningsDate: "—", lastAnalystAction: null, hasOptions: false, latestHeadline: "—",
-        };
-      })
-    : watch;
+  const watchMini: WatchItem[] = realWatchTickers.map(t => {
+    const c = companyByTicker.get(t);
+    return {
+      ticker: t, name: c?.name ?? t, price: c?.price ?? 0, pctChange: c?.pctChange ?? 0,
+      nextEarningsDate: "—", lastAnalystAction: null, hasOptions: false, latestHeadline: "—",
+    };
+  });
 
   const isRealFolio = realHoldings.length > 0;
-  const folioMini: FolioItem[] = isRealFolio
-    ? realHoldings.map(h => {
-        const c = companyByTicker.get(h.ticker);
-        return {
-          ticker: h.ticker, name: c?.name ?? h.ticker, price: c?.price ?? 0, pctChange: c?.pctChange ?? 0,
-          gainLossPct: 0, positionSize: h.positionSize, conviction: h.conviction, eventNote: "—",
-        };
-      })
-    : folio;
+  const folioMini: FolioItem[] = realHoldings.map(h => {
+    const c = companyByTicker.get(h.ticker);
+    return {
+      ticker: h.ticker, name: c?.name ?? h.ticker, price: c?.price ?? 0, pctChange: c?.pctChange ?? 0,
+      gainLossPct: 0, positionSize: h.positionSize, conviction: h.conviction, eventNote: "—",
+    };
+  });
 
-  const leaders  = [...screenerStocks].sort((a, b) => b.relativeStrength - a.relativeStrength).slice(0, 3);
-  const laggards = [...screenerStocks].sort((a, b) => a.relativeStrength - b.relativeStrength).slice(0, 3);
+  // Leaders/Laggards: real price/pctChange data is already fetched in this
+  // file (companies), so this is a straightforward live sort rather than a gap.
+  const rankedCompanies = companies.filter(c => c.pctChange != null);
+  const leaders  = [...rankedCompanies].sort((a, b) => (b.pctChange ?? 0) - (a.pctChange ?? 0)).slice(0, 3);
+  const laggards = [...rankedCompanies].sort((a, b) => (a.pctChange ?? 0) - (b.pctChange ?? 0)).slice(0, 3);
 
   const EARN_MOVERS = [...earnings]
     .filter(e => e.priceReaction !== null)
@@ -465,7 +546,9 @@ export function DashboardScreen() {
               </button>
             </div>
             <ul className="wmn-body" style={{ maxHeight: 220, overflowY: "scroll" }}>
-              {wmn.map((b, i) => (
+              {wmnItems.length === 0 ? (
+                <li><span className="bullet" /><span style={{ color: "var(--text-dim-solid)" }}>No live news synced yet.</span></li>
+              ) : wmnItems.map((b, i) => (
                 <li key={i}>
                   <span className="bullet" />
                   <span>
@@ -628,32 +711,33 @@ export function DashboardScreen() {
           </div>
         </div>
 
-        {/* ── 6. Analyst Actions ── */}
+        {/* ── 6. Analyst Consensus ── */}
+        {/* Per-firm actions table retired here too (mirrors ../screens/analyst.tsx):
+            the live /market-data/analyst-actions feed only supplies an aggregate
+            Buy/Hold/Sell snapshot per ticker, not individual upgrade/downgrade
+            events, so there's no per-firm mock left to reconstruct. */}
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Analyst Actions</h3>
+              <h3>Analyst Consensus</h3>
               <button className="link" onClick={() => setDrawer("analyst")}>View all →</button>
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
-              {analyst.slice(0, 5).map((a, i) => (
-                <div key={i} className="minirow" style={{ cursor: "pointer" }}
-                  onClick={() => openStock(a.ticker)}
-                  {...mr(a.ticker, "analyst")}
-                >
-                  <StockLogo sym={a.ticker} size={26} />
-                  <span className="tkr">
-                    {a.ticker}
-                    {consensusByTicker.has(a.ticker) && (
-                      <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", marginLeft: 4, fontSize: ".58rem" }}>
-                        live: {consensusByTicker.get(a.ticker)!.consensus}
-                      </span>
-                    )}
-                  </span>
-                  <span className="mid">{a.firm} → <b style={{ color: "var(--text-hi)" }}>{a.newRating}</b></span>
-                  <span className="r">{analystDir(a.actionType)}</span>
-                </div>
-              ))}
+              {liveConsensusRows.length === 0 ? (
+                <div className="ec-none">No live analyst consensus data available.</div>
+              ) : (
+                liveConsensusRows.slice(0, 5).map(c => (
+                  <div key={c.ticker} className="minirow" style={{ cursor: "pointer" }}
+                    onClick={() => openStock(c.ticker)}
+                    {...mr(c.ticker, "analyst")}
+                  >
+                    <StockLogo sym={c.ticker} size={26} />
+                    <span className="tkr">{c.ticker}</span>
+                    <span className="mid">{c.strongBuy + c.buy}B / {c.hold}H / {c.sell + c.strongSell}S</span>
+                    <span className="r" style={{ color: "var(--up)" }}>{c.consensus}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -676,7 +760,7 @@ export function DashboardScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
               {(scrTab === "leaders" ? leaders : laggards).map(s => {
-                const dayC = movers.find(m => m.ticker === s.ticker)?.pctChange ?? 0;
+                const dayC = s.pctChange ?? 0;
                 return (
                   <div key={s.ticker} className="minirow" style={{ cursor: "pointer" }}
                     onClick={() => openStock(s.ticker)}
@@ -684,7 +768,7 @@ export function DashboardScreen() {
                   >
                     <StockLogo sym={s.ticker} size={26} />
                     <span className="tkr">{s.ticker}</span>
-                    <span className="mid">RS {s.relativeStrength} · {s.sector}</span>
+                    <span className="mid">RS {s.rsRating ?? "—"} · {s.sector ?? "—"}</span>
                     <span className={`r ${cls(dayC)}`}>{sign(dayC)}</span>
                   </div>
                 );
@@ -894,7 +978,7 @@ export function DashboardScreen() {
                 <div className="drawer-title">
                   {drawer === "earnings"    && "Earnings Calendar"}
                   {drawer === "movers"      && "Movers"}
-                  {drawer === "analyst"     && "Analyst Actions"}
+                  {drawer === "analyst"     && "Analyst Consensus"}
                   {drawer === "earn-movers" && "Biggest Earnings Movers"}
                   {drawer === "internals"   && "Market Internals"}
                   {drawer === "watchlist"   && "Watchlist"}
@@ -952,23 +1036,20 @@ export function DashboardScreen() {
                 </>
               )}
 
-              {/* Analyst */}
-              {drawer === "analyst" && analyst.map((a, i) => (
-                <div key={i} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
-                  onClick={() => { openStock(a.ticker); setDrawer(null); }}>
-                  <StockLogo sym={a.ticker} size={22} />
-                  <span className="tkr">
-                    {a.ticker}<small>{a.name}</small>
-                    {consensusByTicker.has(a.ticker) && (
-                      <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", marginLeft: 4, fontSize: ".58rem" }}>
-                        live: {consensusByTicker.get(a.ticker)!.consensus}
-                      </span>
-                    )}
-                  </span>
-                  <span className="mid" style={{ fontSize: ".74rem" }}>{a.firm} <b style={{ color: "var(--text-hi)" }}>{a.previousRating} &rarr; {a.newRating}</b></span>
-                  <span className="r">{analystDir(a.actionType)}</span>
-                </div>
-              ))}
+              {/* Analyst consensus — per-firm actions retired (no live source; see ../screens/analyst.tsx) */}
+              {drawer === "analyst" && (
+                liveConsensusRows.length === 0 ? (
+                  <div className="ec-none" style={{ padding: "12px 0" }}>No live analyst consensus data available.</div>
+                ) : liveConsensusRows.map(c => (
+                  <div key={c.ticker} className="minirow" style={{ cursor: "pointer", padding: "7px 0" }}
+                    onClick={() => { openStock(c.ticker); setDrawer(null); }}>
+                    <StockLogo sym={c.ticker} size={22} />
+                    <span className="tkr">{c.ticker}</span>
+                    <span className="mid" style={{ fontSize: ".74rem" }}>{c.strongBuy + c.buy}B / {c.hold}H / {c.sell + c.strongSell}S</span>
+                    <span className="r" style={{ color: "var(--up)" }}>{c.consensus}</span>
+                  </div>
+                ))
+              )}
 
               {/* Earn movers */}
               {drawer === "earn-movers" && EARN_MOVERS.map(e => (
@@ -1166,7 +1247,7 @@ export function DashboardScreen() {
           <div className="heat-pop-trend">{heatPop.sd.trend}</div>
           {heatPop.sd.items.slice(0, 4).map(([sym, mcap, chg]) => {
             const mv  = movers.find(m => m.ticker === sym);
-            const scr = screenerStocks.find(s => s.ticker === sym);
+            const scr = screenerUniverse.find(s => s.ticker === sym);
             const cap = mcap >= 1000 ? `$${(mcap / 1000).toFixed(1)}T` : `$${Math.round(mcap)}B`;
             const isActive = heatSym === sym;
             return (
@@ -1217,7 +1298,7 @@ export function DashboardScreen() {
             else openStock(pop.sym);
           }}
         >
-          <DashPopContent sym={pop.sym} block={pop.block} movers={movers} earnings={earnings} watchlist={watchMini} portfolio={folioMini} />
+          <DashPopContent sym={pop.sym} block={pop.block} movers={movers} earnings={earnings} watchlist={watchMini} portfolio={folioMini} screener={screenerUniverse} consensusByTicker={consensusByTicker} />
         </div>
       )}
     </div>

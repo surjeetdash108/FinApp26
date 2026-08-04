@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { screenerStocks, screenerPresets, watch as watchData, movers as moversData, type ScreenerStock } from "../data";
+import { screenerPresets, type ScreenerStock } from "../data";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
@@ -17,31 +17,31 @@ function ratingLabel(n: number): string {
   return "Strong Sell";
 }
 
-// Live companies data now covers marketCap/peRatio/price, relativeStrength
-// (rsRating), AND the previously-illustrative proprietary scores — techRating,
-// RVOL, sales/EPS growth, and gross margin — all computed by the backend score
-// jobs from real ohlcv_bars + Polygon financials. Each falls back to the mock
-// value until its job has run. Growth/margin are stored as decimals and scaled
-// to the mock's percentage units here; techRating is mapped to its label.
-function mergeScreenerStocks(mock: ScreenerStock[], byTicker: Map<string, CompanyDoc>): (ScreenerStock & { live: boolean })[] {
-  return mock.map(s => {
-    const c = byTicker.get(s.ticker);
-    if (!c) return { ...s, live: false };
-    return {
-      ...s,
-      marketCap: c.marketCap != null ? c.marketCap / 1e9 : s.marketCap,
-      peRatio: c.peRatio ?? s.peRatio,
-      relativeStrength: c.rsRating ?? s.relativeStrength,
-      techRating: c.techRating != null ? ratingLabel(c.techRating) : s.techRating,
-      rvolRatio: c.rvol ?? s.rvolRatio,
-      salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : s.salesGrowth,
-      epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : s.epsGrowth,
-      grossMargin: c.grossMargin != null ? c.grossMargin * 100 : s.grossMargin,
-      live:
-        c.marketCap != null || c.peRatio != null || c.rsRating != null ||
-        c.techRating != null || c.rvol != null || c.revenueGrowthYoY != null,
-    };
-  });
+// Universe is built directly from the live companies feed — marketCap/peRatio/
+// price, relativeStrength (rsRating), techRating, RVOL, sales/EPS growth, and
+// gross margin are all computed by the backend score jobs from real
+// ohlcv_bars + Polygon financials. Growth/margin are stored as decimals and
+// scaled to percentage units here; techRating is mapped to its label. A
+// company only appears once at least one score has actually been computed —
+// otherwise it'd just be a row of zeros.
+function buildScreenerStocks(companies: CompanyDoc[]): ScreenerStock[] {
+  return companies
+    .filter(c =>
+      c.marketCap != null || c.peRatio != null || c.rsRating != null ||
+      c.techRating != null || c.rvol != null || c.revenueGrowthYoY != null)
+    .map(c => ({
+      ticker: c.ticker,
+      name: c.name ?? c.ticker,
+      sector: c.sector ?? "—",
+      marketCap: c.marketCap != null ? c.marketCap / 1e9 : 0,
+      peRatio: c.peRatio ?? 0,
+      relativeStrength: c.rsRating ?? 0,
+      techRating: c.techRating != null ? ratingLabel(c.techRating) : "Neutral",
+      rvolRatio: c.rvol ?? 0,
+      salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : 0,
+      epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : 0,
+      grossMargin: c.grossMargin != null ? c.grossMargin * 100 : 0,
+    }));
 }
 
 function CheckOpt({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
@@ -62,9 +62,7 @@ function CheckOpt({ label, on, onToggle }: { label: string; on: boolean; onToggl
 
 export function ScreenerScreen() {
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
-  const byTicker = new Map(companies.map(c => [c.ticker, c]));
-  const universe = mergeScreenerStocks(screenerStocks, byTicker);
-  const liveCount = universe.filter(s => s.live).length;
+  const universe = buildScreenerStocks(companies);
 
   /* ── Preset multi-select ── */
   const [activePresets, setActivePresets] = useState<Set<number>>(new Set());
@@ -167,9 +165,7 @@ export function ScreenerScreen() {
   const selSym   = selStock?.ticker ?? "";
 
   /* price for CandleChart */
-  const selWatch = watchData.find(w => w.ticker === selSym);
-  const selMover = moversData.find(m => m.ticker === selSym);
-  const selPx    = selWatch?.price ?? selMover?.price ?? 0;
+  const selPx = companies.find(c => c.ticker === selSym)?.price ?? 0;
 
   /* how many "More" presets (index >= 4) are active */
   const moreActiveCount = [...activePresets].filter(i => i >= 4).length;
@@ -179,7 +175,6 @@ export function ScreenerScreen() {
       <div className="page-head">
         <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
           {filtered.length} match{filtered.length !== 1 ? "es" : ""}
-          {liveCount > 0 && <> · <span style={{ color: "var(--up)" }}>{liveCount} live cap/PE</span></>}
         </span>
         <button className="btn primary" onClick={saveScreen}>
           <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>

@@ -1,13 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useIQActions } from "../shell";
-import { commentary, watch, folio, movers, analyst, screenerStocks, stockInfo, sectorByName } from "../data";
+import { firebaseAuth } from "../../firebase";
+import { apiGet } from "../backend";
 import { sign, fmt, hashStr, earnHistory, StockLogo } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import type { NewsArticleDoc } from "../types";
+import type { NewsArticleDoc, WatchlistDoc, HoldingDoc } from "../types";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 
@@ -35,21 +36,6 @@ function nd(days: number): string {
   const dt = new Date(2026, 4, 21);
   dt.setDate(dt.getDate() - days);
   return MQ[dt.getMonth()] + " " + dt.getDate();
-}
-
-/* ── Ticker search suggestion list ── */
-const SEARCH_SYMS = [
-  ...Object.keys(stockInfo),
-  ...screenerStocks.map(s => s.ticker),
-  ...movers.map(m => m.ticker),
-].filter((v, i, a) => a.indexOf(v) === i).sort();
-
-// symbol → company name, so search can match by name too (e.g. "apple" → AAPL)
-const SEARCH_NAMES: Record<string, string> = {};
-for (const s of screenerStocks) if (s.name) SEARCH_NAMES[s.ticker] = s.name;
-for (const sym of Object.keys(stockInfo)) {
-  const n = (stockInfo as Record<string, { name?: string }>)[sym]?.name;
-  if (n && !SEARCH_NAMES[sym]) SEARCH_NAMES[sym] = n;
 }
 
 function catCol(c: string): string {
@@ -119,58 +105,26 @@ type NewsItem = { daysAgo: number; cat: string; source: string; html: string };
 
 function buildNewsHistory(sym: string): NewsItem[] {
   const H: NewsItem[] = [];
-  const ss = screenerStocks.find(x => x.ticker === sym);
-  const info = stockInfo[sym];
-  const nm = info?.name ?? ss?.name ?? sym;
-  const mv = movers.find(m => m.ticker === sym);
-  const sec = ss ? sectorByName[ss.sector] : null;
+  // No live per-ticker equivalent exists for the mover/screener/sector/analyst-
+  // action mocks this synthetic narrative generator used to read from, so the
+  // Catalyst / Technical / Sector / Analyst-actions / next-earnings-from-watch
+  // sections that depended on them are omitted below (accepted gap) rather
+  // than fabricating replacement data. The remaining sections fall back to
+  // the same defaults those lookups used to degrade to when a name wasn't found.
+  const nm = sym;
   const sd = hashStr(sym + "news");
-  const rs = ss?.relativeStrength ?? 55;
-  const p = mv?.price ?? info?.price ?? 100;
-  const c = mv?.pctChange ?? info?.pctChange ?? 0;
+  const rs = 55;
+  const p = 100;
+  const c = 0;
 
-  // Catalyst
-  if (mv?.newsContext) H.push({ daysAgo: 0, cat: "Catalyst", source: mv.catalystLabel ?? "Market", html: mv.newsContext });
-  // Technical
-  if (mv) {
-    H.push({
-      daysAgo: 0, cat: "Technical", source: mv.maPosture ?? "Trend",
-      html: `${nm} is ${c >= 0 ? `<b class="up">up ${sign(c)}</b>` : `<b class="down">down ${sign(c)}</b>`} today on <b>${(mv.rvolRatio ?? 1).toFixed(1)}×</b> volume. ${mv.techContext ?? ""}`,
-    });
-  }
-  // Sector
-  if (sec) {
-    H.push({
-      daysAgo: 1, cat: "Sector", source: ss?.sector ?? "Group",
-      html: `The ${ss?.sector ?? "group"} is ${sec.pctChange >= 0 ? `<b class="up">${sign(sec.pctChange)}</b>` : `<b class="down">${sign(sec.pctChange)}</b>`} (${(sec.trend ?? "flat").toLowerCase()}).`,
-    });
-  }
-  // Analyst actions
-  analyst.filter(a => a.ticker === sym).slice(0, 3).forEach((a, i) => {
-    const verb = a.actionType === "up" ? "raised to" : a.actionType === "down" ? "cut to" : a.actionType === "init" ? "initiated at" : "reiterated";
-    H.push({
-      daysAgo: 3 + i * 4, cat: "Analyst", source: a.firm,
-      html: `<b>${a.firm}</b> ${verb} <b style="color:var(--text-hi)">${a.newRating}</b>${a.newPriceTarget ? `, PT $${a.newPriceTarget}` : ""}.`,
-    });
-  });
   // Last earnings
-  const qeps = p / ((info?.peRatio ?? ss?.peRatio ?? 25) || 25) / 4;
+  const qeps = p / 25 / 4;
   const hist = earnHistory(sym, qeps);
   if (hist.length) {
     const q = hist[0];
     H.push({
       daysAgo: 6, cat: "Earnings", source: "Report",
       html: `${nm} posted ${q.q} EPS $${fmt(q.a)} vs $${fmt(q.e)} est (${q.surp >= 0 ? "beat" : "miss"}); shares ${q.mv >= 0 ? `<b class="up">${sign(q.mv)}</b>` : `<b class="down">${sign(q.mv)}</b>`} on the print.`,
-    });
-  }
-  // Next ER (from watch data)
-  const wEntry = watch.find(w => w.ticker === sym);
-  if (wEntry?.nextEarningsDate && wEntry.nextEarningsDate !== "—") {
-    const streak = Math.abs(sd % 7) + 2;
-    const beatStreak = (sd % 3) !== 0;
-    H.push({
-      daysAgo: 0, cat: "Earnings", source: "Calendar",
-      html: `${nm} next reports <b style="color:var(--text-hi)">${wEntry.nextEarningsDate}</b>. Riding a ${streak}-qtr ${beatStreak ? "beat" : "miss"} streak.`,
     });
   }
   // Coverage (deterministic)
@@ -181,7 +135,7 @@ function buildNewsHistory(sym: string): NewsItem[] {
   // Product
   H.push({
     daysAgo: (sd % 7) + 16, cat: "Product", source: "Company",
-    html: `${nm} unveiled a new ${(ss?.sector ?? "").toLowerCase().includes("semi") ? "product line" : "initiative"}; the Street called it ${(sd % 2) ? "incremental" : "a needle-mover"}.`,
+    html: `${nm} unveiled a new initiative; the Street called it ${(sd % 2) ? "incremental" : "a needle-mover"}.`,
   });
   // Guidance
   H.push({
@@ -247,9 +201,8 @@ function FeedItem({ item, i, total, onItemClick }: {
 /* ── News Drawer ── */
 function NewsDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   const { openStockFull } = useIQActions();
-  const info = stockInfo[sym];
-  const ss   = screenerStocks.find(x => x.ticker === sym);
-  const nm   = info?.name ?? ss?.name ?? sym;
+  // No live per-ticker company-name lookup wired here; degrades to the ticker.
+  const nm = sym;
   const items = buildNewsHistory(sym);
   // Per-ticker cache-aside fill (GET /live/news?ticker=X) — independent of the
   // main screen's bounded top-60 global feed, so a quiet ticker not in that
@@ -342,10 +295,27 @@ export function CommentaryScreen() {
   const searchRef = useRef<HTMLInputElement>(null);
   const [suggOpen, setSuggOpen] = useState(false);
 
-  const mySymbols = new Set([
-    ...watch.map(w => w.ticker),
-    ...folio.map(f => f.ticker),
-  ]);
+  const uid = firebaseAuth.currentUser?.uid ?? null;
+  const [watchTickers, setWatchTickers] = useState<string[]>([]);
+  const [folioTickers, setFolioTickers] = useState<string[]>([]);
+
+  // Backend persistence: pull the user's real watchlist/portfolio ticker sets
+  // to power the "My names" tab filter (mirrors watchlist.tsx / portfolio.tsx).
+  const refreshMyNames = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const { tickers } = await apiGet<WatchlistDoc>("/api/watchlist");
+      setWatchTickers(tickers);
+    } catch { /* stay on current (empty) watchlist tickers */ }
+    try {
+      const { holdings } = await apiGet<{ holdings: HoldingDoc[] }>("/api/portfolio");
+      setFolioTickers(holdings.map(h => h.ticker));
+    } catch { /* stay on current (empty) portfolio tickers */ }
+  }, [uid]);
+
+  useEffect(() => { void refreshMyNames(); }, [refreshMyNames]);
+
+  const mySymbols = new Set([...watchTickers, ...folioTickers]);
 
   const liveConverted: CommentaryItem[] = [...liveNews]
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
@@ -356,27 +326,23 @@ export function CommentaryScreen() {
   const liveMacro       = liveNews.filter(n => n.category !== "company").map(liveToCommentaryItem);
   const liveMyFeed       = liveNews.filter(n => mySymbols.has(n.ticker)).map(liveToCommentaryItem);
 
-  const myFeed = commentary.filter(item =>
-    [...mySymbols].some(sym => item.text.includes(`>${sym}<`) || item.text.includes(`<b>${sym}</b>`))
-  );
-
-  const macroFeed = commentary.filter(item =>
-    ["Macro", "Fed/Rates"].includes(item.cat)
-  );
+  // Ticker search universe: derived from live news tickers plus tracked
+  // names — no live company-name lookup is wired here, so name-based search
+  // degrades to ticker-only matching (accepted gap; previously backed by
+  // the removed mocks).
+  const searchSyms = Array.from(new Set([
+    ...liveNews.map(n => n.ticker),
+    ...mySymbols,
+  ])).sort();
+  const searchNames: Record<string, string> = {};
 
   const tabFeed: CommentaryItem[] = (() => {
-    if (activeTab === 0) return [...liveConverted, ...commentary];
+    if (activeTab === 0) return liveConverted;
     if (activeTab === 1) return [...livePremarket, ...PREMARKET];
     if (activeTab === 2) return [...liveAfterHours, ...AFTERHOURS];
-    if (activeTab === 3) {
-      const combined = [...liveMyFeed, ...myFeed];
-      return combined.length > 0 ? combined : commentary;
-    }
-    if (activeTab === 4) {
-      const combined = [...liveMacro, ...macroFeed];
-      return combined.length > 0 ? combined : commentary;
-    }
-    return commentary;
+    if (activeTab === 3) return liveMyFeed;
+    if (activeTab === 4) return liveMacro;
+    return [];
   })();
 
   const feedLabel = (() => {
@@ -391,7 +357,7 @@ export function CommentaryScreen() {
   const q = search.trim().toUpperCase();
   const ql = q.toLowerCase();
   const suggestions = q.length >= 1
-    ? SEARCH_SYMS.filter(s => s.includes(q) || (SEARCH_NAMES[s] ?? "").toLowerCase().includes(ql)).slice(0, 8)
+    ? searchSyms.filter(s => s.includes(q) || (searchNames[s] ?? "").toLowerCase().includes(ql)).slice(0, 8)
     : [];
 
   function openNews(sym: string) {
@@ -443,9 +409,7 @@ export function CommentaryScreen() {
                 minWidth: 220, width: "100%",
               }}>
                 {suggestions.map(sym => {
-                  const ss  = screenerStocks.find(x => x.ticker === sym);
-                  const inf = stockInfo[sym];
-                  const nm  = inf?.name ?? ss?.name ?? "";
+                  const nm = searchNames[sym] ?? "";
                   return (
                     <div
                       key={sym}

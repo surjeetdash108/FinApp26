@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { movers } from "../data";
 import { fmt, sign, cls, arr, StockLogo } from "../utils";
 import { useApiResource } from "../hooks/useApiResource";
+import { useApiList } from "../hooks/useApiList";
 import { OptionsChainDoc, OPTIONS_UNIVERSE } from "../types";
+import type { LiveMoverDoc } from "../types";
 
 const EXTRA_STOCKS = [
   { s: "AAPL",  n: "Apple",          p:  189.98, c:  1.02 },
@@ -97,12 +98,14 @@ function fK(k: number) { return k % 1 === 0 ? k.toFixed(0) : k.toFixed(1); }
 function fOI(x: number) { return fmt(x, 0); }
 
 export function OptionsScreen() {
+  const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
+
   const stockList = useMemo(() => {
-    const moverSyms = new Set(movers.map(m => m.ticker));
-    const base = movers.map(m => ({ s: m.ticker, n: m.name, p: m.price, c: m.pctChange }));
+    const moverSyms = new Set(liveMovers.map(m => m.ticker));
+    const base = liveMovers.map(m => ({ s: m.ticker, n: m.name ?? m.ticker, p: m.price, c: m.pctChange }));
     const extra = EXTRA_STOCKS.filter(e => !moverSyms.has(e.s));
     return [...base, ...extra].sort((a, b) => a.s < b.s ? -1 : 1);
-  }, []);
+  }, [liveMovers]);
 
   const [selSym, setSelSym] = useState(stockList[0]?.s ?? "NVDA");
   const [expIdx, setExpIdx] = useState(0);

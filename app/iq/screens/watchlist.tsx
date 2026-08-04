@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { firebaseAuth } from "../../firebase";
-import { watch as watchData } from "../data";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc, WatchlistDoc } from "../types";
@@ -14,36 +13,32 @@ export function WatchlistScreen() {
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
-  const [items, setItems]                 = useState<string[]>(() => watchData.map(w => w.ticker));
-  const [sel, setSel]                     = useState<string | null>(() => watchData[0]?.ticker ?? null);
+  const [items, setItems]                 = useState<string[]>([]);
+  const [sel, setSel]                     = useState<string | null>(null);
   const [addOpen, setAddOpen]             = useState(false);
   const [newSym, setNewSym]               = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  // Backend persistence layered on top of the demo watchlist: once signed in,
-  // a saved list (if any) takes over; an empty/missing doc keeps the demo names.
+  // Backend persistence: once signed in, load the user's real saved watchlist.
   const refreshWatchlist = useCallback(async () => {
     if (!uid) return;
     try {
       const { tickers } = await apiGet<WatchlistDoc>("/api/watchlist");
-      if (tickers.length > 0) {
-        setItems(tickers);
-        setSel(prev => prev ?? tickers[0] ?? null);
-      }
-    } catch { /* stay on demo data */ }
+      setItems(tickers);
+      setSel(prev => prev ?? tickers[0] ?? null);
+    } catch { /* stay on current data */ }
   }, [uid]);
 
   useEffect(() => { void refreshWatchlist(); }, [refreshWatchlist]);
 
   const list = items.map(sym => {
-    const w = watchData.find(x => x.ticker === sym);
     const c = byTicker.get(sym);
     const live = c?.price != null;
     return {
       ticker: sym,
-      name: c?.name ?? w?.name ?? sym,
-      price: c?.price ?? w?.price ?? 0,
-      pctChange: c?.pctChange ?? w?.pctChange ?? 0,
+      name: c?.name ?? sym,
+      price: c?.price ?? 0,
+      pctChange: c?.pctChange ?? 0,
       live,
     };
   });

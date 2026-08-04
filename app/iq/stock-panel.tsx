@@ -3,8 +3,9 @@
 import { useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { CandleChart, RsiPane, earnHistory, Spark } from "./utils";
-import { stockInfo, watch as watchData, screenerStocks } from "./data";
 import { ExpandBtn } from "./shell";
+import { useApiList } from "./hooks/useApiList";
+import type { CompanyDoc, LiveEarningsDoc } from "./types";
 
 /* ── Shared dynamic embed — one definition for all screens ── */
 export const StockScreenEmbed = dynamic<{ initialSym?: string; hideHeader?: boolean; hideChart?: boolean }>(
@@ -219,9 +220,12 @@ export function ChartCard({
   const [showRsi, setShowRsi] = useState(false);
   const [showEarnings, setShowEarnings] = useState(false);
 
-  const erDate = watchData.find(w => w.ticker === sym)?.nextEarningsDate ?? "—";
-  const eps = stockInfo[sym]?.eps ?? 1;
-  const rs = screenerStocks.find(s => s.ticker === sym)?.relativeStrength ?? 50;
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+
+  const erDate = liveEarnings.find(e => e.ticker === sym)?.date ?? "—";
+  const eps = 1;
+  const rs = companies.find(c => c.ticker === sym)?.rsRating ?? 50;
   const rsiVal = Math.round(38 + rs * 0.36);
 
   return (

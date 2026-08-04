@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useIQActions } from "../shell";
-import { funds as mockFunds, fundDetail, type Fund } from "../data";
 import { StockLogo } from "../utils";
 import { apiGet } from "../backend";
 import { useApiList } from "../hooks/useApiList";
@@ -113,15 +112,12 @@ function insiderHistory(sym: string) {
     date: d,
   }));
 }
-function instHolders(sym: string) {
-  const out: { fund: string; mgr: string; pct: number; act: string }[] = [];
-  mockFunds.forEach(fd => {
-    const dt = fundDetail[fd.fundName];
-    if (!dt) return;
-    const hit = dt.holdings.find(x => x[0] === sym);
-    if (hit) out.push({ fund: fd.fundName, mgr: fd.managerName, pct: hit[1], act: hit[2] });
-  });
-  return out;
+// Live 13F positions are keyed by CUSIP + issuer name, not ticker — there is no
+// live way to answer "which tracked funds hold ticker X" without a CUSIP→ticker
+// map, which the backend doesn't provide. Accepted gap: the drawer's existing
+// "No tracked 13F funds hold…" empty state covers this.
+function instHolders(_sym: string): { fund: string; mgr: string; pct: number; act: string }[] {
+  return [];
 }
 function mutualFunds(sym: string) {
   const h     = instSeed(sym);
@@ -179,13 +175,6 @@ async function fetchPositions(cik: string, accessionNumber: string): Promise<Pos
     `/market-data/fund-holdings/positions?cik=${encodeURIComponent(cik)}&accession=${encodeURIComponent(accessionNumber)}`,
   );
 }
-/** Loosely matches "Berkshire Hathaway" (live) with "Berkshire Hathaway" or "Berkshire" (mock) etc. */
-function fuzzyFundMatch(a: string, b: string): boolean {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
-  const na = norm(a), nb = norm(b);
-  return na.includes(nb) || nb.includes(na);
-}
-
 // ---- insider stock drawer ----
 function InsiderDrawer({ sym, liveTxns, onClose, onOpenFull }: {
   sym: string; liveTxns: InsiderTxDoc[]; onClose: () => void; onOpenFull: (s: string) => void;
@@ -470,18 +459,17 @@ export function InsiderScreen() {
   );
   const activeInst = [...INST_DATA].sort((a, b) => b.owners - a.owners).slice(0, 6);
 
-  // Merge live fund_holdings data into the mock fund cards (aum/positions/top holding), by fuzzy name match.
-  const mergedFunds: (Fund & { live?: boolean })[] = mockFunds.map(f => {
-    const live = liveFunds.find(lf => fuzzyFundMatch(lf.fundName, f.fundName));
-    if (!live) return f;
-    return {
-      ...f,
-      aum: fmtValue(live.totalValue),
-      totalPositions: live.totalPositions,
-      quarter: `Filed ${live.latestFilingDate}`,
-      live: true,
-    };
-  });
+  // Fund summary cards are built directly from the live 13F feed — no mock
+  // base list. Fields the mock used to carry with no live source (manager
+  // name, top holding ticker, new/exit counts) are dropped rather than
+  // fabricated; the "Deep analysis" link needs a ticker so it goes away too.
+  const fundCards = liveFunds.map(f => ({
+    fundName: f.fundName,
+    avatar: f.fundName.slice(0, 2).toUpperCase(),
+    aum: fmtValue(f.totalValue),
+    totalPositions: f.totalPositions,
+    quarter: `Filed ${f.latestFilingDate}`,
+  }));
 
   return (
     <>
@@ -632,18 +620,17 @@ export function InsiderScreen() {
           </div>
 
           <div style={{ margin: "20px 0 10px", fontSize: ".74rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--text-dim-solid)", fontWeight: 700 }}>
-            Top tracked funds · latest 13F filings {liveFunds.length > 0 && <span style={{ color: "var(--up)" }}>· live where synced</span>}
+            Top tracked funds · latest 13F filings
           </div>
 
           <div className="dash" style={{ marginBottom: 14 }}>
-            {mergedFunds.map((f) => (
+            {fundCards.map((f) => (
               <div key={f.fundName} className="col-4">
-                <div className="fundcard" onClick={() => setDrawer({ kind: "inst", sym: f.topHolding, sn: INST_SN[f.topHolding] || f.topHolding })}>
+                <div className="fundcard">
                   <div style={{ display: "flex", gap: 11, alignItems: "center", marginBottom: 12 }}>
                     <div className="av">{f.avatar}</div>
                     <div>
-                      <div className="nm">{f.fundName}{f.live && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", marginLeft: 6, fontSize: ".6rem" }}>live</span>}</div>
-                      <div className="mgr">{f.managerName}</div>
+                      <div className="nm">{f.fundName}</div>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 14, fontFamily: "var(--f-mono)", fontSize: ".78rem" }}>
@@ -655,23 +642,16 @@ export function InsiderScreen() {
                       <div style={{ color: "var(--text-dim-solid)", fontSize: ".62rem", fontFamily: "var(--f-body)" }}>Positions</div>
                       <b style={{ color: "var(--text-hi)" }}>{f.totalPositions}</b>
                     </div>
-                    <div>
-                      <div style={{ color: "var(--text-dim-solid)", fontSize: ".62rem", fontFamily: "var(--f-body)" }}>Top</div>
-                      <b style={{ color: "var(--text-hi)" }}>{f.topHolding}</b>
-                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 6, marginTop: 11, alignItems: "center" }}>
-                    <span className="pill up">{f.newPositions} new</span>
-                    <span className="pill dn">{f.exitCount} exits</span>
                     <span className="pill amc">{f.quarter}</span>
-                    <span className="link" style={{ marginLeft: "auto" }}
-                      onClick={e => { e.stopPropagation(); openStockFull(f.topHolding); }}>
-                      Deep analysis →
-                    </span>
                   </div>
                 </div>
               </div>
             ))}
+            {fundCards.length === 0 && (
+              <div style={{ fontSize: ".85rem", color: "var(--text-dim-solid)" }}>No 13F filings synced yet.</div>
+            )}
           </div>
 
           <div className="dash" style={{ marginTop: 14 }}>

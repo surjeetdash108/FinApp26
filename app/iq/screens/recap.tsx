@@ -3,11 +3,70 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useIQActions } from "../shell";
-import { recap, sectorList, earnings } from "../data";
 import { cls, arr, sign, StockLogo, heatCol } from "../utils";
+import { useApiList } from "../hooks/useApiList";
+import type { SectorApiDoc } from "../types";
 
 const SEC_PAGE = 10;
-const SEC_PAGES = Math.ceil(sectorList.length / SEC_PAGE);
+
+// ---- backend doc shape (see MarketCatalystBackEnd src/sync/recaps.job.ts,
+// src/market-data/recaps.controller.ts — GET /market-data/recaps) ----
+interface RecapMover { ticker: string; name: string; price: number | null; pctChange: number | null; sector: string | null; cap: string | null; }
+interface RecapIndex { id: string; label: string; value: number | null; pctChange: number | null; }
+interface RecapSector { sector: string; pctChange: number | null; }
+interface RecapInternals {
+  date: string; advancers: number | null; decliners: number | null; netAdvancers: number | null;
+  breadthPct: number | null; trin: number | null; upVolume: number | null; downVolume: number | null;
+}
+interface RecapDoc {
+  date: string;
+  indices: RecapIndex[];
+  topGainers: RecapMover[];
+  topLosers: RecapMover[];
+  sectorLeaders: RecapSector[];
+  sectorLaggards: RecapSector[];
+  internals: RecapInternals | null;
+  // Narrative prose isn't produced by any backend job yet — headline/stories
+  // below are derived from the numeric fields instead of fabricated copy.
+  narrative: string | null;
+}
+
+function buildHeadline(r: RecapDoc | null): string {
+  if (!r) return "Recap unavailable";
+  const spx = r.indices.find(i => i.label === "S&P 500" && i.pctChange != null);
+  if (!spx) return `Market recap · ${r.date}`;
+  return `Markets closed ${spx.pctChange! >= 0 ? "higher" : "lower"}, S&P 500 ${sign(spx.pctChange!)}`;
+}
+
+function buildStories(r: RecapDoc | null): string[] {
+  if (!r) return [];
+  const out: string[] = [];
+  const g = r.topGainers[0], l = r.topLosers[0], sl = r.sectorLeaders[0], lg = r.sectorLaggards[0];
+  if (g?.pctChange != null) out.push(`${g.name} led gainers, ${sign(g.pctChange)} on the day.`);
+  if (l?.pctChange != null) out.push(`${l.name} led decliners, ${sign(l.pctChange)}.`);
+  if (sl?.pctChange != null) out.push(`${sl.sector} was the strongest sector, ${sign(sl.pctChange)}.`);
+  if (lg?.pctChange != null) out.push(`${lg.sector} lagged, ${sign(lg.pctChange)}.`);
+  return out;
+}
+
+function buildInternals(internals: RecapInternals | null): { label: string; value: string; direction: number }[] {
+  if (!internals) return [];
+  const rows: { label: string; value: string; direction: number }[] = [];
+  if (internals.advancers != null && internals.decliners != null) {
+    rows.push({ label: "Advancers / Decliners", value: `${internals.advancers} / ${internals.decliners}`, direction: internals.advancers >= internals.decliners ? 1 : -1 });
+  }
+  if (internals.breadthPct != null) {
+    rows.push({ label: "Breadth", value: `${internals.breadthPct.toFixed(0)}%`, direction: internals.breadthPct >= 50 ? 1 : -1 });
+  }
+  if (internals.upVolume != null && internals.downVolume != null && (internals.upVolume + internals.downVolume) > 0) {
+    const pct = Math.round((internals.upVolume / (internals.upVolume + internals.downVolume)) * 100);
+    rows.push({ label: "Up volume", value: `${pct}%`, direction: pct >= 50 ? 1 : -1 });
+  }
+  if (internals.trin != null) {
+    rows.push({ label: "TRIN", value: internals.trin.toFixed(2), direction: internals.trin <= 1 ? 1 : -1 });
+  }
+  return rows;
+}
 
 const TABS = ["Today (EOD)", "This Week"];
 
@@ -227,11 +286,22 @@ export function RecapScreen() {
   const [recapPage, setRecapPage] = useState(0);
   const [drawer, setDrawer] = useState<"earn-movers" | "internals" | null>(null);
 
+  const { data: recaps } = useApiList<RecapDoc>("/market-data/recaps");
+  const recap = [...recaps].sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
+  const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const sectorRows = sectorsLive.filter(s => s.pctChange != null);
+  const SEC_PAGES = Math.max(1, Math.ceil(sectorRows.length / SEC_PAGE));
+  const recapMovers = recap
+    ? [...recap.topGainers.map(m => ({ ...m, reason: "Top gainer" })), ...recap.topLosers.map(m => ({ ...m, reason: "Top loser" }))]
+        .filter(m => m.pctChange != null)
+    : [];
+  const recapInternals = buildInternals(recap?.internals ?? null);
+
   const pageStart = recapPage * SEC_PAGE;
-  const pageSectors = sectorList.slice(pageStart, pageStart + SEC_PAGE);
+  const pageSectors = sectorRows.slice(pageStart, pageStart + SEC_PAGE);
 
   function downloadRecap(which: string) {
-    const blob = new Blob([`MarketCatalyst ${which} Recap — ${recap.date}`], { type: "text/plain" });
+    const blob = new Blob([`MarketCatalyst ${which} Recap — ${recap?.date ?? ""}`], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -251,17 +321,20 @@ export function RecapScreen() {
       <div className="card-b">
         <div className="heat">
           {pageSectors.map(s => (
-            <div key={s.name} className="s"
-              style={{ background: heatColor(weeklyScale ? s.pctChange * 5 : s.pctChange), cursor: "pointer" }}
-              onClick={() => openSector(s.name)}>
-              <div className="nm">{s.name}</div>
-              <div className="v">{weeklyScale ? `${arr(s.pctChange)}${sign(s.pctChange)}` : sign(s.pctChange)}</div>
+            <div key={s.sector} className="s"
+              style={{ background: heatColor(weeklyScale ? (s.pctChange ?? 0) * 5 : (s.pctChange ?? 0)), cursor: "pointer" }}
+              onClick={() => openSector(s.sector)}>
+              <div className="nm">{s.sector}</div>
+              <div className="v">{weeklyScale ? `${arr(s.pctChange ?? 0)}${sign(s.pctChange ?? 0)}` : sign(s.pctChange ?? 0)}</div>
             </div>
           ))}
+          {pageSectors.length === 0 && (
+            <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)", padding: "8px 0" }}>No sector data available yet.</div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 9, fontSize: ".74rem" }}>
           <span style={{ color: "var(--text-dim-solid)" }}>
-            Sectors {pageStart + 1}–{Math.min(pageStart + SEC_PAGE, sectorList.length)} of {sectorList.length} · click one to open it in the heatmap
+            Sectors {pageStart + 1}–{Math.min(pageStart + SEC_PAGE, sectorRows.length)} of {sectorRows.length} · click one to open it in the heatmap
           </span>
           <span style={{ display: "flex", gap: 14 }}>
             {recapPage > 0 && (
@@ -285,14 +358,17 @@ export function RecapScreen() {
             <button className="link" onClick={() => router.push("/menu/earnings")}>View all →</button>
           </div>
           <div className="card-b" style={{ paddingTop: 6 }}>
-            {recap.movers.map(m => (
+            {recapMovers.map(m => (
               <div key={m.ticker} className="minirow" style={{ cursor: "pointer" }} onClick={() => openStock(m.ticker)}>
                 <StockLogo sym={m.ticker} size={20} />
                 <span className="tkr">{m.ticker}</span>
                 <span className="mid">{m.reason}</span>
-                <span className={`r ${cls(m.pctChange)}`}>{sign(m.pctChange)}</span>
+                <span className={`r ${cls(m.pctChange ?? 0)}`}>{sign(m.pctChange ?? 0)}</span>
               </div>
             ))}
+            {recapMovers.length === 0 && (
+              <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>No mover data available yet.</div>
+            )}
           </div>
         </div>
       </div>
@@ -303,12 +379,15 @@ export function RecapScreen() {
             <button className="link" onClick={() => router.push("/menu/movers")}>View all →</button>
           </div>
           <div className="card-b" style={{ paddingTop: 6 }}>
-            {recap.internals.map(r => (
+            {recapInternals.map(r => (
               <div key={r.label} className="minirow">
                 <span className="mid">{r.label}</span>
                 <span className={`r ${r.direction > 0 ? "up" : r.direction < 0 ? "down" : ""}`}>{r.value}</span>
               </div>
             ))}
+            {recapInternals.length === 0 && (
+              <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>No internals data available yet.</div>
+            )}
           </div>
         </div>
       </div>
@@ -339,20 +418,20 @@ export function RecapScreen() {
               <div onClick={() => downloadRecap("today")}
                 title="Open the full executive summary (PDF)"
                 style={{ cursor: "pointer", fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>
-                {recap.headline}{" "}
+                {buildHeadline(recap)}{" "}
                 <span style={{ fontSize: ".7rem", color: "var(--brand-2)", fontWeight: 600 }}>→ open PDF</span>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
-              {recap.indices.map(idx => {
-                const { bg, fg } = heatCol(idx.value);
+              {(recap?.indices ?? []).filter(idx => idx.pctChange != null).map(idx => {
+                const { bg, fg } = heatCol(idx.pctChange!);
                 return (
                   <div key={idx.label} style={{
                     background: bg, borderRadius: 10, padding: "8px 14px", minWidth: 90,
                   }}>
                     <div style={{ fontSize: ".68rem", color: fg, opacity: 0.8, marginBottom: 3 }}>{idx.label}</div>
                     <div style={{ fontSize: "1.1rem", fontWeight: 700, fontFamily: "var(--f-mono)", color: fg }}>
-                      {arr(idx.value)}{sign(idx.value)}
+                      {arr(idx.pctChange!)}{sign(idx.pctChange!)}
                     </div>
                   </div>
                 );
@@ -380,30 +459,30 @@ export function RecapScreen() {
                   <div className="eyebrow">Key stories</div>
                   <span className="link" onClick={() => router.push("/menu/commentary")}>View all →</span>
                 </div>
-                {recap.stories.map((s, i) => (
+                {buildStories(recap).map((s, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, padding: "6px 0", fontSize: ".84rem" }}>
                     <span className="bullet" style={{ marginTop: 6, flexShrink: 0 }} />
                     <span>{s}</span>
                   </div>
                 ))}
+                {buildStories(recap).length === 0 && (
+                  <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>No stories available yet.</div>
+                )}
               </div>
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div className="eyebrow">Up next · tomorrow</div>
                   <span className="link" onClick={() => router.push("/menu/macro")}>View all →</span>
                 </div>
-                {recap.tomorrow.map((t, i) => (
-                  <div key={i} className="minirow">
-                    <span className="mono" style={{ width: 54, color: "var(--warn)" }}>{t.time}</span>
-                    <span className="mid">{t.event}</span>
-                  </div>
-                ))}
+                <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>
+                  Economic calendar isn&apos;t available from the live data feed yet — check the Macro tab.
+                </div>
               </div>
             </div>
           </div>
  <NewsBriefing
             mode="today"
-            dateLabel={recap.date}
+            dateLabel={recap?.date ?? "—"}
             onDownload={() => downloadRecap("today")}
             />
           {SectorHeatCard(true, false)}
@@ -559,62 +638,39 @@ export function RecapScreen() {
             <div className="drawer-b">
               {drawer === "earn-movers" && (
                 <>
-                  {recap.movers.map(m => (
+                  {recapMovers.map(m => (
                     <div key={m.ticker} className="minirow" style={{ cursor: "pointer", padding: "8px 0" }}
                       onClick={() => { openStock(m.ticker); setDrawer(null); }}>
                       <StockLogo sym={m.ticker} size={22} />
                       <span className="tkr">{m.ticker}</span>
                       <span className="mid">{m.reason}</span>
-                      <span className={`r mono ${cls(m.pctChange)}`} style={{ fontWeight: 700 }}>{sign(m.pctChange)}</span>
+                      <span className={`r mono ${cls(m.pctChange ?? 0)}`} style={{ fontWeight: 700 }}>{sign(m.pctChange ?? 0)}</span>
                     </div>
                   ))}
-                  <div style={{ height: 1, background: "var(--border)", margin: "12px 0 10px" }} />
-                  <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>
-                    Full earnings calendar · reported reactions
-                  </div>
-                  {[...earnings]
-                    .filter(e => e.priceReaction !== null)
-                    .sort((a, b) => Math.abs(b.priceReaction!) - Math.abs(a.priceReaction!))
-                    .map(e => (
-                      <div key={e.ticker} className="minirow" style={{ cursor: "pointer", padding: "8px 0" }}
-                        onClick={() => { openStock(e.ticker); setDrawer(null); }}>
-                        <StockLogo sym={e.ticker} size={22} />
-                        <span className="tkr">{e.ticker}<small>{e.name}</small></span>
-                        <span className="mid">
-                          <span className={`pill ${e.priceReaction! >= 0 ? "beat" : "miss"}`}>
-                            {e.priceReaction! >= 0 ? "Beat" : "Miss"}
-                          </span>
-                          {e.guidanceStatus && e.guidanceStatus !== "In-line" && (
-                            <span className={`pill ${e.guidanceStatus === "Raised" ? "beat" : "miss"}`} style={{ marginLeft: 4 }}>
-                              {e.guidanceStatus}
-                            </span>
-                          )}
-                          <span style={{ marginLeft: 6, fontSize: ".7rem", color: "var(--text-dim-solid)" }}>
-                            EPS ${e.epsEstimate} → ${e.epsActual}
-                          </span>
-                        </span>
-                        <span className={`r mono ${e.priceReaction! >= 0 ? "up" : "down"}`} style={{ fontWeight: 700 }}>
-                          {e.priceReaction! >= 0 ? "+" : ""}{e.priceReaction}%
-                        </span>
-                      </div>
-                    ))}
+                  {recapMovers.length === 0 && (
+                    <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)", padding: "8px 0" }}>No mover data available yet.</div>
+                  )}
                 </>
               )}
               {drawer === "internals" && (
                 <>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".8rem", marginBottom: 6 }}>
-                      <span className="up mono" style={{ fontWeight: 700 }}>▲ 2,810 advancing</span>
-                      <span className="down mono" style={{ fontWeight: 700 }}>▼ 1,140 declining</span>
+                  {recap?.internals?.advancers != null && recap.internals.decliners != null && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".8rem", marginBottom: 6 }}>
+                        <span className="up mono" style={{ fontWeight: 700 }}>▲ {recap.internals.advancers} advancing</span>
+                        <span className="down mono" style={{ fontWeight: 700 }}>▼ {recap.internals.decliners} declining</span>
+                      </div>
+                      <div style={{ height: 8, borderRadius: 4, background: "var(--surface-3)", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${Math.round((recap.internals.advancers / (recap.internals.advancers + recap.internals.decliners || 1)) * 100)}%`, background: "var(--up)", borderRadius: 4 }} />
+                      </div>
+                      {recap.internals.decliners > 0 && (
+                        <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
+                          A/D Ratio: {(recap.internals.advancers / recap.internals.decliners).toFixed(2)} · NYSE + NASDAQ composite
+                        </div>
+                      )}
                     </div>
-                    <div style={{ height: 8, borderRadius: 4, background: "var(--surface-3)", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: "71%", background: "var(--up)", borderRadius: 4 }} />
-                    </div>
-                    <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
-                      A/D Ratio: 2.47 · NYSE + NASDAQ composite
-                    </div>
-                  </div>
-                  {recap.internals.map(r => (
+                  )}
+                  {recapInternals.map(r => (
                     <div key={r.label} style={{
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                       padding: "10px 14px", marginBottom: 6,

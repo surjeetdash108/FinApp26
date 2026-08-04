@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
-import { earnings, stockInfo, type Earning } from "../data";
+import type { Earning } from "../data";
 import { fmt, cls, sign, earnHistory, EarnQ, StockLogo } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { LiveEarningsDoc } from "../types";
@@ -147,9 +147,8 @@ function parseMcNum(mc: string): number {
 }
 
 function earnIncome(s: string, mcStr: string): IncRow[] {
-  const si    = stockInfo[s];
   const mc    = parseMcNum(mcStr);
-  const price = si?.price ?? 100;
+  const price = 100;
   const rev0  = Math.max(2, mc * 0.02);
   const sh    = Math.max(0.3, mc / price);
   const cols  = ["Q2 25","Q1 25","Q4 24","Q3 24","Q2 24","Q1 24","Q4 23","Q3 23","Q2 23","Q1 23"];
@@ -940,8 +939,7 @@ export function EarningsScreen() {
 
   // ── Detail section ────────────────────────────────────────────────────────
 
-  const baseEarning: Earning = earnings.find(e => e.ticker === sel)
-    ?? (() => { const cal = EARN_CAL.find(e => e.s === sel); return cal ? calToEarning(cal) : calToEarning(EARN_CAL[0]); })();
+  const baseEarning: Earning = calToEarning(EARN_CAL.find(e => e.s === sel) ?? EARN_CAL[0]);
 
   const liveMatches = liveEarnings.filter(e => e.ticker === sel).sort((a, b) => b.date.localeCompare(a.date));
   const liveMatch = liveMatches[0];
@@ -950,8 +948,7 @@ export function EarningsScreen() {
     ? { ...baseEarning, epsEstimate: liveMatch.epsEstimate ?? baseEarning.epsEstimate, epsActual: liveMatch.epsActual ?? baseEarning.epsActual }
     : baseEarning;
 
-  const _si   = stockInfo[sel];
-  const _base = Math.max(0.05, ((_si?.price ?? 100) / (_si?.peRatio ?? 25)) / 4);
+  const _base = Math.max(0.05, (100 / 25) / 4);
   const hist  = earnHistory(sel, _base);
   const inc   = earnIncome(sel, selEarning?.marketCap ?? "$60B");
   const beats = hist.filter(h => h.surp > 0).length;
@@ -1044,9 +1041,9 @@ export function EarningsScreen() {
             </div>{/* end outer flex */}
           </div>{/* end card-h */}
           <div className="card-b" style={{ paddingTop: 10 }}>
-            {(COMPANY_BIO[sel] ?? stockInfo[sel]?.aiThesis) && (
+            {COMPANY_BIO[sel] && (
               <p style={{ fontSize: ".82rem", color: "var(--text)", lineHeight: 1.6, marginBottom: 14, marginTop: 0 }}>
-                {COMPANY_BIO[sel] ?? stockInfo[sel]?.aiThesis}
+                {COMPANY_BIO[sel]}
               </p>
             )}
             <div className="metric-grid" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 12 }}>

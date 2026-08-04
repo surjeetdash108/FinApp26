@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { firebaseAuth } from "../../firebase";
-import { folio as folioData, type FolioItem } from "../data";
+import type { FolioItem } from "../data";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc, HoldingDoc } from "../types";
@@ -23,13 +23,9 @@ export function PortfolioScreen() {
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
 
-  const [holdings, setHoldings] = useState<FolioItem[]>(() => [...folioData]);
-  const [pfSel, setPfSel]       = useState(folioData[0]?.ticker ?? "");
-  const [shares, setShares]     = useState<Record<string, number>>(() => {
-    const base = { ...DEFAULT_SHARES };
-    folioData.forEach(f => { if (!(f.ticker in base)) base[f.ticker] = 10; });
-    return base;
-  });
+  const [holdings, setHoldings] = useState<FolioItem[]>([]);
+  const [pfSel, setPfSel]       = useState("");
+  const [shares, setShares]     = useState<Record<string, number>>(() => ({ ...DEFAULT_SHARES }));
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [addOpen, setAddOpen]       = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -39,18 +35,16 @@ export function PortfolioScreen() {
   const [newSize, setNewSize]       = useState<"Small"|"Medium"|"Large">("Small");
   const [newConv, setNewConv]       = useState<"High"|"Medium"|"Low">("Medium");
 
-  // Backend persistence layered on top of the demo portfolio: once signed in,
-  // saved holdings (if any) take over; an empty/missing set keeps the demo names.
+  // Backend persistence: holdings are loaded from the user's real portfolio.
+  // A missing/empty set simply leaves the holdings list empty (empty state).
   const refreshHoldings = useCallback(async () => {
     if (!uid) return;
     try {
       const { holdings: rows } = await apiGet<{ holdings: HoldingDoc[] }>("/api/portfolio");
-      if (rows.length === 0) return;
       const nextShares: Record<string, number> = {};
       const nextHoldings: FolioItem[] = rows.map(r => {
         nextShares[r.ticker] = r.shares;
-        const mock = folioData.find(f => f.ticker === r.ticker);
-        return mock ?? {
+        return {
           ticker: r.ticker, name: r.ticker, price: 100, pctChange: 0, gainLossPct: 0,
           positionSize: r.positionSize, conviction: r.conviction, eventNote: "—",
         };
@@ -58,7 +52,7 @@ export function PortfolioScreen() {
       setHoldings(nextHoldings);
       setShares(nextShares);
       setPfSel(prev => prev || nextHoldings[0]?.ticker || "");
-    } catch { /* stay on demo data */ }
+    } catch { /* keep current (empty) holdings */ }
   }, [uid]);
 
   useEffect(() => { void refreshHoldings(); }, [refreshHoldings]);

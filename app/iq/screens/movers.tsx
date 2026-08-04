@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { movers as mockMovers, analyst, earnings, watch, folio, type Mover } from "../data";
+import type { Mover } from "../data";
 import { fmt, sign, cls, arr, Spark, StockLogo } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { LiveMoverDoc, CompanyDoc } from "../types";
@@ -22,84 +22,54 @@ type TabKey = "win" | "lose" | "vol" | "week";
 const CAPS = ["All", "Mega", "Large", "Mid", "Small"];
 
 /**
- * Merges live Firestore market_movers data into the original mock list —
- * never removes a mock row. Matching tickers get real price/%change/sector/
- * cap; live-only tickers (not in the original mock set) are appended with
- * neutral placeholders for fields that have no real data source yet (RVOL,
- * catalyst, weekly change, technical/news context).
+ * Builds the mover row list directly from live Firestore market_movers data —
+ * there is no mock base anymore. Each live row is overlaid with real RVOL
+ * from companies.rvol when available; narrative fields with no live source
+ * yet (relative strength, catalyst, moving-average posture, weekly change,
+ * technical/news context) fall back to neutral/empty defaults.
  */
-function mergeMovers(
-  mock: Mover[],
+function buildMovers(
   live: LiveMoverDoc[],
   companyRvol: Map<string, number | null>,
 ): { list: Mover[]; liveCount: number } {
-  const liveByTicker = new Map(live.map(l => [l.ticker, l]));
-  let liveCount = 0;
   // Real relative volume from technical-indicators.job (companies.rvol), when
-  // available — otherwise keep the row's existing (mock/placeholder) value.
-  const rv = (ticker: string, fallback: number) => companyRvol.get(ticker) ?? fallback;
+  // available — otherwise a neutral placeholder.
+  const rv = (ticker: string) => companyRvol.get(ticker) ?? 1;
 
-  const merged = mock.map(m => {
-    const l = liveByTicker.get(m.ticker);
-    if (!l) return { ...m, rvolRatio: rv(m.ticker, m.rvolRatio) };
-    liveByTicker.delete(m.ticker);
-    liveCount++;
-    return {
-      ...m,
-      price: l.price,
-      pctChange: l.pctChange,
-      name: l.name ?? m.name,
-      sector: l.sector ?? m.sector,
-      cap: (l.cap as Mover["cap"]) ?? m.cap,
-      rvolRatio: rv(m.ticker, m.rvolRatio),
-    };
-  });
+  const list = live.map(l => ({
+    ticker: l.ticker,
+    name: l.name ?? l.ticker,
+    price: l.price,
+    pctChange: l.pctChange,
+    rvolRatio: rv(l.ticker),
+    relativeStrength: 50,
+    catalystLabel: "No known catalyst",
+    maPosture: l.pctChange >= 0 ? "Above 50/200" : "Below 50/200",
+    owned: false,
+    sector: l.sector ?? "Unclassified",
+    cap: (l.cap as Mover["cap"]) ?? "Mid",
+    weekPct: l.pctChange,
+    techContext: `Live EOD data as of ${l.asOfDate}. RVOL/technical context not available for this synced name yet.`,
+    newsContext: "Live market data — catalyst not yet available from a connected news source.",
+  }));
 
-  for (const l of liveByTicker.values()) {
-    liveCount++;
-    merged.push({
-      ticker: l.ticker,
-      name: l.name ?? l.ticker,
-      price: l.price,
-      pctChange: l.pctChange,
-      rvolRatio: rv(l.ticker, 1),
-      relativeStrength: 50,
-      catalystLabel: "No known catalyst",
-      maPosture: l.pctChange >= 0 ? "Above 50/200" : "Below 50/200",
-      owned: false,
-      sector: l.sector ?? "Unclassified",
-      cap: (l.cap as Mover["cap"]) ?? "Mid",
-      weekPct: l.pctChange,
-      techContext: `Live EOD data as of ${l.asOfDate}. RVOL/technical context not available for this synced name yet.`,
-      newsContext: "Live market data — catalyst not yet available from a connected news source.",
-    });
-  }
-
-  return { list: merged, liveCount };
+  return { list, liveCount: list.length };
 }
 
-function computeTrending(movers: Mover[]) {
-  const srcs: Record<string, Set<string>> = {};
-  const add = (s: string, src: string) => {
-    if (!srcs[s]) srcs[s] = new Set();
-    srcs[s].add(src);
-  };
-  movers.forEach(m  => add(m.ticker, "Movers"));
-  analyst.forEach(a => add(a.ticker, "Analyst"));
-  earnings.forEach(e => add(e.ticker, "Earnings"));
-  watch.forEach(w   => add(w.ticker, "Watchlist"));
-  folio.forEach(f   => add(f.ticker, "Portfolio"));
-  return Object.entries(srcs)
-    .map(([s, set]) => ({ s, n: set.size, srcs: [...set], days: 2 + (s.charCodeAt(0) % 4) }))
-    .filter(o => o.n >= 2)
-    .sort((a, b) => b.n - a.n || b.days - a.days);
+// "Trending across reports" originally cross-referenced analyst actions,
+// earnings, watchlist, and portfolio mock data alongside movers. None of
+// those domains have a live hook wired up in this screen, so there's no
+// meaningful multi-source overlap signal left to compute — return empty
+// and let the render guard (`trending.length > 0 &&`) hide the widget.
+function computeTrending(_movers: Mover[]): { s: string; n: number; srcs: string[]; days: number }[] {
+  return [];
 }
 
 export function MoversScreen() {
   const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
   const { data: rvolCompanies } = useApiList<CompanyDoc>("/market-data/companies");
   const companyRvol = new Map(rvolCompanies.map(c => [c.ticker, c.rvol ?? null]));
-  const { list: movers, liveCount } = mergeMovers(mockMovers, liveMovers, companyRvol);
+  const { list: movers, liveCount } = buildMovers(liveMovers, companyRvol);
 
   const [tab,          setTab]          = useState<TabKey>("win");
   const [sector,       setSector]       = useState("All");

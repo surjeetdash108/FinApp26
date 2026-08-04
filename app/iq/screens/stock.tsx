@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
-import { stockInfo, watch, movers as moversData, folio, earnings as earningsData, sectorByName, sectorList, screenerStocks, fundDetail, StockInfo } from "../data";
+import { type StockInfo } from "../data";
 import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, earnHistory, EarnQ, EarningsGrowthChart } from "../utils";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
@@ -10,9 +10,45 @@ import { useApiResource } from "../hooks/useApiResource";
 import { useApiList } from "../hooks/useApiList";
 import { useBackendBars } from "../hooks/useBackendBars";
 import type {
-  CompanyDoc, AnalystConsensusDoc, InsiderTxDoc,
+  CompanyDoc, AnalystConsensusDoc, InsiderTxDoc, SectorApiDoc, LiveEarningsDoc, HoldingDoc,
   DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, NewsArticleDoc,
 } from "../types";
+
+// Numeric 1-99 tech rating -> the same string buckets the rest of the app
+// uses (screener.tsx has an identical local copy — each screen keeps its own).
+function ratingLabel(n: number): string {
+  if (n >= 90) return "Strong Buy";
+  if (n >= 70) return "Buy";
+  if (n >= 40) return "Neutral";
+  if (n >= 20) return "Sell";
+  return "Strong Sell";
+}
+
+function sectorTrendOf(pctChange: number): string {
+  return pctChange > 0.5 ? "Improving" : pctChange < -0.5 ? "Deteriorating" : "Flat";
+}
+
+interface LiveSectorRow { name: string; rank: number; trend: string; pctChange: number; }
+
+/** Same live-only sector build as heatmap.tsx's buildSectorList, kept local per this codebase's per-screen convention. */
+function buildSectorRows(companies: CompanyDoc[], sectorsLive: SectorApiDoc[]): LiveSectorRow[] {
+  const bySector = new Map<string, CompanyDoc[]>();
+  for (const c of companies) {
+    if (!c.sector) continue;
+    if (!bySector.has(c.sector)) bySector.set(c.sector, []);
+    bySector.get(c.sector)!.push(c);
+  }
+  const sectorPctByName = new Map(sectorsLive.map(s => [s.sector, s.pctChange]));
+  const names = new Set<string>([...bySector.keys(), ...sectorsLive.map(s => s.sector)]);
+  const rows = [...names].map(name => {
+    const members = bySector.get(name) ?? [];
+    const pctChange = sectorPctByName.get(name) ?? (
+      members.length > 0 ? members.reduce((s, c) => s + (c.pctChange ?? 0), 0) / members.length : 0
+    );
+    return { name, rank: 0, trend: sectorTrendOf(pctChange), pctChange };
+  });
+  return rows.sort((a, b) => b.pctChange - a.pctChange).map((row, i) => ({ ...row, rank: i + 1 }));
+}
 
 function fmtMarketCapB(billions: number): string {
   return billions >= 1000 ? `$${(billions / 1000).toFixed(2)}T` : billions >= 10 ? `$${Math.round(billions)}B` : `$${billions.toFixed(1)}B`;
@@ -121,9 +157,6 @@ function ratingCounts(rt: string) {
 }
 
 const ac = (a: string) => a === "Buy" ? "var(--up)" : a === "Sell" ? "var(--down)" : "var(--text-dim-solid)";
-
-const SYMBOLS = [...Object.keys(stockInfo), ...watch.map(w => w.ticker), ...folio.map(f => f.ticker)]
-  .filter((v, i, a) => a.indexOf(v) === i);
 
 type IncRow = { c: string; rev: number; cogs: number; gp: number; opex: number; oi: number; ni: number; eps: number };
 
@@ -430,6 +463,16 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // empty, so nothing goes blank before a ticker has been synced.
   const { data: liveConsensus } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   const { data: liveInsider } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const [folioTickers, setFolioTickers] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!firebaseAuth.currentUser) return;
+    apiGet<{ holdings: HoldingDoc[] }>("/api/portfolio")
+      .then(r => setFolioTickers(new Set(r.holdings.map(h => h.ticker))))
+      .catch(() => {});
+  }, []);
   const yearBars = useBackendBars(sym, "1Y");
   const [emaStep, setEmaStep] = useState(0);
   const realBars = useBackendBars(sym, tfActive);
@@ -455,10 +498,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const [finPeriod,   setFinPeriod]   = useState<"Q" | "A">("Q");
 
   const [watchedSet, setWatchedSet] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set(watch.map(w => w.ticker));
+    if (typeof window === "undefined") return new Set();
     const saved = localStorage.getItem("iq-watchlist");
     if (saved) { try { return new Set(JSON.parse(saved) as string[]); } catch { /* ignore */ } }
-    return new Set(watch.map(w => w.ticker));
+    return new Set();
   });
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -490,22 +533,18 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     setCtxMenu({ x: e.clientX, y: e.clientY });
   }
 
-  const suggestions = SYMBOLS.filter(s =>
-    search && s.toLowerCase().startsWith(search.toLowerCase())
-  );
+  const suggestions = companies
+    .map(c => c.ticker)
+    .filter(s => search && s.toLowerCase().startsWith(search.toLowerCase()));
 
-  const info = stockInfo[sym];
-  const ss = screenerStocks.find(x => x.ticker ===sym);
-  const erEntry = earningsData.find(e => e.ticker ===sym);
-  const moverEntry = moversData.find(m => m.ticker ===sym);
-  const watchEntry = watch.find(w => w.ticker ===sym);
+  const co = companies.find(x => x.ticker === sym);
 
-  const _baseP   = moverEntry?.price   ?? watchEntry?.price ?? 162;
-  const _baseC   = moverEntry?.pctChange   ?? watchEntry?.pctChange  ?? 2.4;
-  const _baseName = moverEntry?.name  ?? watchEntry?.name  ?? sym;
-  const _baseSec  = ss?.sector ?? moverEntry?.sector ?? "Technology";
-  const _basePe   = ss?.peRatio ?? 46;
-  const _baseMc   = ss?.marketCap ?? 100;
+  const _baseP   = co?.price ?? 162;
+  const _baseC   = co?.pctChange ?? 2.4;
+  const _baseName = co?.name ?? sym;
+  const _baseSec  = co?.sector ?? "Technology";
+  const _basePe   = co?.peRatio ?? 46;
+  const _baseMc   = co?.marketCap != null ? co.marketCap / 1e9 : 100;
   const _baseMkt  = _baseMc >= 1000 ? `$${(_baseMc/1000).toFixed(2)}T` : _baseMc >= 10 ? `$${Math.round(_baseMc)}B` : `$${_baseMc.toFixed(1)}B`;
 
   const fallbackData: StockInfo = {
@@ -513,7 +552,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     peRatio: _basePe, eps: _baseP / _basePe,
     week52High: _baseP * 1.35, week52Low: _baseP * 0.65,
     dividendYield: 0, beta: 1.45, sector: _baseSec,
-    aiRating: ss?.techRating ?? "Neutral", aiThesis: "", aiRisk: "",
+    aiRating: co?.techRating != null ? ratingLabel(co.techRating) : "Neutral", aiThesis: "", aiRisk: "",
     aiMetrics: [],
     financials: [],
     news: [],
@@ -539,7 +578,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
       date: (x.transactionDate ?? "").slice(0, 10),
     }));
 
-  const base = info ?? fallbackData;
+  const base = fallbackData;
   const data: StockInfo = {
     ...base,
     ...(isLiveStock
@@ -560,11 +599,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const isUp = data.pctChange >= 0;
   const p = data.price;
 
-  const rating = ss?.techRating ?? data.aiRating ?? "Neutral";
-  const rs = ss?.relativeStrength ?? 55;
-  const mg = ss?.grossMargin ?? 20;
-  const rv = ss?.rvolRatio ?? 1.2;
-  const mc = ss?.marketCap ?? 100;
+  const rating = (co?.techRating != null ? ratingLabel(co.techRating) : null) ?? data.aiRating ?? "Neutral";
+  const rs = co?.rsRating ?? 55;
+  const mg = co?.grossMargin != null ? co.grossMargin * 100 : 20;
+  const rv = co?.rvol ?? 1.2;
+  const mc = co?.marketCap != null ? co.marketCap / 1e9 : 100;
   const gv = RATING_VAL[rating] ?? 0;
   const tone = gv > 0.6 ? "var(--up)" : gv > 0 ? "#7bdcae" : gv < -0.6 ? "var(--down)" : gv < 0 ? "#ff9aab" : "var(--text-dim-solid)";
   // Real analyst consensus (Buy/Neutral/Sell counts) from analyst_actions when
@@ -592,12 +631,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     : rcBase;
 
   const ex = EXCHANGE[sym] ?? "NASDAQ";
-  const group = data.sector ?? ss?.sector ?? "Technology";
+  const group = data.sector ?? co?.sector ?? "Technology";
   const st = BEAT_STREAK[sym] ?? 2;
   const si = SHORT_INT[sym] ?? 2.0;
   const io = INST_OWN[sym] ?? 60;
-  const erDate = erEntry?.session ?? data.aiMetrics?.find(m => m.label === "Next ER")?.value ?? "—";
-  const fundsHolding = Object.values(fundDetail).filter(fd => fd.holdings.some(h => h[0] === sym)).length;
+  const erDate = liveEarnings.find(e => e.ticker === sym)?.date ?? data.aiMetrics?.find(m => m.label === "Next ER")?.value ?? "—";
+  // No live source ties a 13F fund's holdings to a ticker symbol (positions are
+  // keyed by CUSIP/issuer name, not ticker) — accepted gap, see insider.tsx.
+  const fundsHolding = 0;
 
   // Derived financials
   const eps = p / (data.peRatio || 25);
@@ -658,7 +699,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   ];
   const hist10 = earnHistory(sym, qeps);
 
-  const sectorInfo = sectorByName[group];
+  const liveSectorRows = buildSectorRows(companies, sectorsLive);
+  const sectorInfo = liveSectorRows.find(s => s.name === group);
   const sectorTrend = sectorInfo?.trend ?? "Flat";
   const trendPill = sectorTrend === "Improving" ? "up" : sectorTrend === "Deteriorating" ? "dn" : "hold";
   const grank = sectorInfo?.rank ?? 0;
@@ -666,12 +708,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // rank above) — from tech-rating.job; shown as a small badge when available.
   const inSectorRank = liveCompany?.sectorRank ?? null;
   const inSectorTotal = liveCompany?.sectorRankTotal ?? null;
-  const topSectors = sectorList.slice(0, 5);
+  const topSectors = liveSectorRows.slice(0, 5);
 
-  const peers = screenerStocks
-    .filter(x => x.sector === group && x.ticker !== sym)
+  const peers = companies
+    .filter(x => x.sector === group && x.ticker !== sym && x.rsRating != null)
     .slice(0, 5)
-    .map(x => ({ t: x.ticker, c: (x.relativeStrength - 50) / 10 }));
+    .map(x => ({ t: x.ticker, c: (x.rsRating! - 50) / 10 }));
   const pcs = peers.map(x => x.c);
   const pmx = pcs.length ? Math.max(...pcs) : 0;
   const pmn = pcs.length ? Math.min(...pcs) : 0;
@@ -736,8 +778,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               </div>
             )}
           </div>
-          {Object.keys(stockInfo).map(s => (
-            <button key={s} className={`chip${sym === s ? " active" : ""}`} onClick={() => selectSym(s)}>{s}</button>
+          {[...companies].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).slice(0, 6).map(c => (
+            <button key={c.ticker} className={`chip${sym === c.ticker ? " active" : ""}`} onClick={() => selectSym(c.ticker)}>{c.ticker}</button>
           ))}
         </div>
       )}
@@ -1094,7 +1136,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               {peers.length ? peers.map(peer => {
                 const tag = peer.c === pmx ? "Leader" : peer.c === pmn ? "Laggard" : "";
                 return (
-                  <div key={peer.t} className={`minirow${folio.some(f => f.ticker ===peer.t) ? " owned" : ""}`}
+                  <div key={peer.t} className={`minirow${folioTickers.has(peer.t) ? " owned" : ""}`}
                     style={{ cursor: "pointer" }} onClick={() => openStock(peer.t)}>
                     <span className="tkr">{peer.t}</span>
                     <span className="mid">{tag && <span className={`pill ${tag === "Leader" ? "up" : "dn"}`}>{tag}</span>}</span>
@@ -1124,7 +1166,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 </div>
               ))}
               <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
-                {group} ranks <b style={{ color: grank <= 10 ? "var(--up)" : "var(--text-hi)" }}>#{grank || "—"} of {sectorList.length}</b> groups by relative strength.
+                {group} ranks <b style={{ color: grank <= 10 ? "var(--up)" : "var(--text-hi)" }}>#{grank || "—"} of {liveSectorRows.length}</b> groups by relative strength.
               </div>
             </div>
           </div>
@@ -1486,11 +1528,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
-                {screenerStocks
-                  .filter(x => x.sector === group)
-                  .sort((a, b) => b.relativeStrength - a.relativeStrength)
+                {companies
+                  .filter(x => x.sector === group && x.rsRating != null)
+                  .sort((a, b) => b.rsRating! - a.rsRating!)
                   .map(x => {
-                    const chg = (x.relativeStrength - 50) / 10;
+                    const chg = (x.rsRating! - 50) / 10;
                     return (
                       <div key={x.ticker} className="minirow" style={{ cursor: "pointer" }}
                         onClick={() => { setInnerDrawer(null); openStock(x.ticker); }}>
@@ -1498,8 +1540,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                           fontWeight: 700, minWidth: 52,
                           color: x.ticker === sym ? "var(--brand-2)" : "var(--text-hi)",
                         }}>{x.ticker}</span>
-                        <span className="mid" style={{ fontSize: ".76rem" }}>{x.name}</span>
-                        <span className="pill" style={{ fontSize: ".66rem", background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>RS {x.relativeStrength}</span>
+                        <span className="mid" style={{ fontSize: ".76rem" }}>{x.name ?? x.ticker}</span>
+                        <span className="pill" style={{ fontSize: ".66rem", background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>RS {x.rsRating}</span>
                         <span className={`mono ${cls(chg)}`} style={{ fontSize: ".82rem" }}>{sign(chg)}</span>
                       </div>
                     );
@@ -1519,7 +1561,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
-                {sectorList.map(g => (
+                {liveSectorRows.map(g => (
                   <div key={g.name} className="grouprow" style={{ cursor: "pointer" }}
                     onClick={() => { setInnerDrawer(null); openSector(g.name); }}>
                     <span className="rk">{g.rank}</span>
@@ -1572,25 +1614,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     No recent Form 4 activity found.
                   </div>
                 )}
-                {(() => {
-                  const holdingFunds = Object.entries(fundDetail)
-                    .filter(([, fd]) => fd.holdings.some(h => h[0] === sym))
-                    .slice(0, 8);
-                  return holdingFunds.length > 0 ? (
-                    <>
-                      <div className="ai-sec" style={{ marginTop: 14 }}><div className="h">Top institutional holders (13F)</div></div>
-                      {holdingFunds.map(([nm, fd]) => {
-                        const h = fd.holdings.find(x => x[0] === sym);
-                        return (
-                          <div key={nm} className="minirow">
-                            <span className="mid">{nm}</span>
-                            <span className="r" style={{ color: "var(--text-hi)" }}>{h ? h[1] + "%" : "—"}</span>
-                          </div>
-                        );
-                      })}
-                    </>
-                  ) : null;
-                })()}
+                {/* No live source ties a 13F fund's holdings to a ticker symbol
+                    (positions are keyed by CUSIP/issuer name) — accepted gap. */}
               </div>
             </div>
           )}
@@ -1707,9 +1732,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             const fb = (v: number) => v >= 1 ? `$${v.toFixed(2)}B` : `$${(v * 1000).toFixed(0)}M`;
             const beats10 = hist10.filter(h => h.surp >= 0).length;
             const avgMv = (hist10.reduce((a, h) => a + Math.abs(h.mv), 0) / hist10.length).toFixed(1);
-            const erEnt = earningsData.find(e => e.ticker === sym);
-            const aiRead = erEnt
-              ? `${sym} ${erEnt.epsActual != null ? (erEnt.epsEstimate != null && erEnt.epsActual >= erEnt.epsEstimate ? "beat" : "missed") + " EPS estimates" : "reports " + erEnt.session}. Guidance ${erEnt.guidanceStatus === "Raised" ? "was raised — bullish" : erEnt.guidanceStatus === "Lowered" ? "was lowered — watch downside" : "was maintained"}. ${erEnt.priceReaction != null ? "Shares reacted " + (erEnt.priceReaction >= 0 ? "+" : "") + erEnt.priceReaction + "% on the print." : `Options imply a ±${erEnt.impliedMove}% move.`}`
+            const erEnt = liveEarnings.find(e => e.ticker === sym);
+            const aiRead = erEnt && erEnt.epsActual != null && erEnt.epsEstimate != null
+              ? `${sym} ${erEnt.epsActual >= erEnt.epsEstimate ? "beat" : "missed"} EPS estimates ($${erEnt.epsActual} vs $${erEnt.epsEstimate} est).`
               : `${data.name} reports around ${erDate !== "—" ? erDate : "next quarter"}.`;
             return (
               <div className="side-drawer" style={{ zIndex: 52 }}>
@@ -1729,10 +1754,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     <div className="card-h">
                       <h3>{sym} · 10-quarter earnings history</h3>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        {erEnt?.priceReaction != null
-                          ? <span className={`pill ${erEnt.priceReaction >= 0 ? "up" : "dn"}`}>{erEnt.priceReaction >= 0 ? "+" : ""}{erEnt.priceReaction}% last reaction</span>
-                          : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{beats10}/10 beats</span>
-                        }
+                        <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{beats10}/10 beats</span>
                         <ExpandBtn title={`${sym} · 10-quarter earnings history`} node={<EarnEpsChart hist={hist10} />} />
                       </div>
                     </div>
