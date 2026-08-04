@@ -776,12 +776,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
             {/* Brand cell */}
             <div className="brandcell">
               <div className="brand-top">
-                <div className="logo">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor" />
-                  </svg>
-                </div>
-                <div className="wordmark">MarketCatalyst<span>Market Intelligence</span></div>
+                <img src="/logo-marketcatalyst.png" alt="MarketCatalyst" className="brand-logo" />
                 <button
                   className="nav-collapse-btn"
                   onClick={() => setNavCollapsed(c => { const next = !c; localStorage.setItem("iq-nav-collapsed", next ? "1" : "0"); return next; })}
@@ -812,12 +807,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
               </button>
               {/* Mobile brand — hidden on desktop via CSS */}
               <div className="mob-brand">
-                <div className="logo" style={{ width: 26, height: 26 }}>
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor" />
-                  </svg>
-                </div>
-                <div className="wordmark">MarketCatalyst<span>Market Intelligence</span></div>
+                <img src="/logo-marketcatalyst.png" alt="MarketCatalyst" className="brand-logo" style={{ height: 22 }} />
               </div>
               <div className="cmd-wrap" ref={cmdRef}>
                 <div className={`cmd${searchOpen ? " cmd-active" : ""}`}>
@@ -962,15 +952,10 @@ export function IQShell({ children }: { children: React.ReactNode }) {
             <nav ref={railRef} className={`rail${navOpen ? " mob-open" : ""}`}>
               {/* Mobile rail header — hidden on desktop via CSS */}
               <div className="mob-rail-head">
-                <div className="logo" style={{ width: 26, height: 26 }}>
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor" />
-                  </svg>
-                </div>
-                <div className="wordmark">MarketCatalyst<span>Market Intelligence</span></div>
+                <img src="/logo-marketcatalyst.png" alt="MarketCatalyst" className="brand-logo" style={{ height: 22 }} />
                 <button className="mob-nav-close" onClick={() => setNavOpen(false)} aria-label="Close navigation">✕</button>
               </div>
-              {(["Intelligence", "Context", "My Money"] as const).map(group => (
+              {(["Home", "Markets", "Research", "Market Recaps", "My Workspace"] as const).map(group => (
                 <div key={group}>
                   <div className="sec-lbl">{group}</div>
                   {menuItems.filter(m => m.group === group).map(item => {
