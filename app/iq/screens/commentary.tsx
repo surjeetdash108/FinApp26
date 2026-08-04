@@ -193,7 +193,7 @@ export function CommentaryScreen() {
 
         {/* Ticker filter bar — comma-separated multi-ticker filter for the feed */}
         <div className="fbar" style={{ marginBottom: 12, position: "relative", flexWrap: "wrap", gap: 8 }}>
-          <div style={{ position: "relative", minWidth: "8.125rem" }}>
+          <div style={{ position: "relative", minWidth: "16.25rem" }}>
             <input
               ref={searchRef}
               className="mv-sel"
