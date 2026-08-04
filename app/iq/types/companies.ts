@@ -35,5 +35,8 @@ export interface CompanyDoc {
   // Sector rank from tech-rating.job; source records which vendor served the profile.
   sectorRank: number | null;
   sectorRankTotal: number | null;
+  // Real related companies from Polygon /v1/related-companies (AAPL → MSFT,
+  // AMZN, GOOGL, NVDA…) — algorithmic peers, not just same-sector.
+  peers: string[] | null;
   source: string | null;
 }

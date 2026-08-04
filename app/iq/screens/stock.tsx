@@ -620,11 +620,22 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const pmxSector = sectorPcts.length ? Math.max(...sectorPcts) : 0;
   const pmnSector = sectorPcts.length ? Math.min(...sectorPcts) : 0;
 
-  const peers = companies
-    .filter(c => c.sector === group && c.ticker !== sym && c.pctChange != null)
-    .sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0))
+  // Real peers from Polygon /v1/related-companies (stored on liveCompany.peers),
+  // looked up in the live companies for price/RS. Falls back to same-sector RS
+  // leaders only if none of the related tickers are in the synced universe.
+  const relatedPeers = (liveCompany?.peers ?? [])
+    .filter(t => t !== sym)
+    .map(t => companies.find(c => c.ticker === t))
+    .filter((c): c is CompanyDoc => !!c && c.pctChange != null)
     .slice(0, 5)
     .map(c => ({ t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating }));
+  const peers = relatedPeers.length
+    ? relatedPeers
+    : companies
+        .filter(c => c.sector === group && c.ticker !== sym && c.pctChange != null)
+        .sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0))
+        .slice(0, 5)
+        .map(c => ({ t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating }));
   const pcs = peers.map(x => x.c);
   const pmx = pcs.length ? Math.max(...pcs) : 0;
   const pmn = pcs.length ? Math.min(...pcs) : 0;
