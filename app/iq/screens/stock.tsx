@@ -197,6 +197,106 @@ function quarterlyEpsSalesRows(quarters: QuarterFinancials[]): QuarterlyEpsSales
   });
 }
 
+type EpsSalesPt = { label: string; eps: number | null; sales: number | null };
+
+/** EPS + Sales(M) per period, oldest→newest, for the dual bar charts on the
+ * main Financials card. Actuals only — same reported financials the tables
+ * below use; no forward estimates. Sales is in $millions to match the axis. */
+function epsSalesSeries(period: "Q" | "A", doc: FinancialsDoc | null): EpsSalesPt[] {
+  if (!doc) return [];
+  if (period === "Q") {
+    return [...doc.quarters]
+      .filter(r => r.endDate)
+      .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string))
+      .slice(-12)
+      .map(r => ({
+        label: new Date(r.endDate + "T00:00:00")
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+          .replace(" ", "-"),
+        eps: r.epsActual,
+        sales: r.revenue != null ? r.revenue / 1e6 : null,
+      }));
+  }
+  return [...doc.annual]
+    .filter(r => r.fiscalYear)
+    .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear))
+    .slice(-10)
+    .map(r => ({
+      label: r.fiscalYear as string,
+      eps: r.epsActual,
+      sales: r.revenue != null ? r.revenue / 1e6 : null,
+    }));
+}
+
+/** One single-series bar chart (EPS or Sales), zero-baselined so a negative
+ * period reads correctly, with the value labelled on top of each bar and the
+ * period label angled underneath — matching the reference layout. */
+function MetricBars({
+  title, data, fmt,
+}: {
+  title: string;
+  data: Array<{ label: string; v: number | null }>;
+  fmt: (v: number) => string;
+}) {
+  const gid = "gb-" + title.replace(/\W/g, "");
+  const vals = data.map(d => d.v).filter((v): v is number => v != null);
+  const W = 340, H = 210, PADT = 22, PADB = 34, PADX = 6;
+  const iw = W - PADX * 2, ih = H - PADT - PADB;
+  const maxV = Math.max(0, ...vals);
+  const minV = Math.min(0, ...vals);
+  const span = (maxV - minV) || 1;
+  const yOf = (v: number) => PADT + ((maxV - v) / span) * ih;
+  const zeroY = yOf(0);
+  const gw = iw / Math.max(1, data.length);
+  const bw = Math.min(gw * 0.6, 26);
+  return (
+    <div>
+      <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", marginBottom: 2 }}>{title}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--brand-2)" />
+            <stop offset="100%" stopColor="var(--brand)" />
+          </linearGradient>
+        </defs>
+        {data.map((d, i) => {
+          if (d.v == null) return null;
+          const cx = PADX + gw * i + gw / 2;
+          const yv = yOf(d.v);
+          const y = Math.min(zeroY, yv);
+          const h = Math.max(2, Math.abs(yv - zeroY));
+          const above = d.v >= 0;
+          return (
+            <g key={d.label + i}>
+              <rect x={(cx - bw / 2).toFixed(1)} y={y.toFixed(1)}
+                width={bw.toFixed(1)} height={h.toFixed(1)} rx="2.5" fill={`url(#${gid})`} />
+              <text x={cx.toFixed(1)} y={(above ? y - 4 : y + h + 9).toFixed(1)}
+                textAnchor="middle" fontSize="8" fontFamily="JetBrains Mono,monospace"
+                fill="var(--text-hi)">{fmt(d.v)}</text>
+              <text x={cx.toFixed(1)} y={(H - 9).toFixed(1)} textAnchor="end"
+                fontSize="7.5" fill="var(--text-dim-solid)"
+                transform={`rotate(-45 ${cx.toFixed(1)} ${(H - 9).toFixed(1)})`}>{d.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/** The reference layout's headline: EPS and Sales($Mil) bars side by side,
+ * driven by the same Quarterly/Annual toggle as the rest of the card. */
+function EpsSalesBars({ data }: { data: EpsSalesPt[] }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <MetricBars title="EPS" data={data.map(d => ({ label: d.label, v: d.eps }))}
+        fmt={v => v.toFixed(2)} />
+      <MetricBars title="Sales ($Mil)" data={data.map(d => ({ label: d.label, v: d.sales }))}
+        fmt={v => Math.round(v).toLocaleString()} />
+    </div>
+  );
+}
+
 // EPS estimate-vs-actual bars. No live source exists for post-earnings price
 // reaction across history, so (unlike the old mock version) this never draws
 // a "stock move" line — only the two numbers the live earnings feed actually has.
@@ -952,6 +1052,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {/* Financials — grouped bar chart */}
           {(() => {
             const inc     = incRowsFromFinancials(finPeriod, financialsDoc, () => []);
+            const epsSales = epsSalesSeries(finPeriod, financialsDoc);
             const histEps = hist10.slice(0, 10);
             const beatsOf = histEps.filter(h => h.surp >= 0).length;
             const latestA = histEps[0]?.a ?? 0;
@@ -980,6 +1081,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   </div>
                 </div>
                 <div className="card-b" style={{ paddingTop: 8 }}>
+                  {epsSales.length > 0 && (
+                    <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid var(--border-soft)" }}>
+                      <EpsSalesBars data={epsSales} />
+                      <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 2 }}>
+                        {finPeriod === "Q" ? "Reported quarters" : "Reported fiscal years"} · actuals only
+                      </div>
+                    </div>
+                  )}
                   {inc.length === 0 ? (
                     <DataState loading={financialsLoading} label={`No live ${finPeriod === "Q" ? "quarterly" : "annual"} financials synced for ${sym} yet.`} />
                   ) : (
