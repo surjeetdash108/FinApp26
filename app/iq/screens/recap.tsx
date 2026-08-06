@@ -294,8 +294,7 @@ export function RecapScreen() {
           {NewsCard(todayHeadlines, "Today's headlines")}
           {SectorHeatCard}
           <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
-            <div className="col-6">{EarningsMoversCard(todaySurprises, "Biggest earnings surprises today")}</div>
-            <div className="col-6">
+            <div className="col-12">
               <div className="card">
                 <div className="card-h"><h3>Market internals</h3></div>
                 <div className="card-b">
