@@ -601,33 +601,33 @@ export function EarningsScreen() {
     for (let wk = 0; wk < weeks; wk++) for (let d = 0; d < 5; d++) cells.push(isoDay(addDays(gridStart, wk * 7 + d)));
     calNode = (
       <>
-        <div className="ecm-head">
-          {["Mon", "Tue", "Wed", "Thu", "Fri"].map(d => <div key={d} className="ecm-hcell">{d}</div>)}
+        <div className="emc-head">
+          {["Mon", "Tue", "Wed", "Thu", "Fri"].map(d => <div key={d} className="emc-hcell">{d}</div>)}
         </div>
-        <div className="ecm-grid">
+        <div className="emc-grid">
           {cells.map(iso => {
-            if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="ecm-day is-out" />;
+            if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="emc-day is-out" />;
             const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
             const isToday = iso === todayIso;
             const isSel   = iso === anchor && !isToday;
             const shown   = items.slice(0, MAX_LOGOS);
             const extra   = items.length - shown.length;
             return (
-              <div key={iso} className={`ecm-day${isToday ? " is-today" : ""}${isSel ? " is-sel" : ""}`}>
-                <div className="ecm-dh" onClick={() => { goToDate(iso); setMode("day"); }} title="Open day view">
+              <div key={iso} className={`emc-day${isToday ? " is-today" : ""}${isSel ? " is-sel" : ""}`}>
+                <div className="emc-dh" onClick={() => { goToDate(iso); setMode("day"); }} title="Open day view">
                   {Number(iso.slice(8))}{isToday ? <span className="t">Today</span> : null}
                 </div>
                 {items.length === 0 ? (
-                  <div className="ecm-none">No earnings</div>
+                  <div className="emc-none">No earnings</div>
                 ) : (
-                  <div className="ecm-logos">
+                  <div className="emc-logos">
                     {shown.map(r => (
-                      <button key={r.s} className={`ecm-logo${sel === r.s ? " on" : ""}`} title={r.s} onClick={() => setSel(r.s)}>
+                      <button key={r.s} className={`emc-logo${sel === r.s ? " on" : ""}`} title={r.s} onClick={() => setSel(r.s)}>
                         <StockLogo sym={r.s} size={20} />
                       </button>
                     ))}
                     {extra > 0 && (
-                      <button className="ecm-more" title={`${extra} more — open day view`} onClick={() => { goToDate(iso); setMode("day"); }}>+{extra}</button>
+                      <button className="emc-more" title={`${extra} more — open day view`} onClick={() => { goToDate(iso); setMode("day"); }}>+{extra}</button>
                     )}
                   </div>
                 )}

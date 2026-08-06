@@ -122,8 +122,13 @@ export function StockLogo({ sym, size = 22 }: { sym: string; size?: number }) {
         alt=""
         onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         style={{
+          // Parqet symbol logos are opaque, full-bleed square tiles, so they
+          // cover the square edge-to-edge. No white backdrop or own radius —
+          // both left a 1px white ring at the parent's rounded corners; the
+          // parent's overflow:hidden does the rounding. cover avoids any
+          // letterbox on a rare non-square logo.
           position: 'absolute', inset: 0, width: '100%', height: '100%',
-          objectFit: 'contain', background: '#fff', borderRadius: 'inherit',
+          objectFit: 'cover',
         }}
       />
     </span>

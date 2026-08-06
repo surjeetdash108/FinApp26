@@ -1599,25 +1599,26 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ec-chip.on { border-color: transparent; background: rgba(124,108,245,.16); }
 .ec-chip /* 1.5x the original 19px, matching TICKER_LOGO_SCALE in utils.tsx. */
 .ec-logo { width: 28.5px; height: 28.5px; border-radius: 7.5px; display: inline-flex; align-items: center; justify-content: center; font-size: .93rem; font-weight: 800; flex-shrink: 0; position: relative; overflow: hidden; }
-.ec-chip .ec-logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; border-radius: inherit; }
+.ec-chip .ec-logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .ec-none { font-size: .72rem; color: var(--text-dim-solid); }
-/* Month grid (full weekday earnings calendar) */
-.ecm-head { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 8px; }
-.ecm-hcell { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim-solid); padding-left: 3px; }
-.ecm-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 6px; }
-.ecm-day { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 8px; min-height: 104px; display: flex; flex-direction: column; }
-.ecm-day.is-out { background: transparent; border-color: transparent; }
-.ecm-day.is-today { border-color: var(--ai); box-shadow: 0 0 0 1px var(--ai) inset; }
-.ecm-day.is-sel { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand) inset; }
-.ecm-dh { font-size: .68rem; font-weight: 700; color: var(--text-hi); margin-bottom: 7px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-.ecm-dh:hover { color: var(--brand-2); }
-.ecm-dh .t { color: var(--ai); font-size: .54rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
-.ecm-logos { display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
-.ecm-logo { padding: 0; border: none; background: transparent; cursor: pointer; border-radius: 7px; line-height: 0; }
-.ecm-logo.on { box-shadow: 0 0 0 2px var(--brand); }
-.ecm-more { font-size: .6rem; font-weight: 700; color: var(--text-dim-solid); background: var(--surface-3); border: none; border-radius: 7px; padding: 0 7px; height: 26px; display: inline-flex; align-items: center; cursor: pointer; }
-.ecm-more:hover { color: var(--text-hi); }
-.ecm-none { font-size: .66rem; color: var(--text-dim-solid); }
+/* Earnings month grid (full weekday earnings calendar) — emc- prefix to avoid
+   colliding with the pre-existing macro month-calendar (.ecm-*) classes below. */
+.emc-head { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 8px; }
+.emc-hcell { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim-solid); padding-left: 3px; }
+.emc-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 6px; }
+.emc-day { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 8px; min-height: 104px; display: flex; flex-direction: column; }
+.emc-day.is-out { background: transparent; border-color: transparent; }
+.emc-day.is-today { border-color: var(--ai); box-shadow: 0 0 0 1px var(--ai) inset; }
+.emc-day.is-sel { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand) inset; }
+.emc-dh { font-size: .68rem; font-weight: 700; color: var(--text-hi); margin-bottom: 7px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.emc-dh:hover { color: var(--brand-2); }
+.emc-dh .t { color: var(--ai); font-size: .54rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.emc-logos { display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
+.emc-logo { padding: 0; border: none; background: transparent; cursor: pointer; border-radius: 7px; line-height: 0; }
+.emc-logo.on { box-shadow: 0 0 0 2px var(--brand); }
+.emc-more { font-size: .6rem; font-weight: 700; color: var(--text-dim-solid); background: var(--surface-3); border: none; border-radius: 7px; padding: 0 7px; height: 26px; display: inline-flex; align-items: center; cursor: pointer; }
+.emc-more:hover { color: var(--text-hi); }
+.emc-none { font-size: .66rem; color: var(--text-dim-solid); }
 .call-row { display: flex; align-items: center; gap: 12px; background: var(--surface-1); border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; text-align: left; font-family: inherit; width: 100%; transition: border-color .13s; }
 .call-row:hover { border-color: var(--brand-2); }
 .call-row.on { border-color: var(--brand); background: rgba(124,108,245,.1); }
@@ -1647,7 +1648,7 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ecm-t { font-size: .52rem; background: var(--brand); color: #fff; border-radius: 4px; padding: 1px 4px; font-weight: 700; }
 .ecm-logos { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
 .ecm-logo { width: 17px; height: 17px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-size: .58rem; font-weight: 800; position: relative; overflow: hidden; }
-.ecm-logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; border-radius: inherit; }
+.ecm-logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .ecm-more { font-size: .58rem; color: var(--text-dim-solid); }
 .ecm-n { font-size: .56rem; color: var(--text-dim-solid); margin-top: 4px; }
 @media (max-width: 760px) { .ecm-cell { min-height: 54px; } .ecm-n { display: none; } }
