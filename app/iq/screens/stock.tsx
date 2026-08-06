@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
+import { useWatchlists } from "../hooks/useWatchlists";
+import { WatchlistPicker } from "../watchlist-picker";
 import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable } from "../utils";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
@@ -550,12 +552,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const [innerDrawer, setInnerDrawer] = useState<InnerDrawer>(null);
   const [finPeriod,   setFinPeriod]   = useState<"Q" | "A">("Q");
 
-  const [watchedSet, setWatchedSet] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set<string>();
-    const saved = localStorage.getItem("iq-watchlist");
-    if (saved) { try { return new Set(JSON.parse(saved) as string[]); } catch { /* ignore */ } }
-    return new Set<string>();
-  });
+  // Watchlists are backend-synced (multiple named lists). The star is "filled"
+  // when the ticker is in ANY list; clicking it opens the which-list picker.
+  const { watchlists, addTicker, removeTicker, createList } = useWatchlists();
+  const watchedSet = useMemo(() => new Set(watchlists.flatMap(w => w.tickers)), [watchlists]);
+  const [wlPicker, setWlPicker] = useState<{ sym: string; x: number; y: number } | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
 
   const refreshNotes = useCallback(async () => {
@@ -751,15 +752,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     if (typeof window !== "undefined") localStorage.setItem("iq-stock", s);
   }
 
-  function toggleWatchlist(s: string) {
-    setWatchedSet(prev => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s); else next.add(s);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("iq-watchlist", JSON.stringify([...next]));
-      }
-      return next;
-    });
+  function openWatchlistPicker(s: string, e: React.MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setWlPicker({ sym: s, x: r.right - 250, y: r.bottom });
   }
 
   return (
@@ -794,8 +789,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       {s}
                     </div>
                     <button
-                      onMouseDown={e => { e.preventDefault(); toggleWatchlist(s); }}
-                      title={watchedSet.has(s) ? "Remove from watchlist" : "Add to watchlist"}
+                      onMouseDown={e => { e.preventDefault(); openWatchlistPicker(s, e); }}
+                      title={watchedSet.has(s) ? "Edit watchlists" : "Add to a watchlist"}
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1rem", padding: "0 4px",
                         color: watchedSet.has(s) ? "var(--warn)" : "var(--text-dim-solid)", lineHeight: 1 }}>
                       {watchedSet.has(s) ? "★" : "☆"}
@@ -2124,6 +2119,19 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
         </>
+      )}
+
+      {/* Which-watchlist picker (opened from a search-result star) */}
+      {wlPicker && (
+        <WatchlistPicker
+          sym={wlPicker.sym}
+          watchlists={watchlists}
+          onAdd={id => addTicker(id, wlPicker.sym)}
+          onRemove={id => removeTicker(id, wlPicker.sym)}
+          onCreate={name => createList(name)}
+          onClose={() => setWlPicker(null)}
+          anchor={{ x: wlPicker.x, y: wlPicker.y }}
+        />
       )}
     </>
   );
