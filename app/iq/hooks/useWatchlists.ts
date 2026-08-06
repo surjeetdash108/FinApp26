@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiPatch, apiDelete } from "../backend";
 
@@ -8,6 +8,22 @@ export interface Watchlist {
   id: string;
   name: string;
   tickers: string[];
+}
+
+export type WatchlistsApi = ReturnType<typeof useWatchlists>;
+
+/**
+ * Shared instance provided once at the shell so every consumer (the ⌘K search
+ * star, the stock-page star, and the Watchlist screen) reads and mutates ONE
+ * state — a star anywhere shows up on the Watchlist screen immediately, with no
+ * manual refresh.
+ */
+export const WatchlistsContext = createContext<WatchlistsApi | null>(null);
+
+export function useWatchlistsContext(): WatchlistsApi {
+  const ctx = useContext(WatchlistsContext);
+  if (!ctx) throw new Error("useWatchlistsContext used outside <WatchlistsContext.Provider>");
+  return ctx;
 }
 
 /**

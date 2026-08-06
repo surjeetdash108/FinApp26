@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useApiList } from "../hooks/useApiList";
-import { useWatchlists } from "../hooks/useWatchlists";
+import { useWatchlistsContext } from "../hooks/useWatchlists";
 import type { CompanyDoc } from "../types";
 import { arr, sign, DataState } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
@@ -10,7 +10,7 @@ import { TickerSearchField } from "../ticker-search-field";
 import { AiSummaryCard } from "../ai-summary-card";
 
 export function WatchlistScreen() {
-  const { uid, watchlists, loading: wlLoading, createList, renameList, deleteList, addTicker, removeTicker } = useWatchlists();
+  const { uid, watchlists, loading: wlLoading, createList, renameList, deleteList, addTicker, removeTicker } = useWatchlistsContext();
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = useMemo(() => new Map(companies.map(c => [c.ticker, c])), [companies]);
 

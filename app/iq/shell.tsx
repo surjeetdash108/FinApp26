@@ -24,6 +24,8 @@ import { useTickerSearch } from "./hooks/useTickerSearch";
 import { useTapeStream } from "./hooks/useTapeStream";
 import { useBackendMarketStatus } from "./hooks/useBackendMarketStatus";
 import { useApiList } from "./hooks/useApiList";
+import { useWatchlists, WatchlistsContext } from "./hooks/useWatchlists";
+import { WatchlistPicker } from "./watchlist-picker";
 import { pulseFromLive, tapeItemsToIndexDocs } from "./live-market-indices";
 import type { CompanyDoc, SectorApiDoc, LiveEarningsDoc, WatchlistDoc } from "./types";
 
@@ -638,28 +640,16 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   });
   const [searchQ, setSearchQ] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  // Real watchlist membership (not a session-only Set) — the ★ button in
-  // search results adds/removes via the same /api/watchlist endpoints the
-  // Watchlist screen uses, so a star here actually persists.
-  const [searchStarred, setSearchStarred] = useState<Set<string>>(() => new Set());
-  useEffect(() => {
-    const load = user?.uid
-      ? apiGet<WatchlistDoc>("/api/watchlist").then(w => new Set(w.tickers)).catch(() => new Set<string>())
-      : Promise.resolve(new Set<string>());
-    load.then(setSearchStarred);
-  }, [user?.uid]);
-  async function toggleSearchStar(sym: string) {
-    const wasStarred = searchStarred.has(sym);
-    setSearchStarred(prev => {
-      const n = new Set(prev);
-      if (wasStarred) n.delete(sym); else n.add(sym);
-      return n;
-    });
-    if (!user?.uid) return;
-    try {
-      if (wasStarred) await apiDelete(`/api/watchlist/tickers/${encodeURIComponent(sym)}`);
-      else await apiPost<WatchlistDoc>("/api/watchlist/tickers", { ticker: sym });
-    } catch { /* optimistic update above already applied locally */ }
+  // One shared watchlists instance for the whole app (provided via context
+  // below). The ⌘K search star opens the "which watchlist" picker; membership
+  // is the union across every list, and any add/remove is reflected instantly
+  // on the Watchlist screen (same state).
+  const wl = useWatchlists();
+  const searchStarred = new Set(wl.watchlists.flatMap(w => w.tickers));
+  const [wlPicker, setWlPicker] = useState<{ sym: string; x: number; y: number } | null>(null);
+  function openSearchStar(sym: string, e: React.MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setWlPicker({ sym, x: r.right - 250, y: r.bottom });
   }
   // Live top-by-market-cap companies, used both as the "quick access" list
   // shown before the user types and as a name-match augmentation once they
@@ -806,6 +796,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
       <IQActionsContext.Provider value={actions}>
+       <WatchlistsContext.Provider value={wl}>
         <div className="iq-root" data-theme={theme} data-font={font}>
           <div className={`app${navCollapsed ? " nav-collapsed" : ""}`}>
             {/* Brand cell */}
@@ -826,9 +817,6 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                     {navCollapsed ? <path d="m14 9 3 3-3 3" /> : <path d="m16 15-3-3 3-3" />}
                   </svg>
                 </button>
-              </div>
-              <div className="nav-clock">
-                {navTime.day} · <span style={{ color: "var(--text-hi)", fontWeight: 700 }}>{navTime.time} ET</span>
               </div>
             </div>
 
@@ -881,9 +869,9 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                           </div>
                         )}
                         <button
-                          title={searchStarred.has(m.sym) ? "Remove from watchlist" : "Add to watchlist"}
+                          title={searchStarred.has(m.sym) ? "Edit watchlists" : "Add to a watchlist"}
                           onMouseDown={e => e.preventDefault()}
-                          onClick={e => { e.stopPropagation(); void toggleSearchStar(m.sym); }}
+                          onClick={e => { e.stopPropagation(); openSearchStar(m.sym, e); }}
                           style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1rem", color: searchStarred.has(m.sym) ? "var(--warn)" : "var(--text-dim-solid)", padding: "0 4px" }}>
                           {searchStarred.has(m.sym) ? "★" : "☆"}
                         </button>
@@ -894,6 +882,10 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                     )}
                   </div>
                 )}
+              </div>
+              {/* Session ET clock — sits immediately to the right of the search box. */}
+              <div className="topbar-clock">
+                {navTime.day} · <span style={{ color: "var(--text-hi)", fontWeight: 700 }}>{navTime.time} ET</span>
               </div>
               <div className={`statuspill${mkt.phase === "open" ? "" : mkt.phase === "closed" ? " mkt-closed" : " mkt-ext"}`}>
                 <div className="dot" />
@@ -1076,7 +1068,19 @@ export function IQShell({ children }: { children: React.ReactNode }) {
             </div>
           )}
 
+          {wlPicker && (
+            <WatchlistPicker
+              sym={wlPicker.sym}
+              watchlists={wl.watchlists}
+              onAdd={id => wl.addTicker(id, wlPicker.sym)}
+              onRemove={id => wl.removeTicker(id, wlPicker.sym)}
+              onCreate={name => wl.createList(name)}
+              onClose={() => setWlPicker(null)}
+              anchor={{ x: wlPicker.x, y: wlPicker.y }}
+            />
+          )}
         </div>
+       </WatchlistsContext.Provider>
       </IQActionsContext.Provider>
     </AuthGuard>
   );

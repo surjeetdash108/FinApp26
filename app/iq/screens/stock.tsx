@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
-import { useWatchlists } from "../hooks/useWatchlists";
+import { useWatchlistsContext } from "../hooks/useWatchlists";
 import { WatchlistPicker } from "../watchlist-picker";
 import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable } from "../utils";
 import { firebaseAuth } from "../../firebase";
@@ -554,7 +554,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
   // Watchlists are backend-synced (multiple named lists). The star is "filled"
   // when the ticker is in ANY list; clicking it opens the which-list picker.
-  const { watchlists, addTicker, removeTicker, createList } = useWatchlists();
+  const { watchlists, addTicker, removeTicker, createList } = useWatchlistsContext();
   const watchedSet = useMemo(() => new Set(watchlists.flatMap(w => w.tickers)), [watchlists]);
   const [wlPicker, setWlPicker] = useState<{ sym: string; x: number; y: number } | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
