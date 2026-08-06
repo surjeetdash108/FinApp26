@@ -99,7 +99,7 @@ export function ExpandBtn({ title, node }: { title: string; node: ReactNode }) {
 function BrandLogo({ height = 28 }: { height?: number }) {
   const gid = useId().replace(/:/g, "");
   return (
-    <span className="brand-logo" style={{ display: "inline-flex", alignItems: "center", gap: Math.round(height * 0.3), lineHeight: 1 }}>
+    <span className="brand-logo" style={{ gap: Math.round(height * 0.3), lineHeight: 1 }}>
       <svg viewBox="0 0 44 44" width={height} height={height} aria-hidden="true" style={{ flexShrink: 0 }}>
         <defs>
           <linearGradient id={gid} x1="4" y1="40" x2="40" y2="4" gradientUnits="userSpaceOnUse">
