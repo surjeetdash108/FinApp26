@@ -6,7 +6,7 @@ import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { apiGet } from "../backend";
-import type { LiveEarningsDoc, IpoEventDoc, CompanyDoc, FinancialsDoc, QuarterFinancials } from "../types";
+import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
 
 // Live source (FMP earnings calendar) has ticker/date/epsEstimate/epsActual —
@@ -58,6 +58,7 @@ interface EarnCalItem {
   month: number; day: number;
   weekDay: number; // 0=Mon … 4=Fri
   epsE: number | null; epsA: number | null; implied: number | null;
+  revE: number | null; revA: number | null; // reported revenue (Polygon actuals)
   guide: "Raised" | "In-line" | "Lowered" | null;
   react: number | null;
 }
@@ -68,25 +69,26 @@ function toEarnCalItem(d: LiveEarningsDoc): EarnCalItem {
   const dt = new Date(d.date + "T00:00:00Z");
   return {
     s: d.ticker,
-    n: d.ticker,        // no company name on the earnings doc
+    n: d.companyName ?? d.ticker,
     sec: "—",
-    sess: null,         // not supplied by the vendor feed
+    sess: d.session ?? null,  // "BMO"/"AMC" when the vendor supplies a time, else null
     month: m, day,
     weekDay: (dt.getUTCDay() + 6) % 7,
     epsE: d.epsEstimate,
     epsA: d.epsActual,
     implied: null,
+    revE: d.revenueEstimate ?? null,
+    revA: d.revenueActual ?? null,
     guide: null,
     react: null,
   };
 }
 
 /**
- * Live-only: a row exists here only if a real `earnings_events` doc exists
- * for this date. The EARN_CAL catalog above still backs the ticker-history
- * detail card lower on the page (session/guidance/reaction there are
- * honestly labeled illustrative in that card), but the calendar itself no
- * longer blends in mock rows a user could mistake for a real reporting date.
+ * Live-only: a row exists here only if a real `earnings_events` doc exists for
+ * this date. There is no static/illustrative catalog — every row, and the
+ * ticker-history detail card, come from Polygon (earnings_events + the
+ * per-ticker /live/financials call).
  */
 function rowsForDate(iso: string, live: LiveEarningsDoc[]): EarnCalItem[] {
   return live.filter(d => d.date === iso).map(toEarnCalItem);
@@ -94,16 +96,15 @@ function rowsForDate(iso: string, live: LiveEarningsDoc[]): EarnCalItem[] {
 
 // ── Calendar toolbar: row shape ───────────────────────────────────────────
 //
-// The live earnings_events doc carries only ticker/date/epsEstimate/
-// epsActual (see toEarnCalItem above) — no market cap, no sales, no YoY
-// comparisons, no session/guidance/reaction. Earlier this file filled those
-// with deterministic (hashStr-seeded) placeholder numbers; that fabricated
-// data has been removed rather than labeled — a row shows only fields it
-// genuinely has.
+// The live earnings_events doc (Polygon reported financials) carries
+// ticker/companyName/date/epsActual/revenueActual — no estimates, session,
+// guidance or reaction. Those fields render as NotAvailable rather than being
+// filled with fabricated numbers — a row shows only data it genuinely has.
 
 interface CalRow {
   s: string; n: string; sess: "BMO" | "AMC" | null;
   epsE: number | null; epsA: number | null; epsSurp: number | null;
+  revE: number | null; revA: number | null; revSurp: number | null;
 }
 
 /** Guarded on a near-zero estimate: dividing by ~$0 EPS yields a nonsense ±Infinity%. */
@@ -118,12 +119,22 @@ function fmtPctSigned(v: number | null, digits = 0): string {
 function fmtUpDn(v: number | null): string {
   return v == null ? "" : v >= 0 ? "up" : "dn";
 }
+/** Raw-dollar revenue → $B / $M. */
+function fmtRev(v: number | null): string {
+  if (v == null) return "—";
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
+  return `$${v.toFixed(0)}`;
+}
 
 function toCalRow(item: EarnCalItem): CalRow {
   return {
     s: item.s, n: item.n, sess: item.sess,
     epsE: item.epsE, epsA: item.epsA,
     epsSurp: surprise(item.epsE, item.epsA),
+    revE: item.revE, revA: item.revA,
+    revSurp: surprise(item.revE, item.revA),
   };
 }
 
@@ -263,7 +274,7 @@ function EpsChart({ hist }: { hist: EarnQ[] }) {
     bars.push(
       <rect key={`e${i}`} x={ex} y={PADT + ih - eh} width={bw} height={eh} rx={2} style={{ fill: "var(--surface-3)" }} />,
       <rect key={`a${i}`} x={ax} y={PADT + ih - ah} width={bw} height={ah} rx={2}
-        style={{ fill: x.surp >= 0 ? "var(--up)" : "var(--down)" }} />,
+        style={{ fill: x.surp > 0 ? "var(--up)" : x.surp < 0 ? "var(--down)" : "var(--brand-2)" }} />,
     );
     if (i % 2 === 0 || i === n - 1) {
       labels.push(
@@ -373,62 +384,6 @@ function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   );
 }
 
-// ── Upcoming IPOs panel ───────────────────────────────────────────────────────
-// Live-only, no mock fallback: an IPO date is either scheduled by the vendor
-// feed or it isn't, and the panel says so rather than inventing a pipeline.
-
-function formatIpoPriceRange(low: number | null, high: number | null): string {
-  if (low == null && high == null) return "—";
-  if (low != null && high != null && low !== high) return `$${low.toFixed(2)}–$${high.toFixed(2)}`;
-  return `$${(low ?? high)!.toFixed(2)}`;
-}
-
-function IpoPanel({ ipos }: { ipos: IpoEventDoc[] }) {
-  const [open, setOpen] = useState(true);
-  const today = isoDay(new Date());
-  const upcoming = ipos
-    .filter(i => i.date >= today && i.status !== "withdrawn")
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 15);
-
-  return (
-    <div className="ecal-ipo">
-      <button className="ecal-ipo-h" onClick={() => setOpen(o => !o)}>
-        <span className="ecal-ipo-icon" aria-hidden>▲</span>
-        Upcoming IPOs <span className="ecal-ipo-n">{upcoming.length}</span>
-        <span className="ecal-ipo-chev" aria-hidden>{open ? "▴" : "▾"}</span>
-      </button>
-      {open && (
-        upcoming.length === 0 ? (
-          <div className="ecal-empty" style={{ border: "none", borderRadius: 0 }}>No upcoming IPOs scheduled.</div>
-        ) : (
-          <div className="ecal-tablewrap">
-            <table className="ecal-table">
-              <thead>
-                <tr>
-                  <th>Symbol</th><th>Company</th><th>Exchange</th>
-                  <th className="r">Price range</th><th className="r">Est. market cap</th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcoming.map(i => (
-                  <tr key={i.id}>
-                    <td className="ecal-sym">{i.symbol ?? "—"}</td>
-                    <td>{i.name}</td>
-                    <td>{i.exchange ?? "—"}</td>
-                    <td className="r ecal-num">{formatIpoPriceRange(i.priceLow, i.priceHigh)}</td>
-                    <td className="r ecal-num">—</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
-    </div>
-  );
-}
-
 // ── Day-view table (Before Open / After Close) ────────────────────────────────
 
 type CalView = "eps" | "sales";
@@ -473,9 +428,9 @@ function CalTable({
                   </>
                 ) : (
                   <>
-                    <td className="r ecal-num"><NotAvailable /></td>
-                    <td className="r ecal-num"><NotAvailable /></td>
-                    <td className="r ecal-num"><NotAvailable /></td>
+                    <td className="r ecal-num">{fmtRev(r.revE)}</td>
+                    <td className="r ecal-num">{fmtRev(r.revA)}</td>
+                    <td className={`r ecal-num ${fmtUpDn(r.revSurp)}`}>{fmtPctSigned(r.revSurp)}</td>
                   </>
                 )}
               </tr>
@@ -493,30 +448,23 @@ export function EarningsScreen() {
   const { openStockFull } = useIQActions();
   const [autoRefresh, setAutoRefresh] = useState(false);
   const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings", autoRefresh ? 300_000 : undefined);
-  const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   // Manual refresh (⟳ button) bypasses the polling interval with a one-shot
   // fetch, merged in ahead of whatever the hooks above last returned.
   const [manualEarnings, setManualEarnings] = useState<LiveEarningsDoc[] | null>(null);
-  const [manualIpos, setManualIpos] = useState<IpoEventDoc[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const liveEarningsData = manualEarnings ?? liveEarnings;
-  const liveIposData = manualIpos ?? liveIpos;
   async function refreshNow() {
     setRefreshing(true);
     try {
-      const [e, i] = await Promise.all([
-        apiGet<LiveEarningsDoc[]>("/market-data/earnings"),
-        apiGet<IpoEventDoc[]>("/market-data/ipos"),
-      ]);
+      const e = await apiGet<LiveEarningsDoc[]>("/market-data/earnings");
       setManualEarnings(e);
-      setManualIpos(i);
     } catch {
       // Swallow — the polling/initial fetch already surfaces errors via its own state.
     }
     setRefreshing(false);
   }
 
-  const [mode, setMode]     = useState<"day" | "week">("day");
+  const [mode, setMode]     = useState<"day" | "week" | "month">("day");
   const [anchor, setAnchor] = useState<string>(() => isoDay(new Date()));
   const [session, setSession] = useState<SessionKey>("both");
   const [sort, setSort]       = useState<SortKey>("symbol");
@@ -546,12 +494,17 @@ export function EarningsScreen() {
   const dayRows   = rowsForDate(anchor, liveEarningsData).map(toCalRow);
   const bmoRows   = filterSortRows(dayRows, { ...filterOpts, session: "BMO" });
   const amcRows   = filterSortRows(dayRows, { ...filterOpts, session: "AMC" });
-  const visibleRows = session === "both" ? [...bmoRows, ...amcRows] : session === "BMO" ? bmoRows : amcRows;
+  // Rows the vendor didn't tag with a reporting time — shown under "Time TBD"
+  // so no reporting company is hidden just because it lacks a session tag.
+  const tbdRows   = filterSortRows(dayRows.filter(r => r.sess === null), { ...filterOpts, session: "both" });
+  const visibleRows = session === "both" ? [...bmoRows, ...amcRows, ...tbdRows] : session === "BMO" ? bmoRows : amcRows;
 
   const anchorDate = new Date(`${anchor}T00:00:00Z`);
   const DOW3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const MON3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const dateLabel = `${DOW3[anchorDate.getUTCDay()]}, ${MON3[anchorDate.getUTCMonth()]} ${anchorDate.getUTCDate()}, ${anchorDate.getUTCFullYear()}`;
+  const monthLabel = `${anchorDate.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}`;
+  const headerLabel = mode === "month" ? monthLabel : dateLabel;
 
   /** Navigate to a date and, like the old per-tab navigation, select its first
    *  reporting ticker — computed directly here rather than via an effect, so
@@ -561,7 +514,13 @@ export function EarningsScreen() {
     const first = rowsForDate(iso, liveEarningsData)[0];
     if (first) setSel(first.s);
   }
-  const step = (dir: 1 | -1) => goToDate(isoDay(addDays(anchorDate, mode === "day" ? dir : dir * 7)));
+  const step = (dir: 1 | -1) => {
+    if (mode === "month") {
+      goToDate(isoDay(new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth() + dir, 1))));
+    } else {
+      goToDate(isoDay(addDays(anchorDate, mode === "day" ? dir : dir * 7)));
+    }
+  };
 
   const sortLabel = SORTS.find(([v]) => v === sort)?.[1] ?? "Symbol";
 
@@ -574,6 +533,7 @@ export function EarningsScreen() {
       <>
         {(session === "both" || session === "BMO") && <CalTable title="Before Open" rows={bmoRows} sel={sel} onSelect={setSel} view={view} />}
         {(session === "both" || session === "AMC") && <CalTable title="After Close" rows={amcRows} sel={sel} onSelect={setSel} view={view} />}
+        {session === "both" && <CalTable title="Time TBD" rows={tbdRows} sel={sel} onSelect={setSel} view={view} />}
         {visibleRows.length === 0 && (
           <div className="ecal-empty">
             <div className="ecal-empty-h">No companies reporting</div>
@@ -585,13 +545,14 @@ export function EarningsScreen() {
         )}
       </>
     );
-  } else {
+  } else if (mode === "week") {
     calNode = (
       <div className="ec-grid">
         {weekDays5.map((iso, di) => {
           const items = rowsForDate(iso, liveEarningsData).map(toCalRow);
           const bmo = filterSortRows(items, { ...filterOpts, session: "BMO" });
           const amc = filterSortRows(items, { ...filterOpts, session: "AMC" });
+          const tbd = filterSortRows(items.filter(r => r.sess === null), { ...filterOpts, session: "both" });
           const dn = ["Mon", "Tue", "Wed", "Thu", "Fri"][di];
           const isToday = iso === isoDay(new Date());
           return (
@@ -611,10 +572,70 @@ export function EarningsScreen() {
                   {amc.length ? amc.map(r => <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={setSel} />) : <span className="ec-none">—</span>}
                 </div>
               )}
+              {session === "both" && tbd.length > 0 && (
+                <div className="ec-sess">
+                  <div className="ec-lbl">Time TBD</div>
+                  {tbd.map(r => <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={setSel} />)}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+    );
+  } else {
+    // ── Month grid ────────────────────────────────────────────────────────────
+    // Full weekday calendar (Mon–Fri), every reporting company shown as a logo,
+    // matching the reference Earnings-Hub layout. Session (BMO/AMC) isn't in the
+    // vendor feed, so month cells show all companies for the day regardless of
+    // the Before/After chip.
+    const mFirst = new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), 1));
+    const mLast  = new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth() + 1, 0));
+    const leadOffset = (mFirst.getUTCDay() + 6) % 7; // 0 = Monday
+    const gridStart  = addDays(mFirst, -leadOffset); // Monday of the first week
+    const weeks = Math.ceil((leadOffset + mLast.getUTCDate()) / 7);
+    const monthKey = isoDay(mFirst).slice(0, 7);
+    const todayIso = isoDay(new Date());
+    const MAX_LOGOS = 24;
+    const cells: string[] = [];
+    for (let wk = 0; wk < weeks; wk++) for (let d = 0; d < 5; d++) cells.push(isoDay(addDays(gridStart, wk * 7 + d)));
+    calNode = (
+      <>
+        <div className="ecm-head">
+          {["Mon", "Tue", "Wed", "Thu", "Fri"].map(d => <div key={d} className="ecm-hcell">{d}</div>)}
+        </div>
+        <div className="ecm-grid">
+          {cells.map(iso => {
+            if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="ecm-day is-out" />;
+            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
+            const isToday = iso === todayIso;
+            const isSel   = iso === anchor && !isToday;
+            const shown   = items.slice(0, MAX_LOGOS);
+            const extra   = items.length - shown.length;
+            return (
+              <div key={iso} className={`ecm-day${isToday ? " is-today" : ""}${isSel ? " is-sel" : ""}`}>
+                <div className="ecm-dh" onClick={() => { goToDate(iso); setMode("day"); }} title="Open day view">
+                  {Number(iso.slice(8))}{isToday ? <span className="t">Today</span> : null}
+                </div>
+                {items.length === 0 ? (
+                  <div className="ecm-none">No earnings</div>
+                ) : (
+                  <div className="ecm-logos">
+                    {shown.map(r => (
+                      <button key={r.s} className={`ecm-logo${sel === r.s ? " on" : ""}`} title={r.s} onClick={() => setSel(r.s)}>
+                        <StockLogo sym={r.s} size={20} />
+                      </button>
+                    ))}
+                    {extra > 0 && (
+                      <button className="ecm-more" title={`${extra} more — open day view`} onClick={() => { goToDate(iso); setMode("day"); }}>+{extra}</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </>
     );
   }
 
@@ -624,19 +645,25 @@ export function EarningsScreen() {
   const liveMatch = liveMatches[0];
   const hasLiveEps = !!liveMatch && (liveMatch.epsEstimate != null || liveMatch.epsActual != null);
 
-  const symEvents = liveEarnings.filter(e => e.ticker === sel).sort((a, b) => a.date.localeCompare(b.date));
-  const hist: EarnQ[] = symEvents
-    .filter(e => e.epsEstimate != null && e.epsActual != null)
-    .slice(-10)
-    .reverse()
-    .map(e => {
-      const est = e.epsEstimate as number, act = e.epsActual as number;
-      const surp = est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
-      return {
-        q: new Date(e.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        e: est, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
-      };
-    });
+  // 10-quarter EPS history comes from the per-ticker Polygon financials
+  // (GET /live/financials — 10 reported quarters), not the market-wide calendar
+  // feed, which only holds ~1–2 filings per ticker inside its date window.
+  // Polygon reports actuals only, so estimates/beat-miss are absent.
+  const histQuarters = (financialsDoc?.quarters ?? [])
+    .filter(q => q.epsActual != null)
+    .slice()
+    .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""))
+    .slice(0, 10);
+  const hasEstimates = histQuarters.some(q => q.epsEstimate != null);
+  const hist: EarnQ[] = histQuarters.map(q => {
+    const act = q.epsActual as number;
+    const est = q.epsEstimate;
+    const surp = est != null && est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
+    const label = q.endDate
+      ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+      : `${q.fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim();
+    return { q: label, e: est ?? 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0 };
+  });
   const beats = hist.filter(h => h.surp >= 0).length;
 
   const inc = incRowsFromFinancials(financialsDoc);
@@ -645,10 +672,12 @@ export function EarningsScreen() {
 
   const aiRead = liveMatch
     ? `${sel} ${liveMatch.epsActual != null
-        ? (liveMatch.epsEstimate != null && liveMatch.epsActual >= liveMatch.epsEstimate ? "beat" : "missed") + " EPS estimates"
+        ? liveMatch.epsEstimate != null
+          ? `${liveMatch.epsActual >= liveMatch.epsEstimate ? "beat" : "missed"} EPS estimates`
+          : `reported EPS of $${liveMatch.epsActual.toFixed(2)} (filed ${liveMatch.date})`
         : `reports on ${liveMatch.date}`
-      }.${hist.length > 0 ? ` ${beats}/${hist.length} historical EPS beats.` : ""}`
-    : `${sel}: no earnings-calendar entry synced yet.`;
+      }.${hist.length > 0 && hasEstimates ? ` ${beats}/${hist.length} historical EPS beats.` : ""}`
+    : `${sel}: no reported earnings synced yet.`;
 
   return (
     <>
@@ -659,7 +688,7 @@ export function EarningsScreen() {
             <button className="ecal-arrow" onClick={() => step(-1)} aria-label="Previous">‹</button>
             <div style={{ position: "relative" }}>
               <div className="ecal-date" onClick={() => setPickerOpen(o => !o)} style={{ cursor: "pointer" }} title="Pick a date">
-                {dateLabel} <span aria-hidden style={{ fontSize: ".7em", opacity: .7 }}>▾</span>
+                {headerLabel} <span aria-hidden style={{ fontSize: ".7em", opacity: .7 }}>▾</span>
               </div>
               {pickerOpen && (
                 <MiniCalendar
@@ -672,6 +701,7 @@ export function EarningsScreen() {
             <button className="ecal-arrow" onClick={() => step(1)} aria-label="Next">›</button>
           </div>
           <div className="ecal-seg">
+            <button className={`ecal-segbtn${mode === "month" ? " on" : ""}`} onClick={() => setMode("month")}>Month</button>
             <button className={`ecal-segbtn${mode === "week" ? " on" : ""}`} onClick={() => setMode("week")}>Week</button>
             <button className={`ecal-segbtn${mode === "day" ? " on" : ""}`} onClick={() => setMode("day")}>Day</button>
           </div>
@@ -704,8 +734,6 @@ export function EarningsScreen() {
           </label>
           <span style={{ fontSize: ".76rem", color: "var(--text-dim-solid)", fontFamily: "var(--f-mono)" }}>{etClock} ET</span>
         </div>
-
-        <IpoPanel ipos={liveIposData} />
 
         {/* ── Calendar ─────────────────────────────────────────────────── */}
         {calNode}
@@ -770,7 +798,7 @@ export function EarningsScreen() {
               <div className="m">
                 <div className="k">EPS actual</div>
                 {liveMatch?.epsActual != null
-                  ? <div className={`v ${liveMatch.epsEstimate != null && liveMatch.epsActual >= liveMatch.epsEstimate ? "up" : "down"}`}>${liveMatch.epsActual.toFixed(2)}</div>
+                  ? <div className={`v ${liveMatch.epsEstimate != null ? (liveMatch.epsActual >= liveMatch.epsEstimate ? "up" : "down") : ""}`}>${liveMatch.epsActual.toFixed(2)}</div>
                   : <div className="v" style={{ color: "var(--text-dim-solid)" }}>Pending</div>}
               </div>
               <div className="m">
@@ -795,7 +823,11 @@ export function EarningsScreen() {
             <div className="card-h">
               <h3>{sel} · 10-quarter earnings history</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                {hist.length === 0 ? null : beats / hist.length >= 0.7
+                {hist.length === 0 || !hasEstimates ? (
+                  hist.length > 0
+                    ? <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{hist.length} reported</span>
+                    : null
+                ) : beats / hist.length >= 0.7
                   ? <span className="pill up">{beats}/{hist.length} beats</span>
                   : beats / hist.length < 0.5
                   ? <span className="pill dn">{beats}/{hist.length} beats</span>
@@ -805,13 +837,19 @@ export function EarningsScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 8, flex: 1, display: "flex", flexDirection: "column" }}>
               {hist.length === 0 ? (
-                <DataState loading={earningsLoading} label={`No live earnings history synced for ${sel} yet.`} height="100%" />
+                <DataState loading={financialsLoading} label={`No reported earnings history for ${sel} yet.`} height="100%" />
               ) : (
                 <>
                   <div className="ec-legend">
-                    <span><i style={{ background: "var(--surface-3)" }} /> EPS estimate</span>
-                    <span><i style={{ background: "var(--up)" }} /> Beat</span>
-                    <span><i style={{ background: "var(--down)" }} /> Miss</span>
+                    {hasEstimates ? (
+                      <>
+                        <span><i style={{ background: "var(--surface-3)" }} /> EPS estimate</span>
+                        <span><i style={{ background: "var(--up)" }} /> Beat</span>
+                        <span><i style={{ background: "var(--down)" }} /> Miss</span>
+                      </>
+                    ) : (
+                      <span><i style={{ background: "var(--brand-2)" }} /> Reported EPS (diluted)</span>
+                    )}
                   </div>
                   <EpsChart hist={hist} />
                   <details className="ec-det">
@@ -830,9 +868,9 @@ export function EarningsScreen() {
                           {hist.map(h => (
                             <tr key={h.q}>
                               <td><b style={{ color: "var(--text-hi)" }}>{h.q}</b></td>
-                              <td className="num">${h.e.toFixed(2)}</td>
+                              <td className="num">{hasEstimates ? `$${h.e.toFixed(2)}` : "—"}</td>
                               <td className="num">${h.a.toFixed(2)}</td>
-                              <td className={`num ${cls(h.surp)}`}>{sign(h.surp)}</td>
+                              <td className={`num ${hasEstimates ? cls(h.surp) : ""}`}>{hasEstimates ? sign(h.surp) : "—"}</td>
                             </tr>
                           ))}
                         </tbody>
