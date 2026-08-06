@@ -12,7 +12,7 @@ export const menuItems = [
   { label: 'Screener', slug: 'screener', group: 'Research', icon: '🔍', badge: null },
   { label: 'Themes', slug: 'themes', group: 'Research', icon: '◈', badge: null },
   { label: 'IPOs', slug: 'ipos', group: 'Research', icon: '🚀', badge: null },
-  { label: 'Insider & Institutional', slug: 'insider', group: 'Research', icon: '📄', badge: null },
+  { label: 'Ownership', slug: 'insider', group: 'Research', icon: '📄', badge: null },
   { label: 'Search', slug: 'stock', group: 'Research', icon: '📊', badge: null },
   // ---- Market Recaps ----
   { label: 'Daily/Weekly Recaps', slug: 'recap', group: 'Market Recaps', icon: '🔖', badge: null },
