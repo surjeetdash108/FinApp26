@@ -15,7 +15,8 @@ export const menuItems = [
   { label: 'Ownership', slug: 'insider', group: 'Research', icon: '📄', badge: null },
   { label: 'Search', slug: 'stock', group: 'Research', icon: '📊', badge: null },
   // ---- Market Recaps ----
-  { label: 'Daily/Weekly Recaps', slug: 'recap', group: 'Market Recaps', icon: '🔖', badge: null },
+  { label: 'Daily Recaps', slug: 'recap', group: 'Market Recaps', icon: '🔖', badge: null },
+  { label: 'Weekly Recaps', slug: 'weekly-recap', group: 'Market Recaps', icon: '🗓️', badge: null },
   // ---- My Workspace ----
   { label: 'Portfolio', slug: 'portfolio', group: 'My Workspace', icon: '💼', badge: null },
   { label: 'Watchlist', slug: 'watchlist', group: 'My Workspace', icon: '⭐', badge: null },

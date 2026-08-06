@@ -10,7 +10,6 @@ import { tapeItemsToIndexDocs } from "../live-market-indices";
 import type { SectorApiDoc, LiveEarningsDoc, NewsArticleDoc, MacroEventDoc } from "../types";
 
 const SEC_PAGE = 10;
-const TABS = ["Today (EOD)", "This Week"];
 const MAJOR_INDEX_LABELS = ["S&P 500", "Nasdaq", "Dow", "Russell 2K"];
 
 function heatColor(v: number): string {
@@ -65,10 +64,12 @@ function earnSurprises(events: LiveEarningsDoc[]): EarnSurprise[] {
 }
 
 // ---- Main screen ----
-export function RecapScreen() {
+export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
   const router = useRouter();
   const { openStock, openSector } = useIQActions();
-  const [activeTab, setActiveTab] = useState(0);
+  // Daily vs weekly is now chosen by the menu route (two separate options),
+  // not an in-screen tab.
+  const activeTab = mode === "weekly" ? 1 : 0;
   const [recapPage, setRecapPage] = useState(0);
   const [drawer, setDrawer] = useState<"earn-movers" | null>(null);
   const [audioMsg, setAudioMsg] = useState(false);
@@ -220,12 +221,6 @@ export function RecapScreen() {
         <div>
           <h1 className="page-title">{activeTab === 1 ? "Weekly Recap" : "End-of-Day Recap"}</h1>
         </div>
-        <div className="tabs">
-          {TABS.map((t, i) => (
-            <button key={t} className={`tab${i === activeTab ? " active" : ""}`}
-              onClick={() => setActiveTab(i)}>{t}</button>
-          ))}
-        </div>
       </div>
 
       {/* ── Today (EOD) ── */}
@@ -339,7 +334,7 @@ export function RecapScreen() {
                 Week ending {dateLabel}
               </div>
             </div>
-            <DataState label="Weekly index performance isn't tracked by a live feed — only the current session is available (see Today tab)." />
+            <DataState label="Weekly index performance isn't tracked by a live feed — only the current session is available (see Daily Recaps)." />
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0 4px" }}>
               <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontWeight: 600, letterSpacing: ".03em" }}>
                 DOWNLOAD:
@@ -367,7 +362,7 @@ export function RecapScreen() {
               <div className="card">
                 <div className="card-h"><h3>Sector leaders</h3><span className="pill up">Week</span></div>
                 <div className="card-b" style={{ paddingTop: 6 }}>
-                  <DataState label="Weekly sector performance isn't tracked by a live feed — see the daily sector heatmap on the Today tab." />
+                  <DataState label="Weekly sector performance isn't tracked by a live feed — see the daily sector heatmap on the Daily Recaps screen." />
                 </div>
               </div>
             </div>
@@ -375,7 +370,7 @@ export function RecapScreen() {
               <div className="card">
                 <div className="card-h"><h3>Sector laggards</h3><span className="pill dn">Week</span></div>
                 <div className="card-b" style={{ paddingTop: 6 }}>
-                  <DataState label="Weekly sector performance isn't tracked by a live feed — see the daily sector heatmap on the Today tab." />
+                  <DataState label="Weekly sector performance isn't tracked by a live feed — see the daily sector heatmap on the Daily Recaps screen." />
                 </div>
               </div>
             </div>

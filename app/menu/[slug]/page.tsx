@@ -37,7 +37,8 @@ const SCREENS: Record<string, React.ReactNode> = {
   options:     <OptionsScreen />,
   insider:     <InsiderScreen />,
   commentary:  <CommentaryScreen />,
-  recap:       <RecapScreen />,
+  recap:         <RecapScreen mode="daily" />,
+  "weekly-recap": <RecapScreen mode="weekly" />,
   macro:       <MacroScreen />,
 };
 
