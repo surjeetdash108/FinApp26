@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import { apiGet } from "../backend";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
 
@@ -139,7 +138,6 @@ function toCalRow(item: EarnCalItem): CalRow {
 }
 
 type SortKey = "symbol" | "surprise";
-const SORTS: [SortKey, string][] = [["symbol", "Symbol"], ["surprise", "Surprise"]];
 type SessionKey = "both" | "BMO" | "AMC";
 
 function filterSortRows(rows: CalRow[], opts: { sort: SortKey; session: SessionKey }): CalRow[] {
@@ -149,34 +147,6 @@ function filterSortRows(rows: CalRow[], opts: { sort: SortKey; session: SessionK
     return a.s.localeCompare(b.s);
   });
   return out;
-}
-
-/** Filter/sort dropdown chip that closes on select or click-away. */
-function Picker<T extends string | number>({
-  label, value, options, onPick,
-}: { label: string; value: string; options: [T, string][]; onPick: (v: T) => void }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="ecal-pick">
-      <button className={`ecal-chip${open ? " on" : ""}`} onClick={() => setOpen(o => !o)}>
-        {label}: <b>{value}</b>
-        <span className="ecal-caret" aria-hidden>{open ? "▴" : "▾"}</span>
-      </button>
-      {open && (
-        <>
-          <div className="ecal-away" onClick={() => setOpen(false)} />
-          <div className="ecal-menu">
-            {options.map(([v, l]) => (
-              <button key={String(v)} className={`ecal-opt${l === value ? " on" : ""}`}
-                onClick={() => { onPick(v); setOpen(false); }}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
 }
 
 /** Month-grid date picker opened by clicking the header date label. */
@@ -446,46 +416,26 @@ function CalTable({
 
 export function EarningsScreen() {
   const { openStockFull } = useIQActions();
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings", autoRefresh ? 300_000 : undefined);
-  // Manual refresh (⟳ button) bypasses the polling interval with a one-shot
-  // fetch, merged in ahead of whatever the hooks above last returned.
-  const [manualEarnings, setManualEarnings] = useState<LiveEarningsDoc[] | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const liveEarningsData = manualEarnings ?? liveEarnings;
-  async function refreshNow() {
-    setRefreshing(true);
-    try {
-      const e = await apiGet<LiveEarningsDoc[]>("/market-data/earnings");
-      setManualEarnings(e);
-    } catch {
-      // Swallow — the polling/initial fetch already surfaces errors via its own state.
-    }
-    setRefreshing(false);
-  }
+  const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const liveEarningsData = liveEarnings;
 
   const [mode, setMode]     = useState<"day" | "week" | "month">("day");
   const [anchor, setAnchor] = useState<string>(() => isoDay(new Date()));
-  const [session, setSession] = useState<SessionKey>("both");
-  const [sort, setSort]       = useState<SortKey>("symbol");
-  const [view, setView]       = useState<CalView>("eps");
-  const [hasNews, setHasNews] = useState(false);
+  // The filter bar (session / cap / sort / min-move / view / news / auto-refresh)
+  // was removed — the live earnings feed has no data to drive those — so these
+  // stay at fixed defaults.
+  const session: SessionKey = "both";
+  const sort: SortKey = "symbol";
+  const view: CalView = "eps";
   const [pickerOpen, setPickerOpen]   = useState(false);
 
-  const [sel, setSel]           = useState<string>("GOOG");
-  const { data: liveCompanySel } = useApiResource<CompanyDoc>(`/live/company?ticker=${encodeURIComponent(sel)}`);
-  const { data: financialsDoc, loading: financialsLoading } = useApiResource<FinancialsDoc>(`/live/financials?ticker=${encodeURIComponent(sel)}`);
+  // No company is selected by default — the detail panels appear only after the
+  // user clicks a reporting company in the calendar.
+  const [sel, setSel]           = useState<string>("");
+  const { data: liveCompanySel } = useApiResource<CompanyDoc>(sel ? `/live/company?ticker=${encodeURIComponent(sel)}` : null);
+  const { data: financialsDoc, loading: financialsLoading } = useApiResource<FinancialsDoc>(sel ? `/live/financials?ticker=${encodeURIComponent(sel)}` : null);
   const [selectedCall,   setSelectedCall]   = useState<string | null>(null);
   const [aiModalSym,      setAiModalSym]      = useState<string | null>(null);
-
-  // ET clock next to "Auto 5m" — ticks on its own timer, independent of
-  // whether polling is actually on, so it never implies a fetch that didn't happen.
-  const [nowTick, setNowTick] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNowTick(new Date()), 30_000);
-    return () => clearInterval(id);
-  }, []);
-  const etClock = nowTick.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
 
   const weekMon   = mondayOf(new Date(`${anchor}T00:00:00Z`));
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
@@ -522,7 +472,6 @@ export function EarningsScreen() {
     }
   };
 
-  const sortLabel = SORTS.find(([v]) => v === sort)?.[1] ?? "Symbol";
 
   // ── Calendar rendering ────────────────────────────────────────────────────
 
@@ -707,34 +656,6 @@ export function EarningsScreen() {
           </div>
         </div>
 
-        <div className="ecal-filters">
-          <div className="ecal-seg">
-            <button className={`ecal-segbtn${session === "BMO" ? " on" : ""}`} onClick={() => setSession("BMO")}>Before Open</button>
-            <button className={`ecal-segbtn${session === "AMC" ? " on" : ""}`} onClick={() => setSession("AMC")}>After Close</button>
-            <button className={`ecal-segbtn${session === "both" ? " on" : ""}`} onClick={() => setSession("both")}>Both</button>
-          </div>
-          <button className="ecal-chip" disabled title="Market cap isn't in the live earnings feed yet — can't filter by it." style={{ opacity: .5, cursor: "not-allowed" }}>
-            Cap: <b>All</b>
-          </button>
-          <Picker label="Sort" value={sortLabel} options={SORTS} onPick={setSort} />
-          <button className="ecal-chip" disabled title="Implied move isn't in the live earnings feed yet — can't filter by it." style={{ opacity: .5, cursor: "not-allowed" }}>
-            Min move: <b>—</b>
-          </button>
-          <Picker label="View" value={view === "eps" ? "EPS" : "Sales"} options={[["eps", "EPS"], ["sales", "Sales"]]} onPick={setView} />
-          <label className="ecal-chip" title="Per-ticker news correlation isn't wired up yet." style={{ opacity: .5, cursor: "not-allowed" }}>
-            <input type="checkbox" checked={hasNews} onChange={e => setHasNews(e.target.checked)} disabled style={{ marginRight: 5 }} />
-            Has news
-          </label>
-          <button className="ecal-arrow" title="Refresh now" onClick={refreshNow} disabled={refreshing} style={{ marginLeft: "auto" }}>
-            {refreshing ? "⋯" : "⟳"}
-          </button>
-          <label className="ecal-chip" style={{ cursor: "pointer" }}>
-            <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} style={{ marginRight: 5 }} />
-            Auto 5m
-          </label>
-          <span style={{ fontSize: ".76rem", color: "var(--text-dim-solid)", fontFamily: "var(--f-mono)" }}>{etClock} ET</span>
-        </div>
-
         {/* ── Calendar ─────────────────────────────────────────────────── */}
         {calNode}
       </div>
@@ -790,7 +711,7 @@ export function EarningsScreen() {
             </div>{/* end outer flex */}
           </div>{/* end card-h */}
           <div className="card-b" style={{ paddingTop: 10 }}>
-            <div className="metric-grid" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 12 }}>
+            <div className="metric-grid" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 12 }}>
               <div className="m">
                 <div className="k">EPS estimate</div>
                 <div className="v">{liveMatch?.epsEstimate != null ? `$${liveMatch.epsEstimate.toFixed(2)}` : "—"}</div>
@@ -805,17 +726,15 @@ export function EarningsScreen() {
                 <div className="k">Guidance</div>
                 <div className="v" style={{ fontSize: ".95rem" }}><NotAvailable /></div>
               </div>
-              <div className="m">
-                <div className="k">Reaction</div>
-                <div className="v"><NotAvailable /></div>
-              </div>
             </div>
             <p style={{ fontSize: ".82rem", color: "var(--text-dim-solid)", margin: 0 }}>{aiRead}</p>
           </div>
         </div>
       )}
 
-      {/* ── Detail: EPS history + Income statement ─────────────────────── */}
+      {/* ── Detail: EPS history + Income statement (only once a company is picked) ── */}
+      {sel && (
+      <>
       <div className="dash" style={{ marginTop: 16 }}>
         {/* col-6: 10-quarter EPS history */}
         <div className="col-6">
@@ -963,7 +882,8 @@ export function EarningsScreen() {
           </p>
         </div>
       </div>
-
+      </>
+      )}
 
       {/* Earnings call detail drawer — honest not-connected state, no fabricated summary/transcript */}
       {selectedCall && (
