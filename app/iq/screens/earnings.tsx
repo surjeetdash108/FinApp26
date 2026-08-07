@@ -446,14 +446,10 @@ export function EarningsScreen() {
   const weekMon   = mondayOf(new Date(`${anchor}T00:00:00Z`));
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
 
-  const filterOpts = { sort };
-  const dayRows   = rowsForDate(anchor, liveEarningsData).map(toCalRow);
-  const bmoRows   = filterSortRows(dayRows, { ...filterOpts, session: "BMO" });
-  const amcRows   = filterSortRows(dayRows, { ...filterOpts, session: "AMC" });
-  // Rows the vendor didn't tag with a reporting time — shown under "Time TBD"
-  // so no reporting company is hidden just because it lacks a session tag.
-  const tbdRows   = filterSortRows(dayRows.filter(r => r.sess === null), { ...filterOpts, session: "both" });
-  const visibleRows = session === "both" ? [...bmoRows, ...amcRows, ...tbdRows] : session === "BMO" ? bmoRows : amcRows;
+  const dayRows = rowsForDate(anchor, liveEarningsData).map(toCalRow);
+  // Single reporting list — the data has no before-open/after-close session tag,
+  // so the day view is one table rather than a BMO/AMC/TBD split.
+  const visibleRows = filterSortRows(dayRows, { sort, session: "both" });
 
   const anchorDate = new Date(`${anchor}T00:00:00Z`);
   const DOW3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -486,16 +482,12 @@ export function EarningsScreen() {
   if (mode === "day") {
     calNode = (
       <>
-        {(session === "both" || session === "BMO") && <CalTable title="Before Open" rows={bmoRows} sel={sel} onSelect={setSel} view={view} />}
-        {(session === "both" || session === "AMC") && <CalTable title="After Close" rows={amcRows} sel={sel} onSelect={setSel} view={view} />}
-        {session === "both" && <CalTable title="Time TBD" rows={tbdRows} sel={sel} onSelect={setSel} view={view} />}
-        {visibleRows.length === 0 && (
+        {visibleRows.length > 0 ? (
+          <CalTable title="Companies reporting" rows={visibleRows} sel={sel} onSelect={setSel} view={view} />
+        ) : (
           <div className="ecal-empty">
             <div className="ecal-empty-h">No companies reporting</div>
-            <div>
-              Nothing scheduled for {dateLabel}
-              {session !== "both" ? ` (${session === "BMO" ? "before open" : "after close"})` : ""} in the synced calendar.
-            </div>
+            <div>Nothing scheduled for {dateLabel} in the synced calendar.</div>
           </div>
         )}
       </>
@@ -504,10 +496,7 @@ export function EarningsScreen() {
     calNode = (
       <div className="ec-grid">
         {weekDays5.map((iso, di) => {
-          const items = rowsForDate(iso, liveEarningsData).map(toCalRow);
-          const bmo = filterSortRows(items, { ...filterOpts, session: "BMO" });
-          const amc = filterSortRows(items, { ...filterOpts, session: "AMC" });
-          const tbd = filterSortRows(items.filter(r => r.sess === null), { ...filterOpts, session: "both" });
+          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
           const dn = ["Mon", "Tue", "Wed", "Thu", "Fri"][di];
           const isToday = iso === isoDay(new Date());
           return (
@@ -515,24 +504,9 @@ export function EarningsScreen() {
               <div className="ec-dh" style={{ cursor: "pointer" }} onClick={() => { goToDate(iso); setMode("day"); }}>
                 {dn} {Number(iso.slice(8))}{isToday ? " · Today" : ""}
               </div>
-              {(session === "both" || session === "BMO") && (
-                <div className="ec-sess">
-                  <div className="ec-lbl">Before open</div>
-                  {bmo.length ? bmo.map(r => <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={setSel} />) : <span className="ec-none">—</span>}
-                </div>
-              )}
-              {(session === "both" || session === "AMC") && (
-                <div className="ec-sess">
-                  <div className="ec-lbl">After close</div>
-                  {amc.length ? amc.map(r => <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={setSel} />) : <span className="ec-none">—</span>}
-                </div>
-              )}
-              {session === "both" && tbd.length > 0 && (
-                <div className="ec-sess">
-                  <div className="ec-lbl">Time TBD</div>
-                  {tbd.map(r => <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={setSel} />)}
-                </div>
-              )}
+              <div className="ec-sess">
+                {items.length ? items.map(r => <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={setSel} />) : <span className="ec-none">—</span>}
+              </div>
             </div>
           );
         })}
