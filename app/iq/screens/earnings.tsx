@@ -5,7 +5,7 @@ import { useIQActions, ExpandBtn } from "../shell";
 import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials } from "../types";
+import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
 
 // Live source (Polygon SEC financials) has ticker/date/epsEstimate/epsActual —
@@ -24,8 +24,8 @@ interface IncRow  { c: string; rev: number; cogs: number; gp: number; opex: numb
  * IncRow shape the existing chart/table render — mirrors stock.tsx's
  * incRowsFromFinancials so the two screens never show different numbers.
  */
-function incRowsFromFinancials(doc: FinancialsDoc | null): IncRow[] {
-  const rows = doc ? doc.quarters : [];
+function incRowsFromFinancials(doc: FinancialsDoc | null, period: "Q" | "A" = "Q"): IncRow[] {
+  const rows: (QuarterFinancials | AnnualFinancials)[] = doc ? (period === "A" ? doc.annual : doc.quarters) : [];
   if (rows.length === 0) return [];
   return rows.slice(0, 10).map(r => {
     const revenue = r.revenue ?? 0;
@@ -33,7 +33,9 @@ function incRowsFromFinancials(doc: FinancialsDoc | null): IncRow[] {
     const operatingIncome = r.operatingIncome ?? 0;
     const netIncome = r.netIncome ?? 0;
     const opex = (r as QuarterFinancials).operatingExpenses ?? Math.max(0, grossProfit - operatingIncome);
-    const label = `${r.fiscalPeriod ?? "?"} '${(r.fiscalYear ?? "").slice(-2)}`;
+    const label = period === "A"
+      ? `FY '${(r.fiscalYear ?? "").slice(-2)}`
+      : `${(r as QuarterFinancials).fiscalPeriod ?? "?"} '${(r.fiscalYear ?? "").slice(-2)}`;
     return {
       c: label,
       rev: revenue / 1e9,
@@ -428,6 +430,9 @@ export function EarningsScreen() {
   const sort: SortKey = "symbol";
   const view: CalView = "eps";
   const [pickerOpen, setPickerOpen]   = useState(false);
+  // Quarterly vs Yearly toggles for the two detail tables (independent).
+  const [histPeriod, setHistPeriod] = useState<"Q" | "A">("Q");
+  const [incPeriod, setIncPeriod]   = useState<"Q" | "A">("Q");
 
   // No company is selected by default — the detail panels appear only after the
   // user clicks a reporting company in the calendar.
@@ -598,24 +603,26 @@ export function EarningsScreen() {
   // (GET /live/financials — 10 reported quarters), not the market-wide calendar
   // feed, which only holds ~1–2 filings per ticker inside its date window.
   // Polygon reports actuals only, so estimates/beat-miss are absent.
-  const histQuarters = (financialsDoc?.quarters ?? [])
-    .filter(q => q.epsActual != null)
-    .slice()
-    .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""))
-    .slice(0, 10);
-  const hasEstimates = histQuarters.some(q => q.epsEstimate != null);
-  const hist: EarnQ[] = histQuarters.map(q => {
+  const histSource: (QuarterFinancials | AnnualFinancials)[] =
+    (histPeriod === "A" ? (financialsDoc?.annual ?? []) : (financialsDoc?.quarters ?? []))
+      .filter(q => q.epsActual != null)
+      .slice()
+      .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""))
+      .slice(0, 10);
+  // Annual filings carry no per-quarter estimate, so beat/miss only applies to Q.
+  const hasEstimates = histPeriod === "Q" && histSource.some(q => (q as QuarterFinancials).epsEstimate != null);
+  const hist: EarnQ[] = histSource.map(q => {
     const act = q.epsActual as number;
-    const est = q.epsEstimate;
+    const est = (q as QuarterFinancials).epsEstimate ?? null;
     const surp = est != null && est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
     const label = q.endDate
-      ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-      : `${q.fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim();
+      ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", histPeriod === "A" ? { year: "numeric" } : { month: "short", year: "2-digit" })
+      : (histPeriod === "A" ? `${q.fiscalYear ?? ""}`.trim() : `${(q as QuarterFinancials).fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim());
     return { q: label, e: est ?? 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0 };
   });
   const beats = hist.filter(h => h.surp >= 0).length;
 
-  const inc = incRowsFromFinancials(financialsDoc);
+  const inc = incRowsFromFinancials(financialsDoc, incPeriod);
 
   const fmtB = (v: number) => v >= 1 ? `$${v.toFixed(2)}B` : `$${(v * 1000).toFixed(0)}M`;
 
@@ -740,8 +747,12 @@ export function EarningsScreen() {
         <div className="col-6">
           <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
-              <h3>{sel} · 10-quarter earnings history</h3>
+              <h3>{sel} · earnings history</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div className="ecal-seg">
+                  <button className={`ecal-segbtn${histPeriod === "Q" ? " on" : ""}`} onClick={() => setHistPeriod("Q")}>Quarterly</button>
+                  <button className={`ecal-segbtn${histPeriod === "A" ? " on" : ""}`} onClick={() => setHistPeriod("A")}>Yearly</button>
+                </div>
                 {hist.length === 0 || !hasEstimates ? (
                   hist.length > 0
                     ? <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{hist.length} reported</span>
@@ -771,13 +782,11 @@ export function EarningsScreen() {
                     )}
                   </div>
                   <EpsChart hist={hist} />
-                  <details className="ec-det">
-                    <summary>Show quarterly table</summary>
-                    <div style={{ overflowX: "auto", marginTop: 8 }}>
+                  <div style={{ overflowX: "auto", marginTop: 10 }}>
                       <table className="tbl">
                         <thead>
                           <tr>
-                            <th>Quarter</th>
+                            <th>{histPeriod === "A" ? "Year" : "Quarter"}</th>
                             <th className="num">EPS est</th>
                             <th className="num">EPS act</th>
                             <th className="num">Surprise</th>
@@ -795,7 +804,6 @@ export function EarningsScreen() {
                         </tbody>
                       </table>
                     </div>
-                  </details>
                 </>
               )}
             </div>
@@ -808,13 +816,16 @@ export function EarningsScreen() {
             <div className="card-h">
               <h3>{sel} · Income statement</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>Quarterly</span>
+                <div className="ecal-seg">
+                  <button className={`ecal-segbtn${incPeriod === "Q" ? " on" : ""}`} onClick={() => setIncPeriod("Q")}>Quarterly</button>
+                  <button className={`ecal-segbtn${incPeriod === "A" ? " on" : ""}`} onClick={() => setIncPeriod("A")}>Yearly</button>
+                </div>
                 <ExpandBtn title={`${sel} · Income statement`} node={<IncChart inc={inc} />} />
               </div>
             </div>
             <div className="card-b" style={{ paddingTop: 8, flex: 1, display: "flex", flexDirection: "column" }}>
               {inc.length === 0 ? (
-                <DataState loading={financialsLoading} label={`No live quarterly financials synced for ${sel} yet.`} height="100%" />
+                <DataState loading={financialsLoading} label={`No live ${incPeriod === "A" ? "annual" : "quarterly"} financials synced for ${sel} yet.`} height="100%" />
               ) : (
                 <>
                   <div className="ec-legend">
@@ -823,9 +834,7 @@ export function EarningsScreen() {
                     <span><i style={{ background: "var(--up)" }} /> Net income</span>
                   </div>
                   <IncChart inc={inc} />
-                  <details className="ec-det">
-                    <summary>Show statement table</summary>
-                    <div style={{ overflowX: "auto", marginTop: 8 }}>
+                  <div style={{ overflowX: "auto", marginTop: 10 }}>
                       <table className="tbl">
                         <thead>
                           <tr>
@@ -858,7 +867,6 @@ export function EarningsScreen() {
                         </tbody>
                       </table>
                     </div>
-                  </details>
                 </>
               )}
             </div>
