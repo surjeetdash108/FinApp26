@@ -248,14 +248,16 @@ function EpsChart({ hist }: { hist: EarnQ[] }) {
       <rect key={`a${i}`} x={ax} y={PADT + ih - ah} width={bw} height={ah} rx={2}
         style={{ fill: x.surp > 0 ? "var(--up)" : x.surp < 0 ? "var(--down)" : "var(--brand-2)" }} />,
     );
-    if (i % 2 === 0 || i === n - 1) {
-      labels.push(
-        <text key={`l${i}`} x={cx} y={H - 10} textAnchor="middle"
-          style={{ fill: "var(--text-dim-solid)", fontSize: "0.5625rem" }}>
-          {x.q.replace(" ", "'")}
-        </text>
-      );
-    }
+    // Show every quarter label (previously every other was skipped, so the
+    // axis read Mar'24, Sep'24, … with the in-between quarters missing). Each
+    // ~30px label sits in its own ~48px slot, so they fit horizontally — same
+    // as the IncChart axis directly below.
+    labels.push(
+      <text key={`l${i}`} x={cx} y={H - 10} textAnchor="middle"
+        style={{ fill: "var(--text-dim-solid)", fontSize: "0.5625rem" }}>
+        {x.q.replace(" ", "'")}
+      </text>
+    );
   });
 
   return (
