@@ -333,18 +333,34 @@ function EarnEpsChart({ hist }: { hist: EarnQ[] }) {
 }
 
 function EarnIncChart({ inc }: { inc: IncRow[] }) {
+  // Fill the card's full width instead of capping at a fixed 380px. The viewBox
+  // width tracks the measured container width so the chart stretches edge to
+  // edge at a fixed height — bars spread out, and text/bar sizes stay natural
+  // (a plain maxWidth removal would scale the whole SVG up and distort both).
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(760);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => { const cw = el.clientWidth; if (cw > 0) setW(cw); };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const d = [...inc].reverse();
-  const W = 380, H = 200, PADL = 8, PADR = 8, PADT = 14, PADB = 26;
+  const H = 200, PADL = 8, PADR = 8, PADT = 14, PADB = 26;
   const iw = W - PADL - PADR, ih = H - PADT - PADB;
   const max = Math.max(...d.map(x => x.rev)) * 1.12 || 1;
-  const gw = iw / d.length, bw = gw * 0.2;
+  const gw = iw / d.length, bw = Math.min(gw * 0.2, 26);
   const series: Array<{ key: "rev" | "gp" | "ni"; color: string }> = [
     { key: "rev", color: "var(--brand)" },
     { key: "gp",  color: "var(--ai)" },
     { key: "ni",  color: "var(--up)" },
   ];
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, display: "block" }}>
+    <div ref={wrapRef} style={{ width: "100%" }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
       {d.map((x, i) => {
         const gx = PADL + gw * i;
         return (
@@ -368,6 +384,7 @@ function EarnIncChart({ inc }: { inc: IncRow[] }) {
         );
       })}
     </svg>
+    </div>
   );
 }
 
