@@ -19,7 +19,11 @@ const TABS = [
   ["week", "Weekly Movers"],
 ] as const;
 type TabKey = "win" | "lose" | "vol" | "week";
-const CAPS = ["All", "Mega", "Large", "Mid", "Small"];
+// Largest → smallest. The dropdown only offers tiers that actually have movers
+// right now — the day's top movers are almost never mega-caps, so "Mega" would
+// otherwise sit there returning nothing; "Micro" (which the feed does produce)
+// was missing entirely before.
+const CAP_ORDER = ["Mega", "Large", "Mid", "Small", "Micro"];
 
 /**
  * Live-only: a row exists here only if a real `market_movers` doc exists for
@@ -63,10 +67,15 @@ export function MoversScreen() {
 
   const sectors = ["All", ...Array.from(new Set(movers.map(m => m.sector))).sort()];
 
+  // Only the cap tiers present in the current feed are selectable; if the chosen
+  // tier is no longer present (data refreshed), behave as "All".
+  const availableCaps = ["All", ...CAP_ORDER.filter(c => movers.some(m => m.cap === c))];
+  const effCap = availableCaps.includes(cap) ? cap : "All";
+
   const filtered = movers
     .filter(m => {
       if (sector !== "All" && m.sector !== sector) return false;
-      if (cap    !== "All" && m.cap    !== cap)    return false;
+      if (effCap !== "All" && m.cap    !== effCap) return false;
       if (tab === "win")  return m.pctChange > 0;
       if (tab === "lose") return m.pctChange < 0;
       return true;
@@ -107,8 +116,8 @@ export function MoversScreen() {
           {sectors.map(s => <option key={s}>{s}</option>)}
         </select>
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 10 }}>Market cap</span>
-        <select className="mv-sel" value={cap} onChange={e => setCap(e.target.value)}>
-          {CAPS.map(c => <option key={c}>{c}</option>)}
+        <select className="mv-sel" value={effCap} onChange={e => setCap(e.target.value)}>
+          {availableCaps.map(c => <option key={c}>{c}</option>)}
         </select>
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{filtered.length} stocks</span>
