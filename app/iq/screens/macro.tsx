@@ -638,7 +638,7 @@ export function MacroScreen() {
         </div>
       </div>
 
-      {/* ── Dividend calendar (Polygon-primary, FMP fallback) ── */}
+      {/* ── Dividend calendar (Polygon) ── */}
       <div style={{ marginTop: 14 }}>
         <div className="card">
           <div className="card-h">

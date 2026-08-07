@@ -9,7 +9,7 @@ import { apiGet } from "../backend";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
 
-// Live source (FMP earnings calendar) has ticker/date/epsEstimate/epsActual —
+// Live source (Polygon SEC financials) has ticker/date/epsEstimate/epsActual —
 // no session (BMO/AMC), guidance, price reaction, implied move, or quarterly
 // financials. The selected-company detail card below only ever shows real
 // numbers (EPS estimate/actual from this feed, financials from GET
@@ -755,7 +755,7 @@ export function EarningsScreen() {
                 Session: <NotAvailable />
               </span>
               {hasLiveEps && (
-                <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live EPS · FMP</span>
+                <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live EPS · Polygon</span>
               )}
               {/* Action buttons — inline, same row */}
               <div style={{ display: "flex", gap: 6, marginLeft: 4 }}>

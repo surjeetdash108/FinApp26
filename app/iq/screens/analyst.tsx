@@ -6,7 +6,7 @@ import { DataState, StockLogo } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { AnalystConsensusDoc } from "../types";
 
-// Live source is FMP's grades-consensus snapshot: a current Buy/Hold/Sell vote
+// Live source is a grades-consensus snapshot: a current Buy/Hold/Sell vote
 // count per ticker, not a per-firm upgrade/downgrade event feed (that needs
 // Benzinga, which is not on the current plan). The tab strip, filter bar and
 // per-firm table below are kept in place — with NotAvailable cells rather
@@ -49,11 +49,11 @@ export function AnalystScreen() {
         </div>
       </div>
 
-      {/* ── Live analyst consensus (FMP grades-consensus, real) ── */}
+      {/* ── Live analyst consensus (grades-consensus, real) ── */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-h">
           <h3>Live analyst consensus</h3>
-          {liveRows.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live · FMP</span>}
+          {liveRows.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live</span>}
         </div>
         <div className="card-b" style={{ paddingTop: 4, display: "flex", flexDirection: "column", gap: 8 }}>
           {liveRows.length === 0 ? (
