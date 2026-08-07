@@ -433,6 +433,7 @@ export function EarningsScreen() {
   // Quarterly vs Yearly toggles for the two detail tables (independent).
   const [histPeriod, setHistPeriod] = useState<"Q" | "A">("Q");
   const [incPeriod, setIncPeriod]   = useState<"Q" | "A">("Q");
+  const [aiReadOpen, setAiReadOpen] = useState(true);
 
   // No company is selected by default — the detail panels appear only after the
   // user clicks a reporting company in the calendar.
@@ -874,20 +875,35 @@ export function EarningsScreen() {
         </div>
       </div>
 
-      {/* ── AI earnings read ──────────────────────────────────────────────── */}
-      <div className="ai-block" style={{ marginTop: 2 }}>
-        <div className="card-h">
-          <h3 className="ai-c">◆ AI earnings read · {sel}</h3>
-        </div>
-        <div className="card-b">
-          <p style={{ fontSize: ".85rem", lineHeight: 1.6, color: "var(--text)" }}>
-            {aiRead}{" "}
-            Watch revenue growth and forward guidance most.{" "}
-            <button className="btn" style={{ marginLeft: 8, padding: "4px 10px" }}
-              onClick={() => openStockFull(sel)}>
-              Open full stock page →
-            </button>
-          </p>
+      {/* ── AI earnings read — expandable, same widget as the dashboard ──────── */}
+      <div className={`wmn${aiReadOpen ? " open" : ""}`} style={{ marginTop: 12 }}>
+        <button type="button" className="wmn-h" aria-expanded={aiReadOpen} onClick={() => setAiReadOpen(o => !o)}>
+          <div className="t">
+            <div className="wmn-orb">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z" fill="currentColor" />
+              </svg>
+            </div>
+            <div>
+              <h2>AI earnings read · {sel}</h2>
+              <div className="meta">Reported vs. estimates · guidance focus</div>
+            </div>
+          </div>
+          <svg className="wmn-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <div className="wmn-collapse">
+          <div className="wmn-collapse-inner">
+            <p style={{ fontSize: ".85rem", lineHeight: 1.6, color: "var(--text)", margin: 0 }}>
+              {aiRead}{" "}
+              Watch revenue growth and forward guidance most.{" "}
+              <button className="btn" style={{ marginLeft: 8, padding: "4px 10px" }}
+                onClick={() => openStockFull(sel)}>
+                Open full stock page →
+              </button>
+            </p>
+          </div>
         </div>
       </div>
       </>
