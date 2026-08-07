@@ -96,14 +96,19 @@ function mergeMoversData(live: LiveMoverDoc[], companies: CompanyDoc[]): Mover[]
 
 /** Live-only: an earnings row exists here only if a real `earnings_events` doc
  *  exists. session/guidance/reaction/impliedMove have no live source. */
+// Polygon earnings_events are reported filings (keyed by SEC filing date), so
+// "Earnings Today" shows the most recently reported companies — real names and
+// reported EPS/revenue. No session/estimate/reaction exists on this feed.
 function mergeEarningsData(live: LiveEarningsDoc[]): Earning[] {
-  return live.map(l => ({
-    ticker: l.ticker, name: l.ticker, session: "", marketCap: "", sector: "",
-    epsEstimate: l.epsEstimate, epsActual: l.epsActual,
-    revenueEstimate: null, revenueActual: null,
-    guidanceStatus: null, priceReaction: null, impliedMove: null,
-    tags: [], owned: false,
-  }));
+  return [...live]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map(l => ({
+      ticker: l.ticker, name: l.companyName ?? l.ticker, session: "", marketCap: "", sector: "",
+      epsEstimate: l.epsEstimate, epsActual: l.epsActual,
+      revenueEstimate: null, revenueActual: l.revenueActual ?? null,
+      guidanceStatus: null, priceReaction: null, impliedMove: null,
+      tags: [], owned: false,
+    }));
 }
 
 function DashPopContent({
@@ -151,7 +156,7 @@ function DashPopContent({
       <DpRow label="Strong Buy / Buy">{an.strongBuy} / {an.buy}</DpRow>
       <DpRow label="Hold">{an.hold}</DpRow>
       <DpRow label="Sell / Strong Sell">{an.sell} / {an.strongSell}</DpRow>
-      <div className="dp-note">Analyst consensus vote count (FMP). Per-firm upgrades/downgrades/price targets need a Benzinga-class feed, not built yet.</div>
+      <div className="dp-note">Analyst consensus vote count. Per-firm upgrades/downgrades/price targets need a Benzinga-class feed, not built yet.</div>
     </>;
   } else if (block === "watchlist") {
     const px = w?.price ?? mv?.price;
@@ -460,12 +465,12 @@ export function DashboardScreen() {
                   <StockLogo sym={e.ticker} size={26} />
                   <span className="tkr">{e.ticker}<small>{e.name}</small></span>
                   <span className="mid">
-                    <span className={`pill ${e.session === "BMO" ? "bmo" : "amc"}`}>{e.session}</span>
+                    {e.epsActual != null
+                      ? <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-hi)" }}>EPS ${e.epsActual.toFixed(2)}</span>
+                      : <span style={{ color: "var(--text-dim-solid)", fontSize: ".72rem" }}>—</span>}
                   </span>
-                  <span className={`r ${e.priceReaction != null ? cls(e.priceReaction) : ""}`}>
-                    {e.priceReaction != null
-                      ? sign(e.priceReaction)
-                      : <span style={{ color: "var(--text-dim-solid)" }}>pending</span>}
+                  <span className="r" style={{ color: "var(--text-dim-solid)", fontSize: ".72rem", fontFamily: "var(--f-mono)" }}>
+                    {e.revenueActual != null ? `$${(e.revenueActual / 1e9).toFixed(1)}B` : ""}
                   </span>
                 </div>
               ))}
@@ -632,8 +637,8 @@ export function DashboardScreen() {
               ))}
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
-              {rankedCompanies.length === 0 ? (
-                <DataState loading={companiesLoading} label="No RS-ranked companies synced yet." height={80} />
+              {rankedCompanies.length < 12 ? (
+                <DataState loading={companiesLoading} label={`Rankings build as price history syncs — ${rankedCompanies.length} of ${companies.length} companies scored so far.`} height={80} />
               ) : (scrTab === "leaders" ? leaders : laggards).map(s => {
                 const dayC = movers.find(m => m.ticker === s.ticker)?.pctChange ?? 0;
                 return (
