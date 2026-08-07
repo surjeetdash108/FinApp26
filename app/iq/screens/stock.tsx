@@ -10,6 +10,7 @@ import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiResource } from "../hooks/useApiResource";
 import { useApiList } from "../hooks/useApiList";
 import { useBackendBars } from "../hooks/useBackendBars";
+import { EarningsPlaybook } from "./EarningsPlaybook";
 import type {
   CompanyDoc, AnalystConsensusDoc, InsiderTxDoc,
   DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, NewsArticleDoc, LiveEarningsDoc, SectorApiDoc,
@@ -1154,6 +1155,22 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                         </div>
                       </>
                     )}
+                  </div>
+
+                  {/* Earnings Playbook — how the stock trades when it reports.
+                      Derived from the live earnings feed (report dates + EPS)
+                      and the Polygon daily bars already fetched here. */}
+                  <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border-soft)" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                      <div style={{ fontSize: ".78rem", fontWeight: 700, color: "var(--text-hi)" }}>Earnings Playbook</div>
+                      <div style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>how {sym} trades when it reports</div>
+                    </div>
+                    <EarningsPlaybook
+                      sym={sym}
+                      reports={(financialsDoc?.quarters ?? [])
+                        .filter((q) => q.filingDate)
+                        .map((q) => ({ date: q.filingDate as string, epsActual: q.epsActual, epsEstimate: q.epsEstimate }))}
+                    />
                   </div>
                 </div>
               </div>
