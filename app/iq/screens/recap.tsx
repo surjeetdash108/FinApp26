@@ -7,10 +7,21 @@ import { cls, sign, StockLogo, DataState, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useTapeStream } from "../hooks/useTapeStream";
 import { tapeItemsToIndexDocs } from "../live-market-indices";
-import type { SectorApiDoc, LiveEarningsDoc, NewsArticleDoc, MacroEventDoc } from "../types";
+import type { SectorApiDoc, LiveEarningsDoc, NewsArticleDoc, MacroEventDoc, RecapDoc, CompanyDoc, EarningsAnnouncementDoc } from "../types";
 
 const SEC_PAGE = 10;
 const MAJOR_INDEX_LABELS = ["S&P 500", "Nasdaq", "Dow", "Russell 2K"];
+
+// Compact volume/number formatter for the internals block (e.g. 1.2B, 340M).
+function fmtVol(n: number | null | undefined): string {
+  if (n == null) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return `${n}`;
+}
 
 function heatColor(v: number): string {
   const a = Math.min(Math.abs(v) / 2.2, 1);
@@ -78,6 +89,25 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
   const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   const { data: liveNews, loading: liveNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
   const { data: macroEvents, loading: macroLoading } = useApiList<MacroEventDoc>("/market-data/macro-events");
+  // Recap docs carry the day's market internals (advance/decline, TRIN, up/down
+  // volume, breadth %) computed by the backend from OHLCV bars. Pick the latest.
+  const { data: recaps } = useApiList<RecapDoc>("/market-data/recaps");
+  const latestRecap = [...recaps].sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
+  const internals = latestRecap?.internals ?? null;
+  const weekly = latestRecap?.weekly ?? null;
+  // New 52-week highs/lows: count company docs whose latest price sits at/through
+  // their rolling 52-wk high/low (both from technical-indicators.job). Null when
+  // no company doc carries a 52-wk range yet, so we show N/A rather than a false 0.
+  const { data: companiesLive } = useApiList<CompanyDoc>("/market-data/companies");
+  const with52 = companiesLive.filter(c => c.high52 != null || c.low52 != null);
+  const newHighs = with52.length ? with52.filter(c => c.price != null && c.high52 != null && c.price >= c.high52).length : null;
+  const newLows = with52.length ? with52.filter(c => c.price != null && c.low52 != null && c.price <= c.low52).length : null;
+  // Earnings movers by post-announcement price reaction (EDGAR 8-K item 2.02).
+  const { data: earningsAnn } = useApiList<EarningsAnnouncementDoc>("/market-data/earnings-announcements");
+  const earnMovers = [...earningsAnn]
+    .filter(a => a.reactionPct != null)
+    .sort((a, b) => Math.abs(b.reactionPct as number) - Math.abs(a.reactionPct as number))
+    .slice(0, 8);
   const { frame: tapeFrame } = useTapeStream();
   const liveIndices = tapeFrame
     ? tapeItemsToIndexDocs(tapeFrame.items).filter(i => MAJOR_INDEX_LABELS.includes(i.label))
@@ -288,6 +318,31 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
 
           {NewsCard(todayHeadlines, "Today's headlines")}
           {SectorHeatCard}
+          {earnMovers.length > 0 && (
+            <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
+              <div className="col-12">
+                <div className="card">
+                  <div className="card-h"><h3>Earnings movers</h3><span className="pill ai" style={{ fontSize: ".68rem" }}>8-K reaction</span></div>
+                  <div className="card-b">
+                    {earnMovers.map(a => (
+                      <div key={a.id} className="minirow" style={{ justifyContent: "space-between", cursor: "pointer" }} onClick={() => openStock(a.ticker)}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <StockLogo sym={a.ticker} size={22} />
+                          <span className="tkr">{a.ticker}</span>
+                          {a.session && <span className="pill" style={{ fontSize: ".6rem" }}>{a.session}</span>}
+                          <span style={{ fontSize: ".66rem", color: "var(--text-dim-solid)" }}>{a.announceDate.slice(5)}</span>
+                        </span>
+                        <span className={`mono ${cls(a.reactionPct as number)}`} style={{ fontWeight: 700 }}>{sign(a.reactionPct as number)}</span>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 6 }}>
+                      Price reaction around the SEC-EDGAR 8-K (item 2.02) earnings announcement.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
             <div className="col-12">
               <div className="card">
@@ -295,27 +350,56 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
                 <div className="card-b">
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".8rem", marginBottom: 6 }}>
-                      <span className="up mono" style={{ fontWeight: 700 }}>▲ <NotAvailable /> advancing</span>
-                      <span className="down mono" style={{ fontWeight: 700 }}>▼ <NotAvailable /> declining</span>
+                      <span className="up mono" style={{ fontWeight: 700 }}>
+                        ▲ {internals?.advancers != null ? internals.advancers.toLocaleString() : <NotAvailable />} advancing
+                      </span>
+                      <span className="down mono" style={{ fontWeight: 700 }}>
+                        ▼ {internals?.decliners != null ? internals.decliners.toLocaleString() : <NotAvailable />} declining
+                      </span>
                     </div>
-                    <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
-                      No live advance/decline breadth feed yet.
-                    </div>
+                    {internals?.breadthPct != null ? (
+                      <>
+                        <div style={{ height: 8, borderRadius: 4, overflow: "hidden", background: "var(--down-dim, rgba(255,84,112,.25))", display: "flex" }}>
+                          <div style={{ width: `${(internals.breadthPct * 100).toFixed(0)}%`, background: "var(--up)" }} />
+                        </div>
+                        <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
+                          {(internals.breadthPct * 100).toFixed(0)}% of the tracked universe advancing
+                          {internals.date ? ` · ${internals.date}` : ""}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
+                        No advance/decline breadth synced yet.
+                      </div>
+                    )}
                   </div>
-                  {[
-                    "NYSE TICK", "TRIN (Arms)", "McClellan Osc", "Put/Call Ratio", "New 52W Highs", "New 52W Lows",
-                  ].map(label => (
+                  {([
+                    // Real values computed by the backend market-breadth job.
+                    { label: "TRIN (Arms)", value: internals?.trin != null ? internals.trin.toFixed(2) : null },
+                    { label: "Up volume", value: internals?.upVolume != null ? fmtVol(internals.upVolume) : null },
+                    { label: "Down volume", value: internals?.downVolume != null ? fmtVol(internals.downVolume) : null },
+                    // Counted from company docs' 52-wk range (technical-indicators.job).
+                    { label: "New 52W Highs", value: newHighs != null ? newHighs.toLocaleString() : null },
+                    { label: "New 52W Lows", value: newLows != null ? newLows.toLocaleString() : null },
+                    // McClellan from the breadth series (EMA19−EMA39 of net advances).
+                    { label: "McClellan Osc", value: internals?.mcclellan != null ? internals.mcclellan.toFixed(2) : null },
+                    // No source on the current plan — kept visible, marked N/A.
+                    { label: "NYSE TICK", value: null },
+                    { label: "Put/Call Ratio", value: null },
+                  ] as { label: string; value: string | null }[]).map(({ label, value }) => (
                     <div key={label} style={{
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                       padding: "8px 12px", marginBottom: 6,
                       background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 8,
                     }}>
                       <span style={{ fontSize: ".8rem", color: "var(--text)" }}>{label}</span>
-                      <NotAvailable />
+                      {value != null
+                        ? <span className="mono" style={{ fontSize: ".8rem", fontWeight: 700, color: "var(--text-hi)" }}>{value}</span>
+                        : <NotAvailable />}
                     </div>
                   ))}
                   <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
-                    Market breadth needs a live NYSE/NASDAQ composite feed — not on the current plan.
+                    Advance/decline, TRIN, up/down volume, McClellan and new 52-week highs/lows are computed from the tracked universe. NYSE TICK and Put/Call need a composite exchange feed not on the current plan.
                   </div>
                 </div>
               </div>
@@ -334,7 +418,26 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
                 Week ending {dateLabel}
               </div>
             </div>
-            <DataState label="Weekly index performance isn't tracked by a live feed — only the current session is available (see Daily Recaps)." />
+            {weekly && weekly.indices.some(i => i.pctChange != null) ? (
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {weekly.indices.filter(i => i.pctChange != null).map(i => (
+                  <div key={i.label} style={{
+                    flex: "1 1 120px", minWidth: 110, padding: "10px 12px",
+                    background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 10,
+                  }}>
+                    <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginBottom: 4 }}>{i.label}</div>
+                    <div className={`mono ${cls(i.pctChange!)}`} style={{ fontSize: "1.2rem", fontWeight: 700 }}>
+                      {sign(i.pctChange!)}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ flexBasis: "100%", fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 2 }}>
+                  Week-to-date change from the first to latest session this week.
+                </div>
+              </div>
+            ) : (
+              <DataState label="Weekly index performance needs at least two synced sessions this week — check back after the next daily run." />
+            )}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0 4px" }}>
               <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontWeight: 600, letterSpacing: ".03em" }}>
                 DOWNLOAD:
@@ -362,7 +465,16 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <div className="card">
                 <div className="card-h"><h3>Sector leaders</h3><span className="pill up">Week</span></div>
                 <div className="card-b" style={{ paddingTop: 6 }}>
-                  <DataState label="Weekly sector performance isn't tracked by a live feed — see the daily sector heatmap on the Daily Recaps screen." />
+                  {weekly && weekly.sectorLeaders.length > 0 ? (
+                    weekly.sectorLeaders.map(s => (
+                      <div key={s.sector} className="minirow" style={{ justifyContent: "space-between" }}>
+                        <span className="mid">{s.sector}</span>
+                        <span className={`mono ${cls(s.pctChange)}`} style={{ fontWeight: 700 }}>{sign(s.pctChange)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <DataState label="Weekly sector performance needs sector history synced this week." />
+                  )}
                 </div>
               </div>
             </div>
@@ -370,7 +482,16 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <div className="card">
                 <div className="card-h"><h3>Sector laggards</h3><span className="pill dn">Week</span></div>
                 <div className="card-b" style={{ paddingTop: 6 }}>
-                  <DataState label="Weekly sector performance isn't tracked by a live feed — see the daily sector heatmap on the Daily Recaps screen." />
+                  {weekly && weekly.sectorLaggards.length > 0 ? (
+                    weekly.sectorLaggards.map(s => (
+                      <div key={s.sector} className="minirow" style={{ justifyContent: "space-between" }}>
+                        <span className="mid">{s.sector}</span>
+                        <span className={`mono ${cls(s.pctChange)}`} style={{ fontWeight: 700 }}>{sign(s.pctChange)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <DataState label="Weekly sector performance needs sector history synced this week." />
+                  )}
                 </div>
               </div>
             </div>

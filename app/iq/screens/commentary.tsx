@@ -6,7 +6,7 @@ import { StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
-import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc } from "../types";
+import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc } from "../types";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 
@@ -93,6 +93,8 @@ export function CommentaryScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
   const { data: liveNews, loading: liveNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: filingsWire } = useApiList<FilingsWireDoc>("/market-data/filings-wire");
+  const filingsSorted = [...filingsWire].sort((a, b) => b.filingDate.localeCompare(a.filingDate));
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -339,6 +341,28 @@ export function CommentaryScreen() {
                 <button className="btn ai" style={{ marginTop: 10, width: "100%" }} onClick={() => router.push("/menu/recap")}>
                   See today&apos;s EOD recap →
                 </button>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-h">
+                <h3>Filings wire</h3>
+                <span className="pill ai" style={{ fontSize: ".68rem" }}>SEC 8-K</span>
+              </div>
+              <div className="card-b">
+                {filingsSorted.length === 0 ? (
+                  <DataState label="No recent 8-K filings synced yet (run the edgar-8k job)." />
+                ) : filingsSorted.slice(0, 12).map(f => (
+                  <a key={f.id} href={f.url} target="_blank" rel="noreferrer"
+                    style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "7px 0", textDecoration: "none", color: "inherit", borderBottom: "1px solid var(--border-soft)" }}>
+                    <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)", minWidth: 52 }}>{f.ticker}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: ".76rem", color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {f.isEarnings ? "Earnings (8-K 2.02)" : f.description || "8-K"}
+                    </span>
+                    {f.session && <span className="pill" style={{ fontSize: ".6rem" }}>{f.session}</span>}
+                    <span className="mono" style={{ fontSize: ".64rem", color: "var(--text-dim-solid)" }}>{f.filingDate.slice(5)}</span>
+                  </a>
+                ))}
               </div>
             </div>
 

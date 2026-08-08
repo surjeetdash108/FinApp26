@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useIQActions } from "../shell";
 import { cls, sign, StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
-import type { IpoEventDoc } from "../types";
+import type { IpoEventDoc, IpoPipelineDoc } from "../types";
 
 function formatIpoPrice(low: number | null, high: number | null): string {
   if (low == null && high == null) return "—";
@@ -15,9 +15,10 @@ function formatIpoPrice(low: number | null, high: number | null): string {
 interface IpoRow {
   s: string; n: string; date: string;
   offer: number | null;
-  /** Current price and day-1 return require aftermarket pricing, which the
-   *  ipos feed does not carry — null for every live row. */
-  cur: number | null; day1: number | null;
+  /** Aftermarket pricing computed by the ipos job from Polygon bars: current
+   *  price, day-1 pop %, and return-since-offer %. Null when the name hasn't
+   *  listed yet or Polygon has no series for it. */
+  cur: number | null; day1: number | null; since: number | null;
   sec: string; live?: boolean;
 }
 
@@ -30,18 +31,21 @@ export function IPOsScreen() {
   const { openStock } = useIQActions();
   const [sector, setSector] = useState("All");
   const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
+  const { data: pipeline } = useApiList<IpoPipelineDoc>("/market-data/ipo-pipeline");
+  const pipelineSorted = [...pipeline].sort((a, b) => b.dateFiled.localeCompare(a.dateFiled));
   const liveIposSorted = [...liveIpos].sort((a, b) => b.date.localeCompare(a.date));
 
-  // Live ipos docs carry the offering, not its aftermarket performance, so
-  // cur/day1 stay null and the performance tiles below report "—" rather than
-  // computing a return from a fabricated current price.
+  // Aftermarket performance (current price, day-1 pop %, return since offer) is
+  // computed by the backend ipos job from Polygon daily bars for already-listed
+  // names; it's null only when the name hasn't listed yet or has no series.
   const liveRows: IpoRow[] = liveIposSorted.map(e => ({
     s: e.symbol ?? "—",
     n: e.name,
     date: e.date,
-    offer: e.priceLow != null && e.priceHigh != null ? (e.priceLow + e.priceHigh) / 2 : e.priceLow ?? e.priceHigh,
-    cur: null,
-    day1: null,
+    offer: e.offerPrice ?? (e.priceLow != null && e.priceHigh != null ? (e.priceLow + e.priceHigh) / 2 : e.priceLow ?? e.priceHigh),
+    cur: e.currentPrice,
+    day1: e.day1PopPct,
+    since: e.returnSinceIpoPct,
     sec: e.exchange ?? "—",
     live: true,
   }));
@@ -136,8 +140,9 @@ export function IPOsScreen() {
                   <td colSpan={7} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No IPOs match your filter.</td>
                 </tr>
               ) : filtered.map(r => {
-                // null when the feed has no aftermarket price — rendered as "—" below.
-                  const ret = r.cur != null && r.offer != null && r.offer !== 0 ? (r.cur - r.offer) / r.offer * 100 : null;
+                // Prefer the backend's return-since-offer; fall back to computing
+                // it from cur/offer. Null → "—" when there's no aftermarket price.
+                  const ret = r.since ?? (r.cur != null && r.offer != null && r.offer !== 0 ? (r.cur - r.offer) / r.offer * 100 : null);
                 return (
                   <tr key={r.s} onClick={() => openStock(r.s)} style={{ cursor: "pointer" }}>
                     <td>
@@ -168,35 +173,51 @@ export function IPOsScreen() {
       <div className="card">
         <div className="card-h">
           <h3>Upcoming pipeline</h3>
-          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>expected new issues</span>
+          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>SEC-EDGAR registration filings (S-1 / 424B)</span>
         </div>
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
               <tr>
                 <th>Company</th>
-                <th>Symbol</th>
-                <th>Expected</th>
-                <th>Sector</th>
+                <th>Form</th>
+                <th>Filed</th>
+                <th>Filing</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan={4} style={{ padding: 16 }}>
-                  <DataState label="No live source for pre-filing / rumored upcoming IPOs (would need a filings-intelligence feed). The live calendar below shows confirmed, priced offerings." />
-                </td>
-              </tr>
+              {pipelineSorted.length === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ padding: 16 }}>
+                    <DataState label="No recent S-1/424B registrations synced yet (run the edgar-ipo-pipeline job). Rumored/pre-filing names would still need a filings-intelligence feed." />
+                  </td>
+                </tr>
+              ) : pipelineSorted.slice(0, 30).map(p => (
+                <tr key={p.id}>
+                  <td><b style={{ color: "var(--text-hi)" }}>{p.companyName}</b></td>
+                  <td><span className="pill amc">{p.form}</span></td>
+                  <td>{p.dateFiled}</td>
+                  <td>
+                    <a href={p.url} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: ".72rem" }}>
+                      SEC filing →
+                    </a>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
+        <p style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", padding: "8px 12px 0" }}>
+          Raw registration pipeline from EDGAR — includes shells, SPACs and amendments, not a curated IPO list.
+        </p>
       </div>
 
-      {/* ── Live IPO calendar (Finnhub) — additive, doesn't touch the tables above ── */}
+      {/* ── Live IPO calendar (Polygon) — additive, doesn't touch the tables above ── */}
       {liveIposSorted.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <div className="card-h">
             <h3>Live IPO Calendar</h3>
-            <span className="pill ai" style={{ fontSize: ".68rem" }}>live · Finnhub</span>
+            <span className="pill ai" style={{ fontSize: ".68rem" }}>live · Polygon</span>
           </div>
           <div className="tbl-wrap">
             <table className="tbl">

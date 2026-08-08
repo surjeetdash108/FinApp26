@@ -28,8 +28,9 @@ const CAP_ORDER = ["Mega", "Large", "Mid", "Small", "Micro"];
 /**
  * Live-only: a row exists here only if a real `market_movers` doc exists for
  * it. RVOL comes from `companies.rvol` (technical-indicators.job) when
- * synced. Catalyst label and MA posture have no live source at all yet, so
- * they render a neutral "—" instead of an invented label.
+ * synced. MA posture has no live source at all yet, so it renders a neutral
+ * "—" instead of an invented label. (Catalyst was removed — Polygon has no
+ * catalyst feed, so it only ever showed "—".)
  */
 function mergeMovers(
   live: LiveMoverDoc[],
@@ -42,7 +43,6 @@ function mergeMovers(
     pctChange: l.pctChange,
     rvolRatio: companyRvol.get(l.ticker) ?? 0,
     relativeStrength: 0,
-    catalystLabel: "—",
     maPosture: "—",
     owned: false,
     sector: l.sector ?? "—",
@@ -146,14 +146,13 @@ export function MoversScreen() {
               <th className="num">Change</th>
               <th className="num">RVOL</th>
               <th>Cap · Sector</th>
-              <th>Catalyst</th>
               <th className="num">Intraday</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No stocks match these filters.</td>
+                <td colSpan={6} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No stocks match these filters.</td>
               </tr>
             ) : filtered.map(m => {
               const v = val(m);
@@ -187,9 +186,6 @@ export function MoversScreen() {
                       {" · "}
                       <span style={{ color: "var(--text-dim-solid)" }}>{m.sector}</span>
                     </span>
-                  </td>
-                  <td className="mv-reason">
-                    <span style={{ color: "var(--text-dim-solid)" }}>{m.catalystLabel}</span>
                   </td>
                   <td className="num">
                     <Spark seed={m.ticker.charCodeAt(0)} up={v >= 0} />

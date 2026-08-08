@@ -4,3 +4,11 @@ export interface MarketSentimentDoc {
   value?: number;
   label?: string;
 }
+
+/** Mirrors `market_sentiment_history/{date}` — GET /market-data/market-sentiment-history. One composite Fear & Greed value per past trading day. */
+export interface MarketSentimentHistoryDoc {
+  id: string; // date, YYYY-MM-DD
+  value?: number;
+  label?: string;
+  asOfDate?: string;
+}

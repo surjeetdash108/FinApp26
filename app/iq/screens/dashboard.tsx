@@ -12,7 +12,7 @@ import { useTapeStream } from "../hooks/useTapeStream";
 import { pulseFromLive, buildSectorList, tapeItemsToIndexDocs } from "../live-market-indices";
 import type {
   LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
-  InsiderTxDoc, AnalystConsensusDoc, MarketSentimentDoc,
+  InsiderTxDoc, AnalystConsensusDoc, MarketSentimentDoc, MarketSentimentHistoryDoc, EarningsAnnouncementDoc,
   WatchlistDoc, HoldingDoc, NewsArticleDoc,
 } from "../types";
 
@@ -77,8 +77,9 @@ function DpRow({ label, children }: { label: string; children: React.ReactNode }
 /**
  * Live-only: a mover row exists here only if a real `market_movers` doc
  * exists for it. `rvolRatio`/`relativeStrength` come from `companies.rvol`/
- * `rsRating` when synced; `catalystLabel`/`maPosture` have no live source at
- * all yet, so they render a neutral "—" rather than an invented label.
+ * `rsRating` when synced; `maPosture` has no live source yet, so it renders a
+ * neutral "—" rather than an invented label. (Catalyst was removed — Polygon
+ * has no catalyst feed, so it only ever showed "—".)
  */
 function mergeMoversData(live: LiveMoverDoc[], companies: CompanyDoc[]): Mover[] {
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
@@ -87,7 +88,7 @@ function mergeMoversData(live: LiveMoverDoc[], companies: CompanyDoc[]): Mover[]
     return {
       ticker: l.ticker, name: l.name ?? l.ticker, price: l.price, pctChange: l.pctChange,
       rvolRatio: c?.rvol ?? 0, relativeStrength: c?.rsRating ?? 0,
-      catalystLabel: "—", maPosture: "—", owned: false,
+      maPosture: "—", owned: false,
       sector: l.sector ?? c?.sector ?? "—", cap: (l.cap as Mover["cap"]) ?? "Mid", weekPct: l.pctChange,
       techContext: `Live EOD data as of ${l.asOfDate}.`, newsContext: "",
     };
@@ -112,10 +113,11 @@ function mergeEarningsData(live: LiveEarningsDoc[]): Earning[] {
 }
 
 function DashPopContent({
-  sym, block, movers, earnings, watchlist, portfolio, companies, consensus, insiderMini,
+  sym, block, movers, earnings, watchlist, portfolio, companies, consensus, insiderMini, announcements,
 }: {
   sym: string; block: PopBlock; movers: Mover[]; earnings: Earning[]; watchlist: WatchItem[]; portfolio: FolioItem[];
   companies: CompanyDoc[]; consensus: AnalystConsensusDoc[]; insiderMini: { key: string; s: string; role: string; dir: "buy" | "sell"; val: string }[];
+  announcements: EarningsAnnouncementDoc[];
 }) {
   const mv  = movers.find(x => x.ticker ===sym);
   const er  = earnings.find(x => x.ticker ===sym);
@@ -124,6 +126,9 @@ function DashPopContent({
   const pf  = portfolio.find(x => x.ticker ===sym);
   const scr = companies.find(x => x.ticker ===sym);
   const ins = insiderMini.find(x => x.s === sym);
+  const ann = announcements
+    .filter(a => a.ticker === sym)
+    .sort((a, b) => b.announceDate.localeCompare(a.announceDate))[0];
   const name = mv?.name ?? er?.name ?? w?.name ?? scr?.name ?? sym;
 
   let body: React.ReactNode;
@@ -134,10 +139,10 @@ function DashPopContent({
         <DpRow label="EPS est → act">
           {er.epsEstimate != null ? `$${er.epsEstimate}` : "—"}{er.epsActual != null && er.epsEstimate != null && <> → ${er.epsActual} <span className={er.epsActual >= er.epsEstimate ? "up" : "down"}>({er.epsActual >= er.epsEstimate ? "beat" : "miss"})</span></>}
         </DpRow>
-        <DpRow label="Session"><NotAvailable /></DpRow>
+        <DpRow label="Session">{ann?.session ?? <NotAvailable />}</DpRow>
         <DpRow label="Guidance"><NotAvailable /></DpRow>
-        <DpRow label="Reaction"><NotAvailable /></DpRow>
-        <div className="dp-note">On the earnings calendar — session, guidance and price reaction have no live source yet (need a Benzinga-class feed).</div>
+        <DpRow label="Reaction">{ann?.reactionPct != null ? <span className={cls(ann.reactionPct)}>{sign(ann.reactionPct)}</span> : <NotAvailable />}</DpRow>
+        <div className="dp-note">Session &amp; price reaction from the SEC-EDGAR 8-K (item 2.02) announcement. Guidance still needs a filings-text feed.</div>
       </>;
     } else {
       body = <div className="dp-note">On this week&apos;s earnings calendar.</div>;
@@ -234,7 +239,6 @@ function MoverPopup({ m }: { m: Mover }) {
         <div className="dp-note" style={{ marginTop: 6 }}>{m.techContext}</div>
       </div>
       <div className="mvp mvp-n">
-        <span className="dp-tag" style={{ display: "inline-block", marginBottom: 6 }}>{m.catalystLabel}</span>
         <div className="dp-note">{m.newsContext}</div>
       </div>
     </div>
@@ -260,6 +264,10 @@ export function DashboardScreen() {
   const fearGreed = marketSentiment.find(d => d.id === "fear_greed");
   const fgVal = fearGreed?.value ?? null;
   const fgLabel = fearGreed?.label ?? null;
+  // Composite F&G history (market_sentiment_history) — backs the history drawer.
+  const { data: fgHistory } = useApiList<MarketSentimentHistoryDoc>("/market-data/market-sentiment-history");
+  // EDGAR 8-K earnings announcements (session + price reaction).
+  const { data: earningsAnnouncements } = useApiList<EarningsAnnouncementDoc>("/market-data/earnings-announcements");
   const { data: consensusLive, loading: consensusLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   const { data: mostSearched, loading: mostSearchedLoading } = useApiResource<{ results: Array<{ ticker: string; count: number }> }>("/live/most-searched-tickers?limit=10");
 
@@ -504,7 +512,7 @@ export function DashboardScreen() {
                 <div key={m.ticker} className="minirow mv-dash-row" style={{ cursor: "pointer" }} onClick={() => openMoverModal(m.ticker)}>
                   <StockLogo sym={m.ticker} size={26} />
                   <span className="tkr">{m.ticker}</span>
-                  <span className="mid">{moversTab === 2 ? `${m.rvolRatio}× vol` : m.catalystLabel}</span>
+                  <span className="mid">{moversTab === 2 ? `${m.rvolRatio}× vol` : m.name}</span>
                   <span className={`r ${cls(m.pctChange)}`}>{sign(m.pctChange)}</span>
                   <MoverPopup m={m} />
                 </div>
@@ -840,9 +848,42 @@ export function DashboardScreen() {
                   removed earnings/movers/analyst/earn-movers/internals/watchlist/
                   portfolio/insider branches are archived in
                   Doc/ARCHIVED-dashboard-viewall-drawers.md. */}
-              {drawer === "fg-history" && (
-                <DataState label="Fear & Greed history has no live endpoint yet (the backfill job writes to Firestore directly; nothing exposes it over REST)." />
-              )}
+              {drawer === "fg-history" && (() => {
+                const rows = [...fgHistory]
+                  .filter(d => typeof d.value === "number")
+                  .sort((a, b) => a.id.localeCompare(b.id))
+                  .slice(-90);
+                if (rows.length < 2) {
+                  return <DataState label="Fear & Greed history populates once the fear-greed job has run over a backfilled ohlcv_bars." />;
+                }
+                const vals = rows.map(r => r.value as number);
+                const W = 320, H = 90;
+                const pts = vals.map((v, i) => {
+                  const x = (i / (vals.length - 1)) * W;
+                  const y = H - (v / 100) * H;
+                  return `${x.toFixed(1)},${y.toFixed(1)}`;
+                }).join(" ");
+                const latest = rows[rows.length - 1];
+                return (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+                      <span className="mono" style={{ fontSize: "1.7rem", fontWeight: 700, color: "var(--text-hi)" }}>{latest.value}</span>
+                      <span style={{ fontSize: ".8rem", color: "var(--text-dim-solid)" }}>{latest.label} · {latest.id}</span>
+                    </div>
+                    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: "block" }}>
+                      {[0.25, 0.5, 0.75].map(f => (
+                        <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke="var(--border)" strokeWidth="0.5" />
+                      ))}
+                      <polyline points={pts} fill="none" stroke="var(--brand)" strokeWidth="1.5" />
+                    </svg>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
+                      <span>{rows[0].id}</span>
+                      <span>{rows.length} sessions · 0–100 composite</span>
+                      <span>{latest.id}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
           </div>
@@ -920,7 +961,7 @@ export function DashboardScreen() {
             else openStock(pop.sym);
           }}
         >
-          <DashPopContent sym={pop.sym} block={pop.block} movers={movers} earnings={earnings} watchlist={watchMini} portfolio={folioMini} companies={companies} consensus={consensusLive} insiderMini={INSIDER_MINI} />
+          <DashPopContent sym={pop.sym} block={pop.block} movers={movers} earnings={earnings} watchlist={watchMini} portfolio={folioMini} companies={companies} consensus={consensusLive} insiderMini={INSIDER_MINI} announcements={earningsAnnouncements} />
         </div>
       )}
     </div>

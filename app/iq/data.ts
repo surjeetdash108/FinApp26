@@ -15,7 +15,7 @@ export interface Earning {
 }
 export interface Mover {
   ticker: string; name: string; price: number; pctChange: number; rvolRatio: number; relativeStrength: number;
-  catalystLabel: string; maPosture: string; owned: boolean;
+  maPosture: string; owned: boolean;
   sector: string; cap: 'Mega' | 'Large' | 'Mid' | 'Small';
   weekPct: number; techContext: string; newsContext: string;
 }

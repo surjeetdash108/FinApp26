@@ -36,6 +36,14 @@ export interface CompanyDoc {
   macd: number | null;
   macdSignal: number | null;
   macdHistogram: number | null;
+  // Price vs 50/200-day SMA, precomputed by technical-indicators.job so the
+  // screener can filter without refetching bars.
+  aboveSma50?: boolean | null;
+  aboveSma200?: boolean | null;
+  // Rolling 52-week high/low from technical-indicators.job — lets the recap
+  // count new highs/lows without a dedicated breadth job.
+  high52?: number | null;
+  low52?: number | null;
   // Sector rank from tech-rating.job; source records which vendor served the profile.
   sectorRank: number | null;
   sectorRankTotal: number | null;

@@ -67,6 +67,12 @@ export function ScreenerScreen() {
   const [activePresets, setActivePresets] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(true);
 
+  /* ── Sector filter (SIC-derived sector on each company doc) ── */
+  const [sector, setSector] = useState("All");
+  const sectorOptions = ["All", ...Array.from(
+    new Set(companies.map(c => c.sector).filter((s): s is string => !!s && s !== "—")),
+  ).sort()];
+
   /* ── Manual filter state ── */
   const [rs90,       setRs90]       = useState(false);
   const [rs7090,     setRs7090]     = useState(false);
@@ -77,6 +83,11 @@ export function ScreenerScreen() {
   const [ratingBuy,  setRatingBuy]  = useState(false);
   const [mcGt10,     setMcGt10]     = useState(true);
   const [rvolGt15,   setRvolGt15]   = useState(false);
+  // Backed by technical-indicators.job fields on the company doc
+  // (aboveSma50/aboveSma200, rsi14) + price.
+  const [dmaAbove,   setDmaAbove]   = useState(false);
+  const [rsiBand,    setRsiBand]    = useState(false);
+  const [priceGt5,   setPriceGt5]   = useState(false);
 
   /* ── Save / restore the current screen (filter set) to localStorage ── */
   const [saved, setSaved] = useState(false);
@@ -89,10 +100,11 @@ export function ScreenerScreen() {
       setRs90(!!s.rs90); setRs7090(!!s.rs7090); setRsLt40(!!s.rsLt40);
       setSalesGt20(!!s.salesGt20); setEpsGt25(!!s.epsGt25); setMarginPos(!!s.marginPos);
       setRatingBuy(!!s.ratingBuy); setMcGt10(s.mcGt10 ?? true); setRvolGt15(!!s.rvolGt15);
+      setDmaAbove(!!s.dmaAbove); setRsiBand(!!s.rsiBand); setPriceGt5(!!s.priceGt5);
     } catch { /* ignore malformed saved filters */ }
   }, []);
   function saveScreen() {
-    const state = { activePresets: [...activePresets], rs90, rs7090, rsLt40, salesGt20, epsGt25, marginPos, ratingBuy, mcGt10, rvolGt15 };
+    const state = { activePresets: [...activePresets], rs90, rs7090, rsLt40, salesGt20, epsGt25, marginPos, ratingBuy, mcGt10, rvolGt15, dmaAbove, rsiBand, priceGt5 };
     try { localStorage.setItem("iq-screener-filters", JSON.stringify(state)); } catch { /* storage full/blocked */ }
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
@@ -126,13 +138,17 @@ export function ScreenerScreen() {
 
   function resetAll() {
     setActivePresets(new Set());
+    setSector("All");
     setRs90(false); setRs7090(false); setRsLt40(false);
     setSalesGt20(false); setEpsGt25(false); setMarginPos(false);
     setRatingBuy(false); setMcGt10(false); setRvolGt15(false);
+    setDmaAbove(false); setRsiBand(false); setPriceGt5(false);
   }
 
   /* ── Filtered results ── */
   const filtered = universe.filter(s => {
+    // Sector classification filter (from CompanyDoc.sector).
+    if (sector !== "All" && s.sector !== sector) return false;
     // Preset filters — stock must pass at least one selected preset (OR logic)
     if (activePresets.size > 0) {
       const passesAny = [...activePresets].some(idx => {
@@ -157,6 +173,13 @@ export function ScreenerScreen() {
     if (ratingBuy && !["Strong Buy", "Buy"].includes(s.techRating))           return false;
     if (mcGt10    && s.marketCap < 10)                                        return false;
     if (rvolGt15  && s.rvolRatio < 1.5)                                       return false;
+    // Technicals read from the company doc (technical-indicators.job).
+    if (dmaAbove || rsiBand || priceGt5) {
+      const c = byTicker.get(s.ticker);
+      if (dmaAbove  && !(c?.aboveSma50 === true && c?.aboveSma200 === true))   return false;
+      if (rsiBand   && !(c?.rsi14 != null && c.rsi14 >= 40 && c.rsi14 <= 70))  return false;
+      if (priceGt5  && !(c?.price != null && c.price > 5))                     return false;
+    }
     return true;
   });
 
@@ -267,6 +290,21 @@ export function ScreenerScreen() {
                 </div>
               )}
             </div>
+
+            {/* Sector classification filter (CompanyDoc.sector, SIC-derived) */}
+            <div style={{ flex: 1 }} />
+            <span style={{
+              fontSize: ".66rem", letterSpacing: ".05em", textTransform: "uppercase",
+              color: "var(--text-dim-solid)", fontWeight: 600,
+            }}>Sector</span>
+            <select
+              className="iq-select"
+              value={sector}
+              onChange={e => setSector(e.target.value)}
+              style={{ width: "auto", minWidth: 150, padding: "4px 10px", fontSize: ".72rem" }}
+            >
+              {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
 
           {/* Filter groups — horizontal */}
@@ -286,14 +324,14 @@ export function ScreenerScreen() {
             <div className="fgroup" style={{ flex: 1, borderBottom: "none", borderRight: "1px solid var(--border-soft)" }}>
               <div className="fl">Technical rating</div>
               <CheckOpt label="Strong Buy / Buy"   on={ratingBuy} onToggle={() => setRatingBuy(o => !o)} />
-              <CheckOpt label="Above 50 & 200-DMA" on={false}     onToggle={() => {}} />
-              <CheckOpt label="RSI 40–70"          on={false}     onToggle={() => {}} />
+              <CheckOpt label="Above 50 & 200-DMA" on={dmaAbove}  onToggle={() => setDmaAbove(o => !o)} />
+              <CheckOpt label="RSI 40–70"          on={rsiBand}   onToggle={() => setRsiBand(o => !o)} />
             </div>
             <div className="fgroup" style={{ flex: 1, borderBottom: "none" }}>
               <div className="fl">Liquidity &amp; cap</div>
               <CheckOpt label="Market cap > $10B"  on={mcGt10}   onToggle={() => setMcGt10(o => !o)} />
               <CheckOpt label="RVOL > 1.5×"        on={rvolGt15} onToggle={() => setRvolGt15(o => !o)} />
-              <CheckOpt label="Price > $5"          on={false}    onToggle={() => {}} />
+              <CheckOpt label="Price > $5"          on={priceGt5} onToggle={() => setPriceGt5(o => !o)} />
             </div>
           </div>
           </>)}

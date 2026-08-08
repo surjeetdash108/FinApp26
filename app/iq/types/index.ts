@@ -6,6 +6,8 @@ export * from "./companies";
 export * from "./analyst";
 export * from "./earnings";
 export * from "./ipos";
+export * from "./recaps";
+export * from "./filings";
 export * from "./macro";
 export * from "./insider";
 export * from "./sentiment";
