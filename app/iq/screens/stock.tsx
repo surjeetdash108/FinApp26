@@ -685,6 +685,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const rsi = liveCompany?.rsi14 ?? null;
   const macd = liveCompany?.macd ?? null;
   const macdBuy = macd != null ? macd >= (liveCompany?.macdSignal ?? 0) : null;
+  const stochKv = liveCompany?.stochK ?? null;
+  const adx14 = liveCompany?.adx14 ?? null;
   const dollar = Math.abs(data.pctChange / 100 * p);
 
   const cap = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(2)}T` : v >= 10 ? `$${Math.round(v)}B` : `$${v.toFixed(1)}B`;
@@ -703,10 +705,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const indRows: [string, string | null, string][] = [
     ["RSI (14)", rsi != null ? rsi.toFixed(2) : null, rsi == null ? "" : rsi > 70 ? "Sell" : rsi < 40 ? "Buy" : "Neutral"],
     ["MACD (12,26)", macd != null ? macd.toFixed(1) : null, macdBuy == null ? "" : macdBuy ? "Buy" : "Sell"],
-    // No live source for Stoch %K / ADX (need a technicals vendor beyond
-    // RSI+MACD) — kept in the table as NotAvailable rather than dropped.
-    ["Stoch %K", null, ""],
-    ["ADX (14)", null, ""],
+    // Stoch %K and Wilder ADX(14) now computed by technical-indicators.job.
+    ["Stoch %K", stochKv != null ? stochKv.toFixed(1) : null, stochKv == null ? "" : stochKv > 80 ? "Sell" : stochKv < 20 ? "Buy" : "Neutral"],
+    ["ADX (14)", adx14 != null ? adx14.toFixed(1) : null, adx14 == null ? "" : adx14 > 25 ? "Strong" : adx14 < 20 ? "Weak" : "Neutral"],
     ["EMA 50", ema50 != null ? nf(ema50) : null, ema50 != null ? (isUp ? "Buy" : "Sell") : ""],
     ["SMA 200", sma200 != null ? nf(sma200) : null, sma200 != null ? (p > sma200 ? "Buy" : "Sell") : ""],
   ];

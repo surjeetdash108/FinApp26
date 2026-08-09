@@ -44,6 +44,11 @@ export interface CompanyDoc {
   // count new highs/lows without a dedicated breadth job.
   high52?: number | null;
   low52?: number | null;
+  // More technicals from technical-indicators.job: true 5-session change,
+  // Stochastic %K, Wilder ADX(14). beta (above) is now computed there too.
+  week5ChangePct?: number | null;
+  stochK?: number | null;
+  adx14?: number | null;
   // Sector rank from tech-rating.job; source records which vendor served the profile.
   sectorRank: number | null;
   sectorRankTotal: number | null;

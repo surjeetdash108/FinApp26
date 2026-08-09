@@ -34,30 +34,34 @@ const CAP_ORDER = ["Mega", "Large", "Mid", "Small", "Micro"];
  */
 function mergeMovers(
   live: LiveMoverDoc[],
-  companyRvol: Map<string, number | null>,
+  companyByTicker: Map<string, CompanyDoc>,
 ): Mover[] {
-  return live.map(l => ({
-    ticker: l.ticker,
-    name: l.name ?? l.ticker,
-    price: l.price,
-    pctChange: l.pctChange,
-    rvolRatio: companyRvol.get(l.ticker) ?? 0,
-    relativeStrength: 0,
-    maPosture: "—",
-    owned: false,
-    sector: l.sector ?? "—",
-    cap: (l.cap as Mover["cap"]) ?? "Mid",
-    weekPct: l.pctChange,
-    techContext: `Live EOD data as of ${l.asOfDate}.`,
-    newsContext: "",
-  }));
+  return live.map(l => {
+    const c = companyByTicker.get(l.ticker);
+    return {
+      ticker: l.ticker,
+      name: l.name ?? l.ticker,
+      price: l.price,
+      pctChange: l.pctChange,
+      rvolRatio: c?.rvol ?? 0,
+      relativeStrength: 0,
+      maPosture: "—",
+      owned: false,
+      sector: l.sector ?? "—",
+      cap: (l.cap as Mover["cap"]) ?? "Mid",
+      // Real 5-session change from technical-indicators.job; null → "—".
+      weekPct: c?.week5ChangePct ?? null,
+      techContext: `Live EOD data as of ${l.asOfDate}.`,
+      newsContext: "",
+    };
+  });
 }
 
 export function MoversScreen() {
   const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
   const { data: rvolCompanies } = useApiList<CompanyDoc>("/market-data/companies");
-  const companyRvol = new Map(rvolCompanies.map(c => [c.ticker, c.rvol ?? null]));
-  const movers = mergeMovers(liveMovers, companyRvol);
+  const companyByTicker = new Map(rvolCompanies.map(c => [c.ticker, c]));
+  const movers = mergeMovers(liveMovers, companyByTicker);
   const liveCount = movers.length;
 
   const [tab,          setTab]          = useState<TabKey>("win");
@@ -84,7 +88,7 @@ export function MoversScreen() {
       if (tab === "win")  return b.pctChange    - a.pctChange;
       if (tab === "lose") return a.pctChange    - b.pctChange;
       if (tab === "vol")  return b.rvolRatio - a.rvolRatio;
-      return Math.abs(b.weekPct) - Math.abs(a.weekPct);
+      return Math.abs(b.weekPct ?? 0) - Math.abs(a.weekPct ?? 0);
     })
     .slice(0, 15);
 
@@ -134,9 +138,6 @@ export function MoversScreen() {
         </div>
       )}
 
-      {tab === "week" ? (
-        <DataState label="Weekly (5-day) change has no live source yet — only daily EOD change is synced." />
-      ) : (
       <div className="card">
         <table className="tbl">
           <thead>
@@ -176,7 +177,7 @@ export function MoversScreen() {
                     </div>
                   </td>
                   <td className="num">${fmt(m.price)}</td>
-                  <td className={`num ${cls(v)}`}>{arr(v)} {sign(v)}</td>
+                  <td className={`num ${v == null ? "" : cls(v)}`}>{v == null ? "—" : <>{arr(v)} {sign(v)}</>}</td>
                   <td className="num">
                     <b style={{ color: m.rvolRatio > 3 ? "var(--warn)" : "var(--text)" }}>{m.rvolRatio.toFixed(1)}×</b>
                   </td>
@@ -188,7 +189,7 @@ export function MoversScreen() {
                     </span>
                   </td>
                   <td className="num">
-                    <Spark seed={m.ticker.charCodeAt(0)} up={v >= 0} />
+                    <Spark seed={m.ticker.charCodeAt(0)} up={(v ?? 0) >= 0} />
                   </td>
                 </tr>
               );
@@ -196,7 +197,6 @@ export function MoversScreen() {
           </tbody>
         </table>
       </div>
-      )}
 
       {/* Sliding stock detail drawer */}
       {selectedSym && (

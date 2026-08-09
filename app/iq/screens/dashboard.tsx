@@ -89,7 +89,7 @@ function mergeMoversData(live: LiveMoverDoc[], companies: CompanyDoc[]): Mover[]
       ticker: l.ticker, name: l.name ?? l.ticker, price: l.price, pctChange: l.pctChange,
       rvolRatio: c?.rvol ?? 0, relativeStrength: c?.rsRating ?? 0,
       maPosture: "—", owned: false,
-      sector: l.sector ?? c?.sector ?? "—", cap: (l.cap as Mover["cap"]) ?? "Mid", weekPct: l.pctChange,
+      sector: l.sector ?? c?.sector ?? "—", cap: (l.cap as Mover["cap"]) ?? "Mid", weekPct: c?.week5ChangePct ?? null,
       techContext: `Live EOD data as of ${l.asOfDate}.`, newsContext: "",
     };
   });
@@ -235,7 +235,7 @@ function MoverPopup({ m }: { m: Mover }) {
         <div className="dp-row"><span>Price</span><b>${fmt(m.price)}</b></div>
         <div className="dp-row"><span>RVOL</span><b>{m.rvolRatio}×</b></div>
         <div className="dp-row"><span>RS Rating</span><b>{m.relativeStrength}/99</b></div>
-        <div className="dp-row"><span>4-Week</span><b className={cls(m.weekPct)}>{m.weekPct > 0 ? "+" : ""}{m.weekPct}%</b></div>
+        <div className="dp-row"><span>1-Week</span>{m.weekPct == null ? <NotAvailable /> : <b className={cls(m.weekPct)}>{sign(m.weekPct)}</b>}</div>
         <div className="dp-note" style={{ marginTop: 6 }}>{m.techContext}</div>
       </div>
       <div className="mvp mvp-n">

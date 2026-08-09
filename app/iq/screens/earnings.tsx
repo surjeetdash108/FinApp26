@@ -5,7 +5,7 @@ import { useIQActions, ExpandBtn } from "../shell";
 import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials } from "../types";
+import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
 
 // Live source (Polygon SEC financials) has ticker/date/epsEstimate/epsActual —
@@ -421,6 +421,7 @@ function CalTable({
 export function EarningsScreen() {
   const { openStockFull } = useIQActions();
   const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const { data: earningsAnnouncements } = useApiList<EarningsAnnouncementDoc>("/market-data/earnings-announcements");
   const liveEarningsData = liveEarnings;
 
   const [mode, setMode]     = useState<"day" | "week" | "month">("day");
@@ -574,6 +575,10 @@ export function EarningsScreen() {
 
   const liveMatches = liveEarnings.filter(e => e.ticker === sel).sort((a, b) => b.date.localeCompare(a.date));
   const liveMatch = liveMatches[0];
+  // Session (BMO/AMC) + post-announcement reaction from the EDGAR 8-K job.
+  const annMatch = earningsAnnouncements
+    .filter(a => a.ticker === sel)
+    .sort((a, b) => b.announceDate.localeCompare(a.announceDate))[0];
   const hasLiveEps = !!liveMatch && (liveMatch.epsEstimate != null || liveMatch.epsActual != null);
 
   // 10-quarter EPS history comes from the per-ticker Polygon financials
@@ -709,6 +714,14 @@ export function EarningsScreen() {
               <div className="m">
                 <div className="k">Guidance</div>
                 <div className="v" style={{ fontSize: ".95rem" }}><NotAvailable /></div>
+              </div>
+              <div className="m">
+                <div className="k">Session</div>
+                <div className="v" style={{ fontSize: ".95rem" }}>{annMatch?.session ?? <NotAvailable />}</div>
+              </div>
+              <div className="m">
+                <div className="k">Reaction</div>
+                <div className="v" style={{ fontSize: ".95rem" }}>{annMatch?.reactionPct != null ? <span className={cls(annMatch.reactionPct)}>{sign(annMatch.reactionPct)}</span> : <NotAvailable />}</div>
               </div>
             </div>
             <p style={{ fontSize: ".82rem", color: "var(--text-dim-solid)", margin: 0 }}>{aiRead}</p>

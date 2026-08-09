@@ -17,7 +17,7 @@ export interface Mover {
   ticker: string; name: string; price: number; pctChange: number; rvolRatio: number; relativeStrength: number;
   maPosture: string; owned: boolean;
   sector: string; cap: 'Mega' | 'Large' | 'Mid' | 'Small';
-  weekPct: number; techContext: string; newsContext: string;
+  weekPct: number | null; techContext: string; newsContext: string;
 }
 export interface AnalystAction {
   ticker: string; name: string; firm: string;
