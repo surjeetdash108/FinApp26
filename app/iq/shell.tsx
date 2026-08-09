@@ -844,7 +844,11 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                     onKeyDown={e => {
                       if (e.key === "Escape") { setSearchOpen(false); setSearchQ(""); }
                       if (e.key === "Enter") {
-                        if (searchMatches[0]) { logSearchedTicker(searchMatches[0].sym); localStorage.setItem("iq-stock", searchMatches[0].sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }
+                        // Use the top match, or fall back to the raw typed ticker
+                        // (the stock page fetches any symbol on demand), so pressing
+                        // Enter always opens the Search page.
+                        const sym = (searchMatches[0]?.sym ?? searchQ.trim().toUpperCase());
+                        if (sym) { logSearchedTicker(sym); localStorage.setItem("iq-stock", sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }
                       }
                     }}
                   />
