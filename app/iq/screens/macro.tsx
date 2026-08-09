@@ -581,7 +581,7 @@ export function MacroScreen() {
                     </span>
                   </div>
                   <div className="note" style={{ marginTop: 8 }}>
-                    VIXY is a decaying futures ETN tracking VIX futures, not the spot VIX index — directionally indicative, not a 1:1 level.
+                    Tracked via the VIXY volatility ETF (Polygon has no spot-VIX feed) — it moves with volatility but isn&apos;t the exact VIX index level.
                   </div>
                 </>
               )}

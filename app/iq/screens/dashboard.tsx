@@ -1006,19 +1006,14 @@ function LiveFeedList() {
         borderBottom: i < recent.length - 1 ? "1px solid var(--border-soft)" : undefined,
       }}>
         <StockLogo sym={f.ticker} size={28} />
-        <div style={{ flexShrink: 0, width: 62 }}>
-          <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{f.category}</span>
-          <div style={{ fontFamily: "var(--f-mono)", fontSize: ".6rem", color: "var(--text-dim-solid)", marginTop: 5 }}>
-            {new Date(f.publishedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: ".8rem", color: "var(--text)", lineHeight: 1.4 }}>
+            <b style={{ color: "var(--text-hi)" }}>{f.ticker}</b> · {f.headline}
           </div>
-        </div>
-        <div>
-          <div style={{ fontSize: ".8rem", color: "var(--text)" }}><b style={{ color: "var(--text-hi)" }}>{f.ticker}</b> · {f.headline}</div>
-          <div style={{
-            fontSize: ".72rem", color: "var(--text-dim-solid)",
-            borderLeft: "2px solid var(--brand-2)55", paddingLeft: 8, marginTop: 4,
-          }}>
-            {f.source}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontSize: ".66rem", color: "var(--text-dim-solid)", flexWrap: "wrap" }}>
+            <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{f.category}</span>
+            <span className="mono">{new Date(f.publishedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+            <span>· {f.source}</span>
           </div>
         </div>
       </div>
