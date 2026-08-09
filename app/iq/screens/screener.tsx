@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { screenerPresets, type ScreenerStock } from "../data";
 import { useApiList } from "../hooks/useApiList";
+import { useApiResource } from "../hooks/useApiResource";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 
@@ -186,8 +187,11 @@ export function ScreenerScreen() {
   const selStock = filtered.find(s => s.ticker === scrSel) ?? filtered[0] ?? null;
   const selSym   = selStock?.ticker ?? "";
 
-  /* price for CandleChart */
-  const selPx = byTicker.get(selSym)?.price ?? 0;
+  /* Live on-demand price for the selected stock — the same source the detail
+     panel below uses — so the list row and the detail show the SAME price
+     (the list otherwise shows the page-load companies snapshot, which drifts). */
+  const { data: selLive } = useApiResource<CompanyDoc>(selSym ? `/live/company?ticker=${encodeURIComponent(selSym)}` : null);
+  const selPx = selLive?.price ?? byTicker.get(selSym)?.price ?? 0;
 
   /* how many "More" presets (index >= 4) are active */
 
@@ -338,7 +342,8 @@ export function ScreenerScreen() {
               maxListHeight={414}
             >
               {filtered.map((s, i) => {
-                const px = byTicker.get(s.ticker)?.price ?? null;
+                // The selected row uses the same live price the detail panel shows.
+                const px = s.ticker === selSym ? (selLive?.price ?? byTicker.get(s.ticker)?.price ?? null) : (byTicker.get(s.ticker)?.price ?? null);
                 return (
                   <StockRow
                     key={s.ticker}
