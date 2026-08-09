@@ -524,6 +524,17 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     if (initialSym && initialSym !== sym) setSym(initialSym);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSym]);
+
+  // Switch immediately when the global search picks a ticker, even if this
+  // screen is already mounted (router-cached) and doesn't re-read localStorage.
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const next = (e as CustomEvent<string>).detail;
+      if (next) setSym(next);
+    };
+    window.addEventListener("iq-stock-change", onChange);
+    return () => window.removeEventListener("iq-stock-change", onChange);
+  }, []);
   const [search, setSearch] = useState("");
   const [tfActive, setTfActive] = useState("3M");
   const [toneActive, setToneActive] = useState("Swing");

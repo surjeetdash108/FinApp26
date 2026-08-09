@@ -651,6 +651,22 @@ export function IQShell({ children }: { children: React.ReactNode }) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setWlPicker({ sym, x: r.right - 250, y: r.bottom });
   }
+
+  // Open the Search (stock) page for a ticker. Persist it (for a fresh mount),
+  // broadcast it (so an already-mounted StockScreen switches immediately), then
+  // navigate. Used by both the search Enter key and clicking a result.
+  function goToStock(sym: string) {
+    const s = sym.trim().toUpperCase();
+    if (!s) return;
+    logSearchedTicker(s);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("iq-stock", s);
+      window.dispatchEvent(new CustomEvent("iq-stock-change", { detail: s }));
+    }
+    setSearchOpen(false);
+    setSearchQ("");
+    router.push("/menu/stock");
+  }
   // Live top-by-market-cap companies, used both as the "quick access" list
   // shown before the user types and as a name-match augmentation once they
   // do — useTickerSearch's full ~10,000-ticker universe only matches by
@@ -847,8 +863,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                         // Use the top match, or fall back to the raw typed ticker
                         // (the stock page fetches any symbol on demand), so pressing
                         // Enter always opens the Search page.
-                        const sym = (searchMatches[0]?.sym ?? searchQ.trim().toUpperCase());
-                        if (sym) { logSearchedTicker(sym); localStorage.setItem("iq-stock", sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }
+                        goToStock(searchMatches[0]?.sym ?? searchQ);
                       }
                     }}
                   />
@@ -859,7 +874,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                     {searchMatches.map(m => (
                       <div key={m.sym} className="palette-item"
                         onMouseDown={e => e.preventDefault()}
-                        onClick={() => { logSearchedTicker(m.sym); localStorage.setItem("iq-stock", m.sym); router.push("/menu/stock"); setSearchOpen(false); setSearchQ(""); }}
+                        onClick={() => goToStock(m.sym)}
                       >
                         <div className="palette-item-icon" style={{ color: "var(--brand-2)", fontWeight: 700, fontFamily: "var(--f-mono)" }}>{m.sym[0]}</div>
                         <div style={{ flex: 1 }}>
