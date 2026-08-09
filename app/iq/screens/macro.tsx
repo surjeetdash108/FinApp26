@@ -47,8 +47,8 @@ function toMacroEvent(d: MacroEventDoc): MacroEvent {
 }
 
 /**
- * Economic-calendar rows for a tab. Live macro_events is authoritative; the
- * hardcoded CAL_* arrays render only when no live data exists at all.
+ * Economic-calendar rows for a tab, from live macro_events only. An empty
+ * result yields an empty state upstream — there is no hardcoded fallback.
  */
 function ecoRowsFor(tabIdx: number, live: MacroEventDoc[], now: Date): MacroEvent[] {
   const r = rangeFor(ECO_TAB_RANGE[tabIdx] ?? "month", now);
@@ -113,8 +113,8 @@ function toDivStock(d: DividendDoc): DivStock {
 
 
 /**
- * Ex-dividend rows for a tab. Live Firestore data is authoritative; the mock
- * array is only used when no live data exists at all, so a demo still renders.
+ * Ex-dividend rows for a tab, from live Firestore dividend data only; returns
+ * [] when there's none (no mock fallback).
  */
 function exDivFor(tab: DivTabKey, live: DividendDoc[], now: Date): DivStock[] {
   if (live.length > 0) {

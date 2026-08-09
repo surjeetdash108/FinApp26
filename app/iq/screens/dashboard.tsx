@@ -988,7 +988,7 @@ export function DashboardScreen() {
   );
 }
 
-/** Live Market Feed — real synced news, falling back to the original mock items if none are synced yet. */
+/** Live Market Feed — real synced news only; honest empty state when none are synced. */
 function LiveFeedList() {
   const { data: news, loading } = useApiList<NewsArticleDoc>("/market-data/news");
   const recent = [...news].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 5);
