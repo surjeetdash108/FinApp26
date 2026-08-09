@@ -14,6 +14,7 @@ interface Holding {
   ticker: string; shares: number;
   positionSize: "Small" | "Medium" | "Large";
   conviction: "High" | "Medium" | "Low";
+  costBasis: number | null;
 }
 
 function usd(v: number) {
@@ -33,12 +34,13 @@ export function PortfolioScreen() {
   const [newSym, setNewSym]         = useState("");
   const [newSize, setNewSize]       = useState<"Small"|"Medium"|"Large">("Small");
   const [newConv, setNewConv]       = useState<"High"|"Medium"|"Low">("Medium");
+  const [newCost, setNewCost]       = useState("");
 
   const refreshHoldings = useCallback(async () => {
     if (!uid) return;
     try {
       const { holdings: rows } = await apiGet<{ holdings: HoldingDoc[] }>("/api/portfolio");
-      setHoldings(rows.map(r => ({ ticker: r.ticker, shares: r.shares, positionSize: r.positionSize, conviction: r.conviction })));
+      setHoldings(rows.map(r => ({ ticker: r.ticker, shares: r.shares, positionSize: r.positionSize, conviction: r.conviction, costBasis: r.costBasis ?? null })));
       setPfSel(prev => prev || rows[0]?.ticker || "");
     } catch { /* leave holdings empty */ }
   }, [uid]);
@@ -52,15 +54,26 @@ export function PortfolioScreen() {
   const merged = holdings.map(h => {
     const live = byTicker.get(h.ticker);
     const hasLive = !!live && live.price != null;
+    const price = hasLive ? live!.price! : null;
+    // Unrealized = (live price − cost basis) × shares; null without a basis.
+    const unrealized = price != null && h.costBasis != null && h.costBasis > 0
+      ? (price - h.costBasis) * h.shares : null;
+    const unrealizedPct = price != null && h.costBasis != null && h.costBasis > 0
+      ? (price - h.costBasis) / h.costBasis * 100 : null;
     return {
       ...h,
       name: live?.name ?? h.ticker,
-      price: hasLive ? live!.price! : null,
+      price,
       pctChange: hasLive ? (live!.pctChange ?? 0) : null,
       live: hasLive,
+      unrealized,
+      unrealizedPct,
     };
   });
   const priced = merged.filter((h): h is typeof h & { price: number; pctChange: number } => h.price != null);
+  // Total unrealized across holdings that carry a basis; null when none do.
+  const withBasis = priced.filter(h => h.unrealized != null);
+  const unrealizedTotal = withBasis.length ? withBasis.reduce((s, h) => s + (h.unrealized as number), 0) : null;
 
   const sel      = merged.find(h => h.ticker === pfSel);
   const totalVal = priced.reduce((s, h) => s + h.shares * h.price, 0);
@@ -76,11 +89,13 @@ export function PortfolioScreen() {
     if (!newSym.trim()) return;
     const s = newSym.trim().toUpperCase();
     if (holdings.find(h => h.ticker === s)) { setAddOpen(false); return; }
-    setHoldings(prev => [...prev, { ticker: s, shares: 10, positionSize: newSize, conviction: newConv }]);
-    setNewSym(""); setAddOpen(false);
+    const parsedCost = parseFloat(newCost);
+    const costBasis = Number.isFinite(parsedCost) && parsedCost > 0 ? parsedCost : null;
+    setHoldings(prev => [...prev, { ticker: s, shares: 10, positionSize: newSize, conviction: newConv, costBasis }]);
+    setNewSym(""); setNewCost(""); setAddOpen(false);
     if (uid) {
       try {
-        await apiPost<HoldingDoc>("/api/portfolio/holdings", { ticker: s, positionSize: newSize, conviction: newConv });
+        await apiPost<HoldingDoc>("/api/portfolio/holdings", { ticker: s, positionSize: newSize, conviction: newConv, ...(costBasis != null ? { costBasis } : {}) });
       } catch { /* optimistic add above already applied locally */ }
     }
   }
@@ -104,6 +119,8 @@ export function PortfolioScreen() {
           <div className="page-sub">
             {merged.length} holdings{priced.length > 0 && <> · {usd(totalVal)} ·{" "}
               <span className={cls(dayPL)}>{dayPL >= 0 ? "+" : ""}{usd(Math.abs(dayPL))} today</span>
+            </>}{unrealizedTotal != null && <> ·{" "}
+              <span className={cls(unrealizedTotal)}>{unrealizedTotal >= 0 ? "+" : "−"}{usd(Math.abs(unrealizedTotal))} unrealized</span>
             </>}
           </div>
         </div>
@@ -230,6 +247,15 @@ export function PortfolioScreen() {
                     <button key={c} className={`chip${newConv === c ? " on" : ""}`} onClick={() => setNewConv(c)}>{c}</button>
                   ))}
                 </div>
+              </div>
+              <div>
+                <label style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", display: "block", marginBottom: 5 }}>Avg cost / share <span style={{ opacity: .7 }}>(optional — enables unrealized P/L)</span></label>
+                <input
+                  type="number" inputMode="decimal" min="0" step="0.01" placeholder="e.g. 182.50"
+                  value={newCost} onChange={e => setNewCost(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addHolding(); }}
+                  style={{ width: "100%", padding: "9px 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-1)", color: "var(--text)", fontSize: ".9rem" }}
+                />
               </div>
               <button className="btn primary" style={{ width: "100%" }} onClick={addHolding}>Add to portfolio</button>
             </div>

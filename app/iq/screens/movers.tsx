@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import type { Mover } from "../data";
+import { type Mover, maPostureLabel } from "../data";
 import { fmt, sign, cls, arr, Spark, StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { LiveMoverDoc, CompanyDoc } from "../types";
@@ -28,9 +28,9 @@ const CAP_ORDER = ["Mega", "Large", "Mid", "Small", "Micro"];
 /**
  * Live-only: a row exists here only if a real `market_movers` doc exists for
  * it. RVOL comes from `companies.rvol` (technical-indicators.job) when
- * synced. MA posture has no live source at all yet, so it renders a neutral
- * "—" instead of an invented label. (Catalyst was removed — Polygon has no
- * catalyst feed, so it only ever showed "—".)
+ * synced. MA posture is derived from `companies.aboveSma50/aboveSma200`
+ * (technical-indicators.job), "—" until synced. (Catalyst was removed — Polygon
+ * has no catalyst feed, so it only ever showed "—".)
  */
 function mergeMovers(
   live: LiveMoverDoc[],
@@ -45,7 +45,7 @@ function mergeMovers(
       pctChange: l.pctChange,
       rvolRatio: c?.rvol ?? 0,
       relativeStrength: 0,
-      maPosture: "—",
+      maPosture: maPostureLabel(c?.aboveSma50, c?.aboveSma200),
       owned: false,
       sector: l.sector ?? "—",
       cap: (l.cap as Mover["cap"]) ?? "Mid",

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { firebaseAuth } from "../../firebase";
 import { useIQActions, ExpandBtn } from "../shell";
-import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem } from "../data";
+import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem, maPostureLabel } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
@@ -77,8 +77,8 @@ function DpRow({ label, children }: { label: string; children: React.ReactNode }
 /**
  * Live-only: a mover row exists here only if a real `market_movers` doc
  * exists for it. `rvolRatio`/`relativeStrength` come from `companies.rvol`/
- * `rsRating` when synced; `maPosture` has no live source yet, so it renders a
- * neutral "—" rather than an invented label. (Catalyst was removed — Polygon
+ * `rsRating` when synced; `maPosture` from `companies.aboveSma50/aboveSma200`
+ * (technical-indicators.job), "—" until synced. (Catalyst was removed — Polygon
  * has no catalyst feed, so it only ever showed "—".)
  */
 function mergeMoversData(live: LiveMoverDoc[], companies: CompanyDoc[]): Mover[] {
@@ -88,7 +88,7 @@ function mergeMoversData(live: LiveMoverDoc[], companies: CompanyDoc[]): Mover[]
     return {
       ticker: l.ticker, name: l.name ?? l.ticker, price: l.price, pctChange: l.pctChange,
       rvolRatio: c?.rvol ?? 0, relativeStrength: c?.rsRating ?? 0,
-      maPosture: "—", owned: false,
+      maPosture: maPostureLabel(c?.aboveSma50, c?.aboveSma200), owned: false,
       sector: l.sector ?? c?.sector ?? "—", cap: (l.cap as Mover["cap"]) ?? "Mid", weekPct: c?.week5ChangePct ?? null,
       techContext: `Live EOD data as of ${l.asOfDate}.`, newsContext: "",
     };
@@ -178,9 +178,9 @@ function DashPopContent({
   } else if (block === "portfolio" && pf) {
     body = <>
       <DpRow label="Day"><span className={cls(pf.pctChange)}>{sign(pf.pctChange)}</span></DpRow>
-      <DpRow label="Unrealized"><NotAvailable /></DpRow>
+      <DpRow label="Unrealized">{pf.costBasis != null ? <span className={cls(pf.gainLossPct)}>{sign(pf.gainLossPct)}</span> : <NotAvailable />}</DpRow>
       <DpRow label="Conviction">{pf.conviction}</DpRow>
-      <div className="dp-note">A position in your book. Unrealized P/L needs a stored cost basis.</div>
+      <div className="dp-note">{pf.costBasis != null ? `Unrealized vs your $${pf.costBasis.toFixed(2)} cost basis.` : "A position in your book. Add a cost basis on the Portfolio screen to see unrealized P/L."}</div>
     </>;
   } else if (block === "insider" && ins) {
     const buy = ins.dir === "buy";
@@ -235,6 +235,7 @@ function MoverPopup({ m }: { m: Mover }) {
         <div className="dp-row"><span>Price</span><b>${fmt(m.price)}</b></div>
         <div className="dp-row"><span>RVOL</span><b>{m.rvolRatio}×</b></div>
         <div className="dp-row"><span>RS Rating</span><b>{m.relativeStrength}/99</b></div>
+        <div className="dp-row"><span>MA posture</span>{m.maPosture === "—" ? <NotAvailable /> : <b>{m.maPosture}</b>}</div>
         <div className="dp-row"><span>1-Week</span>{m.weekPct == null ? <NotAvailable /> : <b className={cls(m.weekPct)}>{sign(m.weekPct)}</b>}</div>
         <div className="dp-note" style={{ marginTop: 6 }}>{m.techContext}</div>
       </div>
@@ -307,9 +308,14 @@ export function DashboardScreen() {
   const isRealFolio = realHoldings.length > 0;
   const folioMini: FolioItem[] = realHoldings.map(h => {
     const c = companyByTicker.get(h.ticker);
+    const price = c?.price ?? 0;
+    // Unrealized return vs the stored cost basis (holdings × live quote is the
+    // $ view; this is the per-share %). 0 when no basis has been entered.
+    const gainLossPct = h.costBasis != null && h.costBasis > 0 && price > 0
+      ? (price - h.costBasis) / h.costBasis * 100 : 0;
     return {
-      ticker: h.ticker, name: c?.name ?? h.ticker, price: c?.price ?? 0, pctChange: c?.pctChange ?? 0,
-      gainLossPct: 0, positionSize: h.positionSize, conviction: h.conviction, eventNote: "—",
+      ticker: h.ticker, name: c?.name ?? h.ticker, price, pctChange: c?.pctChange ?? 0,
+      gainLossPct, costBasis: h.costBasis, positionSize: h.positionSize, conviction: h.conviction, eventNote: "—",
     };
   });
 
@@ -676,11 +682,25 @@ export function DashboardScreen() {
               {isRealFolio ? (() => {
                 const totalVal = realHoldings.reduce((s, h) => s + h.shares * (companyByTicker.get(h.ticker)?.price ?? 0), 0);
                 const dayPL = realHoldings.reduce((s, h) => s + h.shares * (companyByTicker.get(h.ticker)?.price ?? 0) * (companyByTicker.get(h.ticker)?.pctChange ?? 0) / 100, 0);
+                // Unrealized = Σ (live price − cost basis) × shares, over holdings
+                // that carry a basis. null when none do → no line shown.
+                const withBasis = realHoldings.filter(h => h.costBasis != null && h.costBasis > 0 && (companyByTicker.get(h.ticker)?.price ?? 0) > 0);
+                const unrealized = withBasis.length
+                  ? withBasis.reduce((s, h) => s + h.shares * ((companyByTicker.get(h.ticker)!.price!) - (h.costBasis as number)), 0)
+                  : null;
                 return (
+                  <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                     <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)" }}>${totalVal >= 1000 ? (totalVal / 1000).toFixed(1) + "K" : totalVal.toFixed(2)}</span>
                     <span className={`mono ${cls(dayPL)}`} style={{ fontWeight: 600 }}>{arr(dayPL)} {dayPL >= 0 ? "+" : ""}${Math.abs(dayPL).toFixed(2)}</span>
                   </div>
+                  {unrealized != null && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+                      <span>Unrealized{withBasis.length < realHoldings.length ? ` (${withBasis.length}/${realHoldings.length})` : ""}</span>
+                      <span className={`mono ${cls(unrealized)}`} style={{ fontWeight: 600 }}>{unrealized >= 0 ? "+" : "−"}${Math.abs(unrealized).toFixed(2)}</span>
+                    </div>
+                  )}
+                  </>
                 );
               })() : (
                 <DataState loading={portfolioLoading} label="No saved portfolio yet." height={60} />

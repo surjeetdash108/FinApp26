@@ -5,4 +5,6 @@ export interface HoldingDoc {
   shares: number;
   positionSize: "Small" | "Medium" | "Large";
   conviction: "High" | "Medium" | "Low";
+  /** Average cost per share; null when the user hasn't entered one. */
+  costBasis: number | null;
 }

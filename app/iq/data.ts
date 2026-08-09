@@ -19,6 +19,16 @@ export interface Mover {
   sector: string; cap: 'Mega' | 'Large' | 'Mid' | 'Small';
   weekPct: number | null; techContext: string; newsContext: string;
 }
+
+/** Moving-average posture label from the two booleans on the company doc
+ *  (aboveSma50 / aboveSma200, written by technical-indicators.job). Null on
+ *  either → "—" so an un-synced ticker never reads as a real posture. */
+export function maPostureLabel(above50?: boolean | null, above200?: boolean | null): string {
+  if (above50 == null || above200 == null) return "—";
+  if (above50 && above200) return "Above 50 & 200 DMA";
+  if (!above50 && !above200) return "Below 50 & 200 DMA";
+  return above50 ? "Above 50 · below 200" : "Below 50 · above 200";
+}
 export interface AnalystAction {
   ticker: string; name: string; firm: string;
   actionType: 'up' | 'down' | 'init' | 'hold';
@@ -30,7 +40,10 @@ export interface FolioItem {
   ticker: string; name: string;
   price: number;
   pctChange: number;
+  /** Unrealized return % vs cost basis; 0 when no basis is stored. */
   gainLossPct: number;
+  /** Average cost per share; null when the user hasn't entered one. */
+  costBasis: number | null;
   positionSize: "Small" | "Medium" | "Large";
   conviction: "High" | "Medium" | "Low";
   eventNote: string;
