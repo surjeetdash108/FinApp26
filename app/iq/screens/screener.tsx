@@ -81,7 +81,7 @@ export function ScreenerScreen() {
   const [epsGt25,    setEpsGt25]    = useState(false);
   const [marginPos,  setMarginPos]  = useState(false);
   const [ratingBuy,  setRatingBuy]  = useState(false);
-  const [mcGt10,     setMcGt10]     = useState(true);
+  const [mcGt10,     setMcGt10]     = useState(false);
   const [rvolGt15,   setRvolGt15]   = useState(false);
   // Backed by technical-indicators.job fields on the company doc
   // (aboveSma50/aboveSma200, rsi14) + price.
