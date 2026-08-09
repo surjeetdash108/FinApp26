@@ -828,9 +828,6 @@ export function DashboardScreen() {
                     <span className="big">{vix.value.toFixed(2)}</span>
                     <span className={`mono ${cls(vix.pctChange)}`} style={{ fontWeight: 600 }}>{sign(vix.pctChange)}</span>
                   </div>
-                  <div className="note" style={{ marginTop: 10 }}>
-                    Shown via {vix.proxyTicker} (ETF proxy){vix.note ? ` — ${vix.note}` : ""}
-                  </div>
                 </>;
               })()}
             </div>
