@@ -566,7 +566,7 @@ export function MacroScreen() {
           </div>
           <div className="card vix" style={{ flex: 1 }}>
             <div className="card-h">
-              <h3>VIXY</h3>
+              <h3>VIX</h3>
               <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>
             </div>
             <div className="card-b">
@@ -638,54 +638,12 @@ export function MacroScreen() {
         </div>
       </div>
 
-      {/* ── Dividend calendar (Polygon) ── */}
+      {/* ── VIX-sensitive stocks ── */}
       <div style={{ marginTop: 14 }}>
         <div className="card">
           <div className="card-h">
-            <h3>Dividend Calendar</h3>
-            <span className="pill ai" style={{ fontSize: ".68rem" }}>live · Polygon</span>
-          </div>
-          <div className="tbl-wrap">
-            {liveDividendsSorted.length === 0 ? (
-              <div style={{ padding: 16 }}><DataState loading={liveDividendsLoading} label="No live dividend calendar data synced yet." /></div>
-            ) : (
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Ticker</th><th>Ex-div date</th><th>Pay date</th>
-                    <th className="num">Amount</th><th className="num">Yield</th><th>Frequency</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {liveDividendsSorted.slice(0, 30).map(d => (
-                    <tr key={d.id} style={{ cursor: "pointer" }} onClick={() => setSelStock(toDivStock(d))}>
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                          <StockLogo sym={d.ticker} size={20} />
-                          <b style={{ color: "var(--text-hi)", fontFamily: "var(--f-mono)" }}>{d.ticker}</b>
-                        </div>
-                      </td>
-                      <td>{d.exDividendDate}</td>
-                      <td>{d.paymentDate ?? "—"}</td>
-                      <td className="num">${d.dividendAmount.toFixed(2)}</td>
-                      <td className="num">{d.yieldPct != null ? <span className="up">{d.yieldPct.toFixed(2)}%</span> : "—"}</td>
-                      <td>{d.frequency ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      </div>
-
-
-      {/* ── High-beta Stocks ── */}
-      <div style={{ marginTop: 14 }}>
-        <div className="card">
-          <div className="card-h">
-            <h3>High-beta Stocks</h3>
-            <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>Highest real beta · hover for details · click for dividend history</span>
+            <h3>VIX-sensitive stocks</h3>
+            <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>Highest-beta names — most sensitive to volatility spikes · hover for details</span>
           </div>
           <div className="tbl-wrap">
             {highBetaStocks.length === 0 ? (

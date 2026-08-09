@@ -30,6 +30,7 @@ const SECTOR_OPTIONS = [
 export function IPOsScreen() {
   const { openStock } = useIQActions();
   const [sector, setSector] = useState("All");
+  const [tab, setTab] = useState<"recent" | "pipeline" | "calendar">("recent");
   const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   const { data: pipeline } = useApiList<IpoPipelineDoc>("/market-data/ipo-pipeline");
   const pipelineSorted = [...pipeline].sort((a, b) => b.dateFiled.localeCompare(a.dateFiled));
@@ -63,6 +64,15 @@ export function IPOsScreen() {
 
   return (
     <>
+      <div className="page-head">
+        <div className="tabs">
+          <button className={`tab${tab === "recent" ? " on" : ""}`} onClick={() => setTab("recent")}>Recent IPO performance</button>
+          <button className={`tab${tab === "pipeline" ? " on" : ""}`} onClick={() => setTab("pipeline")}>Upcoming pipeline</button>
+          <button className={`tab${tab === "calendar" ? " on" : ""}`} onClick={() => setTab("calendar")}>Live IPO Calendar</button>
+        </div>
+      </div>
+
+      {tab === "recent" && (<>
       {/* Stats strip */}
       <div className="dash" style={{ marginBottom: 14 }}>
         <div className="col-4">
@@ -169,7 +179,9 @@ export function IPOsScreen() {
           </table>
         </div>
       </div>
+      </>)}
 
+      {tab === "pipeline" && (
       <div className="card">
         <div className="card-h">
           <h3>Upcoming pipeline</h3>
@@ -211,9 +223,10 @@ export function IPOsScreen() {
           Raw registration pipeline from EDGAR — includes shells, SPACs and amendments, not a curated IPO list.
         </p>
       </div>
+      )}
 
-      {/* ── Live IPO calendar (Polygon) — additive, doesn't touch the tables above ── */}
-      {liveIposSorted.length > 0 && (
+      {/* ── Live IPO calendar (Polygon) ── */}
+      {tab === "calendar" && liveIposSorted.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <div className="card-h">
             <h3>Live IPO Calendar</h3>

@@ -90,7 +90,7 @@ export function MoversScreen() {
       if (tab === "vol")  return b.rvolRatio - a.rvolRatio;
       return Math.abs(b.weekPct ?? 0) - Math.abs(a.weekPct ?? 0);
     })
-    .slice(0, 15);
+    .slice(0, 20);
 
   const tally: Record<string, number> = {};
   filtered.forEach(m => { tally[m.sector] = (tally[m.sector] || 0) + 1; });
@@ -177,7 +177,7 @@ export function MoversScreen() {
                     </div>
                   </td>
                   <td className="num">${fmt(m.price)}</td>
-                  <td className={`num ${v == null ? "" : cls(v)}`}>{v == null ? "—" : <>{arr(v)} {sign(v)}</>}</td>
+                  <td className="num" style={{ color: v == null ? undefined : v >= 0 ? "var(--up)" : "var(--down)", fontWeight: 600 }}>{v == null ? "—" : <>{arr(v)} {sign(v)}</>}</td>
                   <td className="num">
                     <b style={{ color: m.rvolRatio > 3 ? "var(--warn)" : "var(--text)" }}>{m.rvolRatio.toFixed(1)}×</b>
                   </td>

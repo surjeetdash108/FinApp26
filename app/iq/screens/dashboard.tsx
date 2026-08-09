@@ -1002,9 +1002,10 @@ function LiveFeedList() {
   return <>
     {recent.map((f, i) => (
       <div key={f.id} style={{
-        display: "flex", gap: 10, padding: "9px 0",
+        display: "flex", gap: 10, padding: "9px 0", alignItems: "flex-start",
         borderBottom: i < recent.length - 1 ? "1px solid var(--border-soft)" : undefined,
       }}>
+        <StockLogo sym={f.ticker} size={28} />
         <div style={{ flexShrink: 0, width: 62 }}>
           <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{f.category}</span>
           <div style={{ fontFamily: "var(--f-mono)", fontSize: ".6rem", color: "var(--text-dim-solid)", marginTop: 5 }}>

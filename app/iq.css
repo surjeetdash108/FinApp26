@@ -1668,10 +1668,16 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ecal { display: flex; flex-direction: column; gap: 12px; }
 
 .ecal-top {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
+  position: relative;
+  display: flex; align-items: center;
+  gap: 12px; min-height: 34px;
 }
-.ecal-nav { display: flex; align-items: center; gap: 10px; margin: 0 auto; }
+/* Date navigation is centered in the toolbar regardless of the Month/Week/Day
+   segment on the left. */
+.ecal-nav {
+  display: flex; align-items: center; gap: 10px;
+  position: absolute; left: 50%; transform: translateX(-50%);
+}
 .ecal-arrow {
   width: 30px; height: 30px; border-radius: 8px; flex: none;
   background: transparent; border: 1px solid var(--border-soft);
