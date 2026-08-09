@@ -16,7 +16,6 @@ const TABS = [
   ["win",  "Top Gainers"],
   ["lose", "Top Losers"],
   ["vol",  "Unusual Volume"],
-  ["week", "Weekly Movers"],
 ] as const;
 type TabKey = "win" | "lose" | "vol" | "week";
 // Largest → smallest. The dropdown only offers tiers that actually have movers
@@ -108,7 +107,7 @@ export function MoversScreen() {
         </div>
         {liveCount > 0 && (
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {liveCount} names backed by live EOD data
+            {liveCount} names · top 20 gainers + 20 losers · live EOD
           </span>
         )}
       </div>

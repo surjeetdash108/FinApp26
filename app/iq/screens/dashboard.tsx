@@ -271,6 +271,18 @@ export function DashboardScreen() {
   const { data: earningsAnnouncements } = useApiList<EarningsAnnouncementDoc>("/market-data/earnings-announcements");
   const { data: consensusLive, loading: consensusLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   const { data: mostSearched, loading: mostSearchedLoading } = useApiResource<{ results: Array<{ ticker: string; count: number }> }>("/live/most-searched-tickers?limit=10");
+  // Dedupe: merge any repeated ticker and collapse Google's dual class
+  // (GOOG → GOOGL) so the same company never appears twice.
+  const searchedDeduped = (() => {
+    const map = new Map<string, { ticker: string; count: number }>();
+    for (const r of mostSearched?.results ?? []) {
+      const key = r.ticker === "GOOG" ? "GOOGL" : r.ticker;
+      const cur = map.get(key);
+      if (cur) cur.count += r.count;
+      else map.set(key, { ticker: key, count: r.count });
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count);
+  })();
 
   const pulse = pulseFromLive(liveIndices);
   const movers = mergeMoversData(liveMovers, companies);
@@ -427,11 +439,11 @@ export function DashboardScreen() {
               <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>by user searches</span>
             </div>
             <div className="card-b" style={{ paddingTop: 6 }}>
-              {!mostSearched || mostSearched.results.length === 0 ? (
+              {searchedDeduped.length === 0 ? (
                 <DataState loading={mostSearchedLoading} label="No searches recorded yet." />
               ) : (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {mostSearched.results.map(({ ticker, count }) => {
+                  {searchedDeduped.map(({ ticker, count }) => {
                     const c = companyByTicker.get(ticker);
                     return (
                       <div key={ticker}

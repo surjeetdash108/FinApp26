@@ -580,9 +580,6 @@ export function MacroScreen() {
                       {liveVix.pctChange >= 0 ? "▲" : "▼"} {liveVix.pctChange.toFixed(2)}%
                     </span>
                   </div>
-                  <div className="note" style={{ marginTop: 8 }}>
-                    Tracked via the VIXY volatility ETF (Polygon has no spot-VIX feed) — it moves with volatility but isn&apos;t the exact VIX index level.
-                  </div>
                 </>
               )}
             </div>

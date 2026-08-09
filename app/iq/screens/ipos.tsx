@@ -33,7 +33,19 @@ export function IPOsScreen() {
   const [tab, setTab] = useState<"recent" | "pipeline" | "calendar">("recent");
   const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   const { data: pipeline } = useApiList<IpoPipelineDoc>("/market-data/ipo-pipeline");
-  const pipelineSorted = [...pipeline].sort((a, b) => b.dateFiled.localeCompare(a.dateFiled));
+  // Raw EDGAR registrations repeat the same filer many times (e.g. JPMorgan
+  // Chase files hundreds of structured-note 424Bs). Keep each company once — its
+  // most recent filing — so the pipeline reads as distinct names, not spam.
+  const pipelineSorted = (() => {
+    const sorted = [...pipeline].sort((a, b) => b.dateFiled.localeCompare(a.dateFiled));
+    const seen = new Set<string>();
+    return sorted.filter(p => {
+      const k = (p.companyName || "").trim().toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  })();
   const liveIposSorted = [...liveIpos].sort((a, b) => b.date.localeCompare(a.date));
 
   // Aftermarket performance (current price, day-1 pop %, return since offer) is
