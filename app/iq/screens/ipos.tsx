@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useIQActions } from "../shell";
 import { cls, sign, StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
-import type { IpoEventDoc, IpoPipelineDoc } from "../types";
+import type { IpoEventDoc, IpoPipelineDoc, CompanyDoc } from "../types";
 
 function formatIpoPrice(low: number | null, high: number | null): string {
   if (low == null && high == null) return "—";
@@ -33,6 +33,12 @@ export function IPOsScreen() {
   const [tab, setTab] = useState<"recent" | "pipeline" | "calendar">("recent");
   const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   const { data: pipeline } = useApiList<IpoPipelineDoc>("/market-data/ipo-pipeline");
+  // IPO events carry no sector, so join the live companies collection for each
+  // listed ticker's sector — that's what the sector filter matches on.
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const sectorByTicker = new Map(companies.map(c => [c.ticker, c.sector]));
+  const sectorOf = (symbol: string | null | undefined): string =>
+    (symbol ? sectorByTicker.get(symbol) : null) ?? "—";
   // Raw EDGAR registrations repeat the same filer many times (e.g. JPMorgan
   // Chase files hundreds of structured-note 424Bs). Keep each company once — its
   // most recent filing — so the pipeline reads as distinct names, not spam.
@@ -59,10 +65,12 @@ export function IPOsScreen() {
     cur: e.currentPrice,
     day1: e.day1PopPct,
     since: e.returnSinceIpoPct,
-    sec: e.exchange ?? "—",
+    sec: sectorOf(e.symbol),
     live: true,
   }));
   const filtered = liveRows.filter(r => sector === "All" || r.sec === sector);
+  // Calendar tab shares the same sector filter (also ticker-based).
+  const filteredCalendar = liveIposSorted.filter(e => sector === "All" || sectorOf(e.symbol) === sector);
 
   // Only rows with BOTH an offer price and a current price can produce a return.
   const perf = filtered.filter(
@@ -82,6 +90,26 @@ export function IPOsScreen() {
           <button className={`tab${tab === "pipeline" ? " on" : ""}`} onClick={() => setTab("pipeline")}>Upcoming pipeline</button>
           <button className={`tab${tab === "calendar" ? " on" : ""}`} onClick={() => setTab("calendar")}>Live IPO Calendar</button>
         </div>
+      </div>
+
+      {/* ── Sector filter — shared across all tabs (matches the listed ticker's
+          sector; the pre-IPO pipeline has no ticker, so it isn't sector-filtered). ── */}
+      <div className="fbar" style={{ marginBottom: 10, gap: 10 }}>
+        <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)", fontWeight: 600, alignSelf: "center" }}>Sector</span>
+        <select
+          className="iq-select"
+          value={sector}
+          onChange={e => setSector(e.target.value)}
+          style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem" }}
+        >
+          {SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <div className="spacer" />
+        <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>
+          {tab === "recent" ? `${filtered.length} of ${liveRows.length} shown`
+            : tab === "calendar" ? `${filteredCalendar.length} of ${liveIposSorted.length} shown`
+            : "sector n/a for pre-IPO filings"}
+        </span>
       </div>
 
       {tab === "recent" && (<>
@@ -119,24 +147,6 @@ export function IPOsScreen() {
         </div>
       </div>
 
-      {/* ── Sector filter ── */}
-      <div className="fbar" style={{ marginBottom: 10, gap: 10 }}>
-        <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)", fontWeight: 600, alignSelf: "center" }}>
-          Sector
-        </span>
-        <select
-          className="iq-select"
-          value={sector}
-          onChange={e => setSector(e.target.value)}
-          style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem" }}
-        >
-          {SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <div className="spacer" />
-        <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>
-          {filtered.length} of {liveRows.length} shown
-        </span>
-      </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-h">
@@ -238,7 +248,7 @@ export function IPOsScreen() {
       )}
 
       {/* ── Live IPO calendar (Polygon) ── */}
-      {tab === "calendar" && liveIposSorted.length > 0 && (
+      {tab === "calendar" && filteredCalendar.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <div className="card-h">
             <h3>Live IPO Calendar</h3>
@@ -257,7 +267,7 @@ export function IPOsScreen() {
                 </tr>
               </thead>
               <tbody>
-                {liveIposSorted.slice(0, 25).map(e => (
+                {filteredCalendar.slice(0, 25).map(e => (
                   <tr key={e.id}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
