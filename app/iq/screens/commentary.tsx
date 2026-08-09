@@ -6,7 +6,7 @@ import { StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
-import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc } from "../types";
+import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc } from "../types";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 
@@ -95,6 +95,8 @@ export function CommentaryScreen() {
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: filingsWire } = useApiList<FilingsWireDoc>("/market-data/filings-wire");
   const filingsSorted = [...filingsWire].sort((a, b) => b.filingDate.localeCompare(a.filingDate));
+  const { data: regimeList } = useApiList<MacroRegimeDoc>("/market-data/macro-regime");
+  const regime = regimeList.find(r => r.id === "current") ?? regimeList[0] ?? null;
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -367,9 +369,48 @@ export function CommentaryScreen() {
             </div>
 
             <div className="card" style={{ flex: 1 }}>
-              <div className="card-h"><h3>General perspective</h3></div>
+              <div className="card-h">
+                <h3>Market regime</h3>
+                {regime && (
+                  <span className="pill" style={{
+                    background: regime.regime === "Risk-On" ? "var(--up-dim, rgba(47,230,166,.18))"
+                      : regime.regime === "Risk-Off" ? "var(--down-dim, rgba(255,84,112,.18))" : "var(--surface-3)",
+                    color: regime.regime === "Risk-On" ? "var(--up)" : regime.regime === "Risk-Off" ? "var(--down)" : "var(--text)",
+                    fontWeight: 700,
+                  }}>{regime.regime}</span>
+                )}
+              </div>
               <div className="card-b">
-                <DataState label="A computed market-regime read (breadth, yields, sector rotation) needs a live internals feed — not available yet." />
+                {!regime ? (
+                  <DataState label="Regime read populates once the macro-regime job has run (FRED-derived: curve, VIX, credit, trend, jobs)." />
+                ) : (
+                  <>
+                    <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginBottom: 8 }}>
+                      Score {regime.score >= 0 ? "+" : ""}{regime.score} / ±{regime.maxScore} · FRED-derived · as of {regime.asOfDate}
+                    </div>
+                    {([
+                      ["Yield curve", regime.components.yieldCurve],
+                      ["Volatility (VIX)", regime.components.volatility],
+                      ["Credit spread", regime.components.credit],
+                      ["Trend vs 200-DMA", regime.components.trend],
+                      ["Employment", regime.components.employment],
+                    ] as [string, MacroRegimeDoc["components"]["credit"]][]).map(([label, c]) => (
+                      <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                        <span style={{ fontSize: ".78rem", color: "var(--text)" }}>{label}</span>
+                        <span style={{
+                          fontSize: ".74rem", fontWeight: 600,
+                          color: c.signal == null ? "var(--text-dim-solid)" : c.signal > 0 ? "var(--up)" : c.signal < 0 ? "var(--down)" : "var(--text-dim-solid)",
+                        }}>
+                          {c.signal == null ? "—" : c.signal > 0 ? "▲" : c.signal < 0 ? "▼" : "•"} {c.label}
+                          {c.value != null && <span style={{ color: "var(--text-dim-solid)", marginLeft: 5 }}>({c.value})</span>}
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
+                      Rules-based composite of public FRED series — not investment advice.
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

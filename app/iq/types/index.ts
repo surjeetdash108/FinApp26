@@ -8,6 +8,7 @@ export * from "./earnings";
 export * from "./ipos";
 export * from "./recaps";
 export * from "./filings";
+export * from "./macro-regime";
 export * from "./macro";
 export * from "./insider";
 export * from "./sentiment";
