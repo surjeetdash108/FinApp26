@@ -61,7 +61,6 @@ export function ScreenerScreen() {
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const byTicker = new Map(companies.map(c => [c.ticker, c]));
   const universe = companiesToScreenerStocks(companies);
-  const liveCount = universe.filter(s => s.live).length;
 
   /* ── Preset multi-select ── */
   const [activePresets, setActivePresets] = useState<Set<number>>(new Set());
@@ -198,7 +197,6 @@ export function ScreenerScreen() {
       <div className="page-head">
         <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
           {filtered.length} match{filtered.length !== 1 ? "es" : ""}
-          {liveCount > 0 && <> · <span style={{ color: "var(--up)" }}>{liveCount} live cap/PE</span></>}
         </span>
         <button className="btn primary" onClick={saveScreen}>
           <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
