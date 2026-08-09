@@ -525,9 +525,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSym]);
   const [search, setSearch] = useState("");
-  const [aboutOpen, setAboutOpen] = useState(false);
-  // Collapse the About blurb whenever the ticker changes.
-  useEffect(() => { setAboutOpen(false); }, [sym]);
   const [tfActive, setTfActive] = useState("3M");
   const [toneActive, setToneActive] = useState("Swing");
   const [showVol, setShowVol] = useState(true);
@@ -608,9 +605,18 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // Ticker universe for autocomplete + header chips: the live companies
   // collection, most-active first, instead of a fixed mock catalog.
   const symbolList = [...companies].filter(c => !!c.ticker).sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).map(c => c.ticker);
-  const suggestions = symbolList.filter(s =>
-    search && s.toLowerCase().startsWith(search.toLowerCase())
-  );
+  // Match by ticker prefix OR company name (so "apple" finds AAPL), largest first.
+  const suggestions: { ticker: string; name: string }[] = search
+    ? [...companies]
+        .filter(c => {
+          if (!c.ticker) return false;
+          const q = search.toLowerCase();
+          return c.ticker.toLowerCase().startsWith(q) || (c.name ?? "").toLowerCase().includes(q);
+        })
+        .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
+        .slice(0, 8)
+        .map(c => ({ ticker: c.ticker, name: c.name ?? c.ticker }))
+    : [];
 
   const isLiveStock = !!liveCompany && liveCompany.price != null;
 
@@ -799,20 +805,21 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 border: "1px solid var(--border)", borderRadius: "var(--r-sm)", zIndex: 20,
                 minWidth: 180, marginTop: 2,
               }}>
-                {suggestions.slice(0, 6).map(s => (
-                  <div key={s} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px 6px 12px" }}
+                {suggestions.map(s => (
+                  <div key={s.ticker} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 8px 6px 12px" }}
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                    <div onMouseDown={() => selectSym(s)}
-                      style={{ flex: 1, cursor: "pointer", fontSize: "0.7812rem", color: "var(--text-hi)", fontFamily: "var(--f-mono)" }}>
-                      {s}
+                    <div onMouseDown={() => selectSym(s.ticker)}
+                      style={{ flex: 1, cursor: "pointer", minWidth: 0, overflow: "hidden" }}>
+                      <span style={{ fontSize: "0.7812rem", color: "var(--text-hi)", fontFamily: "var(--f-mono)" }}>{s.ticker}</span>
+                      <span style={{ fontSize: "0.68rem", color: "var(--text-dim-solid)", marginLeft: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
                     </div>
                     <button
-                      onMouseDown={e => { e.preventDefault(); openWatchlistPicker(s, e); }}
-                      title={watchedSet.has(s) ? "Edit watchlists" : "Add to a watchlist"}
+                      onMouseDown={e => { e.preventDefault(); openWatchlistPicker(s.ticker, e); }}
+                      title={watchedSet.has(s.ticker) ? "Edit watchlists" : "Add to a watchlist"}
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1rem", padding: "0 4px",
-                        color: watchedSet.has(s) ? "var(--warn)" : "var(--text-dim-solid)", lineHeight: 1 }}>
-                      {watchedSet.has(s) ? "★" : "☆"}
+                        color: watchedSet.has(s.ticker) ? "var(--warn)" : "var(--text-dim-solid)", lineHeight: 1 }}>
+                      {watchedSet.has(s.ticker) ? "★" : "☆"}
                     </button>
                   </div>
                 ))}
@@ -854,32 +861,21 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           </div>
 
           {/* About the company — Polygon /v3/reference/tickers description, wired
-              via /live/company. Clamps to a few lines with a Show more toggle. */}
+              via /live/company. Shown in full (no clamp / no toggle). */}
           {data.description && (
             <div className="sd-about">
               <div className="sd-about-lbl">About {data.name}</div>
-              <p
-                className={aboutOpen ? "" : "clamp"}
-                style={{ margin: "4px 0 0", fontSize: ".82rem", lineHeight: 1.6, color: "var(--text-dim-solid)" }}
-              >
+              <p style={{ margin: "4px 0 0", fontSize: ".82rem", lineHeight: 1.6, color: "var(--text-dim-solid)" }}>
                 {data.description}
               </p>
-              <div style={{ marginTop: 6, display: "flex", gap: 12, alignItems: "center" }}>
-                {data.description.length > 220 && (
-                  <button
-                    onClick={() => setAboutOpen(o => !o)}
-                    style={{ all: "unset", cursor: "pointer", fontSize: ".72rem", fontWeight: 600, color: "var(--brand-2)" }}
-                  >
-                    {aboutOpen ? "Show less" : "Show more"}
-                  </button>
-                )}
-                {data.homepageUrl && (
+              {data.homepageUrl && (
+                <div style={{ marginTop: 6 }}>
                   <a href={data.homepageUrl} target="_blank" rel="noreferrer"
                     style={{ fontSize: ".72rem", fontWeight: 600, color: "var(--brand-2)", textDecoration: "none" }}>
                     Company website ↗
                   </a>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
