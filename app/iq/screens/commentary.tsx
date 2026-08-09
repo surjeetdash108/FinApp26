@@ -116,22 +116,8 @@ export function CommentaryScreen() {
 
   const symbolList = [...companies].filter(c => !!c.ticker).sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).map(c => ({ s: c.ticker, n: c.name ?? c.ticker }));
   const topSymbols = symbolList.slice(0, 8).map(x => x.s);
-  const knownSet = new Set(symbolList.map(x => x.s.toUpperCase()));
-
-  /* Active ticker filters — comma-separated, e.g. "NVDA, AAPL". A token counts
-     as a committed filter only once it exactly matches a known ticker, so a
-     half-typed symbol never blanks out the feed while you type. */
-  const tokens = search.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
-  const filterTickers = [...new Set(tokens.filter(t => knownSet.size === 0 || knownSet.has(t)))];
-  const filterSet = new Set(filterTickers);
-
-  /* The token after the last comma is what you're currently typing → drives suggestions. */
-  const currentToken = (search.split(",").pop() ?? "").trim();
-  const q = currentToken.toUpperCase();
-  const ql = q.toLowerCase();
-  const suggestions = q.length >= 1
-    ? symbolList.filter(x => !filterSet.has(x.s.toUpperCase()) && (x.s.includes(q) || x.n.toLowerCase().includes(ql))).slice(0, 8)
-    : [];
+  /* Plain free-text search — matches anywhere in the message (ticker / headline / summary). */
+  const q = search.trim().toLowerCase();
 
   const sorted = [...liveNews].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
   const premarket  = sorted.filter(n => etHour(n.publishedAt) < 9.5);
@@ -147,9 +133,12 @@ export function CommentaryScreen() {
     return sorted;
   })();
 
-  /* Filter the feed by the searched tickers (applied on top of the active tab). */
-  const displayFeed = filterSet.size > 0
-    ? tabFeed.filter(n => filterSet.has((n.ticker ?? "").toUpperCase()))
+  /* Filter the feed by the typed text (applied on top of the active tab). */
+  const displayFeed = q
+    ? tabFeed.filter(n =>
+        (n.ticker ?? "").toLowerCase().includes(q) ||
+        (n.headline ?? "").toLowerCase().includes(q) ||
+        (n.summary ?? "").toLowerCase().includes(q))
     : tabFeed;
 
   const feedLabel = (() => {
@@ -161,26 +150,6 @@ export function CommentaryScreen() {
     return { title: "Commentary", badge: null };
   })();
 
-  function addTicker(sym: string) {
-    const next = [...new Set([...filterTickers, sym.toUpperCase()])];
-    setSearch(next.join(", ") + ", ");
-    setSuggOpen(false);
-    searchRef.current?.focus();
-  }
-  function removeTicker(sym: string) {
-    const next = filterTickers.filter(t => t !== sym.toUpperCase());
-    setSearch(next.length ? next.join(", ") + ", " : "");
-  }
-  function onSearchKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && suggestions.length > 0) {
-      e.preventDefault();
-      addTicker(suggestions[0].s);
-    } else if (e.key === "Backspace" && currentToken === "" && filterTickers.length > 0) {
-      // Backspace on an empty token pops the last committed ticker.
-      e.preventDefault();
-      removeTicker(filterTickers[filterTickers.length - 1]);
-    }
-  }
 
   return (
     <>
@@ -195,74 +164,28 @@ export function CommentaryScreen() {
 
       <div style={{ padding: "0 18px 18px" }}>
 
-        {/* Ticker filter bar — comma-separated multi-ticker filter for the feed */}
+        {/* Free-text search — filters the feed by anything typed */}
         <div className="fbar" style={{ marginBottom: 12, position: "relative", flexWrap: "wrap", gap: 8 }}>
           <div style={{ position: "relative", minWidth: "16.25rem" }}>
             <input
               ref={searchRef}
               className="mv-sel"
-              placeholder="Filter feed by ticker(s)…"
+              placeholder="Search the feed — ticker, company or keyword…"
               value={search}
-              onChange={e => { setSearch(e.target.value); setSuggOpen(true); }}
-              onFocus={() => setSuggOpen(true)}
-              onBlur={() => setTimeout(() => setSuggOpen(false), 160)}
-              onKeyDown={onSearchKeyDown}
+              onChange={e => setSearch(e.target.value)}
               autoComplete="off"
               style={{ width: "100%" }}
             />
-            {suggOpen && suggestions.length > 0 && (
-              <div style={{
-                position: "absolute", top: "100%", left: 0, zIndex: 30,
-                background: "var(--surface-1)", border: "1px solid var(--border)",
-                borderRadius: "var(--r-sm)", marginTop: 2,
-                minWidth: 220, width: "100%",
-              }}>
-                {suggestions.map(x => (
-                  <div
-                    key={x.s}
-                    className="sugg-row"
-                    onMouseDown={() => addTicker(x.s)}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer" }}
-                  >
-                    <b style={{ fontFamily: "var(--f-mono)", color: "var(--text-hi)", minWidth: 52 }}>{x.s}</b>
-                    <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)", flex: 1 }}>{x.n}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {suggOpen && q.length >= 1 && suggestions.length === 0 && !filterSet.has(q) && (
-              <div style={{
-                position: "absolute", top: "100%", left: 0, zIndex: 30,
-                background: "var(--surface-1)", border: "1px solid var(--border)",
-                borderRadius: "var(--r-sm)", marginTop: 2, minWidth: 220, width: "100%",
-                padding: "10px 12px", fontSize: ".78rem", color: "var(--text-dim-solid)",
-              }}>
-                No match for &ldquo;{currentToken.toUpperCase()}&rdquo;
-              </div>
-            )}
           </div>
-
-          {/* Active filter chips */}
-          {filterTickers.map(t => (
-            <button
-              key={t}
-              className="chip"
-              onClick={() => removeTicker(t)}
-              title={`Remove ${t} from the filter`}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-            >
-              {t} <span aria-hidden style={{ color: "var(--text-dim-solid)", fontWeight: 700 }}>✕</span>
-            </button>
-          ))}
-          {filterTickers.length > 0 && (
-            <button className="chip ghost" onClick={() => setSearch("")} title="Clear all filters">Clear</button>
+          {search.trim() && (
+            <button className="chip ghost" onClick={() => setSearch("")} title="Clear search">Clear</button>
           )}
 
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {filterTickers.length > 0
-              ? `Showing ${displayFeed.length} item${displayFeed.length === 1 ? "" : "s"} for ${filterTickers.join(", ")}`
-              : "Type ticker(s), comma-separated, to filter the feed — e.g. NVDA, AAPL"}
+            {search.trim()
+              ? `Showing ${displayFeed.length} item${displayFeed.length === 1 ? "" : "s"} for “${search.trim()}”`
+              : "Type anything to filter the feed — ticker, company or keyword"}
           </span>
         </div>
 
@@ -272,19 +195,19 @@ export function CommentaryScreen() {
           <div className="col-8">
             <div className="card">
               <div className="card-h">
-                <h3>{feedLabel.title}{filterTickers.length > 0 ? ` · ${filterTickers.join(", ")}` : ""}</h3>
+                <h3>{feedLabel.title}{q ? ` · “${search.trim()}”` : ""}</h3>
                 {feedLabel.badge}
               </div>
               <div className="card-b" style={{ paddingTop: 2, maxHeight: 620, overflowY: "auto" }}>
                 {displayFeed.length === 0 ? (
                   <DataState loading={liveNewsLoading} label={
-                    filterTickers.length > 0
-                      ? `No commentary for ${filterTickers.join(", ")} in this tab.`
+                    q
+                      ? `No matches for “${search.trim()}” in this tab.`
                       : activeTab === 3
                         ? (uid ? "No live news matches your portfolio or watchlist names right now." : "Sign in and add names to your watchlist or portfolio to see this feed.")
                         : "No live news items in this category right now."} />
                 ) : displayFeed.map((item, i) => (
-                  <FeedItem key={item.id} item={item} i={i} total={displayFeed.length} onTicker={addTicker} />
+                  <FeedItem key={item.id} item={item} i={i} total={displayFeed.length} onTicker={sym => setSearch(sym)} />
                 ))}
               </div>
             </div>
@@ -301,8 +224,8 @@ export function CommentaryScreen() {
                 ) : (activeTab === 3 ? [...mySymbols] : topSymbols).map(sym => (
                   <button
                     key={sym}
-                    className={`chip${filterSet.has(sym.toUpperCase()) ? " on" : ""}`}
-                    onClick={() => (filterSet.has(sym.toUpperCase()) ? removeTicker(sym) : addTicker(sym))}
+                    className={`chip${search.trim().toUpperCase() === sym.toUpperCase() ? " on" : ""}`}
+                    onClick={() => setSearch(search.trim().toUpperCase() === sym.toUpperCase() ? "" : sym)}
                   >{sym}</button>
                 ))}
               </div>

@@ -765,20 +765,24 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // Real peers from Polygon /v1/related-companies (stored on liveCompany.peers),
   // looked up in the live companies for price/RS. Falls back to same-sector RS
   // leaders only if none of the related tickers are in the synced universe.
-  const relatedPeers = (liveCompany?.peers ?? [])
-    .filter(t => t !== sym)
+  // Raw related-tickers Polygon returned for this symbol (before we require a
+  // live price for each). This is "how many peers are in the response".
+  const rawPeerTickers = (liveCompany?.peers ?? []).filter(t => t !== sym);
+  const relatedPeersAll = rawPeerTickers
     .map(t => companies.find(c => c.ticker === t))
     .filter((c): c is CompanyDoc => !!c && c.pctChange != null)
-    .slice(0, 5)
     .map(c => ({ t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating }));
-  const peers = relatedPeers.length
-    ? relatedPeers
+  // Fallback to same-sector RS leaders only if none of the related tickers are
+  // in the synced universe.
+  const peersAll = relatedPeersAll.length
+    ? relatedPeersAll
     : companies
         .filter(c => c.sector === group && c.ticker !== sym && c.pctChange != null)
         .sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0))
-        .slice(0, 5)
         .map(c => ({ t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating }));
-  const pcs = peers.map(x => x.c);
+  const peers = peersAll.slice(0, 5);       // card shows the top few
+  const peersTotal = peersAll.length;        // and the drawer shows all of them
+  const pcs = peersAll.map(x => x.c);
   const pmx = pcs.length ? Math.max(...pcs) : 0;
   const pmn = pcs.length ? Math.min(...pcs) : 0;
 
@@ -1367,8 +1371,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {/* Peers */}
           <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <div className="card-h">
-              <h3>Peers · who&apos;s leading</h3>
-              <span className="link" onClick={() => setInnerDrawer("peers")}>View all →</span>
+              <h3>Peers · who&apos;s leading{peersTotal > 0 ? ` · ${Math.min(peers.length, peersTotal)} of ${peersTotal}` : ""}</h3>
+              {peersTotal > peers.length && <span className="link" onClick={() => setInnerDrawer("peers")}>View all →</span>}
             </div>
             <div className="card-b" style={{ paddingTop: 6, flex: 1, overflowY: "auto", minHeight: 0 }}>
               {peers.length ? peers.map(peer => {
@@ -1631,29 +1635,32 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             <div className="side-drawer" style={{ zIndex: 52 }}>
               <div className="drawer-h">
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Peers · {group}</div>
-                  <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>All tracked stocks in this group</div>
+                  <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Peers · {sym}</div>
+                  <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
+                    {peersTotal} peer{peersTotal === 1 ? "" : "s"} with live data
+                    {rawPeerTickers.length > peersTotal ? ` · ${rawPeerTickers.length} returned by Polygon` : ""}
+                  </div>
                 </div>
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
-                {companies.filter(c => c.sector === group).length === 0 ? (
-                  <DataState loading={companiesLoading} label={`No live peers found in ${group ?? "this sector"}.`} />
-                ) : companies
-                  .filter(c => c.sector === group && c.pctChange != null)
-                  .sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0))
-                  .map(c => (
-                      <div key={c.ticker} className="minirow" style={{ cursor: "pointer" }}
-                        onClick={() => { setInnerDrawer(null); openStock(c.ticker); }}>
+                {peersAll.length === 0 ? (
+                  <DataState loading={companiesLoading || liveCompanyLoading} label={`No live peers found for ${sym}.`} />
+                ) : peersAll.map(peer => {
+                  const c = companies.find(x => x.ticker === peer.t);
+                  return (
+                      <div key={peer.t} className="minirow" style={{ cursor: "pointer" }}
+                        onClick={() => { setInnerDrawer(null); openStock(peer.t); }}>
                         <span className="mono" style={{
                           fontWeight: 700, minWidth: 52,
-                          color: c.ticker === sym ? "var(--brand-2)" : "var(--text-hi)",
-                        }}>{c.ticker}</span>
-                        <span className="mid" style={{ fontSize: ".76rem" }}>{c.name ?? c.ticker}</span>
-                        {c.rsRating != null && <span className="pill" style={{ fontSize: ".66rem", background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>RS {c.rsRating}</span>}
-                        <span className={`mono ${cls(c.pctChange as number)}`} style={{ fontSize: ".82rem" }}>{sign(c.pctChange as number)}</span>
+                          color: peer.t === sym ? "var(--brand-2)" : "var(--text-hi)",
+                        }}>{peer.t}</span>
+                        <span className="mid" style={{ fontSize: ".76rem" }}>{c?.name ?? peer.t}</span>
+                        {peer.rsRating != null && <span className="pill" style={{ fontSize: ".66rem", background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>RS {peer.rsRating}</span>}
+                        <span className={`mono ${cls(peer.c)}`} style={{ fontSize: ".82rem" }}>{sign(peer.c)}</span>
                       </div>
-                  ))}
+                  );
+                })}
               </div>
             </div>
           )}

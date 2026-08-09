@@ -190,7 +190,6 @@ export function ScreenerScreen() {
   const selPx = byTicker.get(selSym)?.price ?? 0;
 
   /* how many "More" presets (index >= 4) are active */
-  const moreActiveCount = [...activePresets].filter(i => i >= 4).length;
 
   return (
     <>
@@ -229,32 +228,20 @@ export function ScreenerScreen() {
               fontSize: ".66rem", letterSpacing: ".05em", textTransform: "uppercase",
               color: "var(--text-dim-solid)", fontWeight: 600, marginRight: 4,
             }}>Presets</span>
-            {screenerPresets.slice(0, 4).map((p, i) => {
-              const on = activePresets.has(i);
-              return (
-                <button key={p.name} onClick={() => togglePreset(i)} style={{
-                  fontSize: ".72rem", padding: "4px 11px", borderRadius: 6, cursor: "pointer",
-                  fontFamily: "var(--f-body)",
-                  border: `1px solid ${on ? "var(--ai)" : "var(--border)"}`,
-                  background: on ? "var(--ai-dim)" : "var(--surface-2)",
-                  color: on ? "var(--text-hi)" : "var(--text-dim-solid)",
-                }}>{p.name}</button>
-              );
-            })}
 
-            {/* More dropdown — controlled, multi-select, close on outside click */}
+            {/* All presets live in this single dropdown (multi-select, close on outside click) */}
             <div ref={ddRef} style={{ position: "relative" }}>
               <button
                 onClick={() => setDdOpen(o => !o)}
                 style={{
                   fontSize: ".72rem", padding: "4px 11px", borderRadius: 6, cursor: "pointer",
                   fontFamily: "var(--f-body)",
-                  border: `1px solid ${moreActiveCount > 0 ? "var(--ai)" : ddOpen ? "var(--brand)" : "var(--border)"}`,
-                  background: moreActiveCount > 0 ? "var(--ai-dim)" : ddOpen ? "var(--brand-dim)" : "var(--surface-2)",
-                  color: moreActiveCount > 0 || ddOpen ? "var(--text-hi)" : "var(--text-dim-solid)",
+                  border: `1px solid ${activePresets.size > 0 ? "var(--ai)" : ddOpen ? "var(--brand)" : "var(--border)"}`,
+                  background: activePresets.size > 0 ? "var(--ai-dim)" : ddOpen ? "var(--brand-dim)" : "var(--surface-2)",
+                  color: activePresets.size > 0 || ddOpen ? "var(--text-hi)" : "var(--text-dim-solid)",
                 }}
               >
-                More{moreActiveCount > 0 ? ` (${moreActiveCount})` : ""} {ddOpen ? "▴" : "▾"}
+                {activePresets.size > 0 ? `Presets (${activePresets.size})` : "Select presets"} {ddOpen ? "▴" : "▾"}
               </button>
               {ddOpen && (
                 <div className="dd-menu" style={{ minWidth: 280 }}>

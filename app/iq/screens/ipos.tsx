@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useIQActions } from "../shell";
+import dynamic from "next/dynamic";
 import { cls, sign, StockLogo, DataState } from "../utils";
+
+// Same embedded stock detail the Movers drawer uses.
+const StockScreenEmbed = dynamic<{ initialSym?: string }>(
+  () => import("./stock").then(m => ({ default: m.StockScreen })),
+  { ssr: false, loading: () => <div style={{ padding: 40, textAlign: "center", color: "var(--text-dim-solid)" }}>Loading…</div> },
+);
 import { useApiList } from "../hooks/useApiList";
 import type { IpoEventDoc, IpoPipelineDoc, CompanyDoc } from "../types";
 
@@ -28,7 +34,7 @@ const SECTOR_OPTIONS = [
 ];
 
 export function IPOsScreen() {
-  const { openStock } = useIQActions();
+  const [selectedSym, setSelectedSym] = useState<string | null>(null);
   const [sector, setSector] = useState("All");
   const [tab, setTab] = useState<"recent" | "pipeline" | "calendar">("recent");
   const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
@@ -176,7 +182,7 @@ export function IPOsScreen() {
                 // it from cur/offer. Null → "—" when there's no aftermarket price.
                   const ret = r.since ?? (r.cur != null && r.offer != null && r.offer !== 0 ? (r.cur - r.offer) / r.offer * 100 : null);
                 return (
-                  <tr key={r.s} onClick={() => openStock(r.s)} style={{ cursor: "pointer" }}>
+                  <tr key={r.s} onClick={() => setSelectedSym(r.s && r.s !== "—" ? r.s : "")} style={{ cursor: "pointer" }}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <StockLogo sym={r.s} size={26} />
@@ -268,7 +274,7 @@ export function IPOsScreen() {
               </thead>
               <tbody>
                 {filteredCalendar.slice(0, 25).map(e => (
-                  <tr key={e.id}>
+                  <tr key={e.id} onClick={() => setSelectedSym(e.symbol || "")} style={{ cursor: "pointer" }}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         {e.symbol && <StockLogo sym={e.symbol} size={22} />}
@@ -297,6 +303,33 @@ export function IPOsScreen() {
       <p style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginTop: 10 }}>
         Returns measured from IPO offer price. Source (production): SEC EDGAR + Polygon.io. Informational only — not investment advice.
       </p>
+
+      {/* Slide-in stock detail (same as Movers). Empty string = clicked a row
+          with no listed ticker → show a not-available message. */}
+      {selectedSym !== null && (
+        <>
+          <div className="scrim" onClick={() => setSelectedSym(null)} />
+          <div className="stock-side-drawer">
+            <div className="drawer-h" style={{ paddingTop: 14, paddingBottom: 14 }}>
+              {selectedSym && <StockLogo sym={selectedSym} size={32} />}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)" }}>
+                  {selectedSym ? `${selectedSym} · Stock Details` : "IPO details"}
+                </div>
+                <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+                  Full analysis · chart · technicals · peers
+                </div>
+              </div>
+              <button className="closebtn" onClick={() => setSelectedSym(null)}>✕</button>
+            </div>
+            <div className="drawer-b">
+              {selectedSym
+                ? <StockScreenEmbed initialSym={selectedSym} />
+                : <DataState label="Stock data isn't available for this IPO yet — it hasn't started trading or isn't in the synced universe." />}
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
