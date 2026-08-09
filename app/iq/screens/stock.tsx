@@ -765,21 +765,33 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // Real peers from Polygon /v1/related-companies (stored on liveCompany.peers),
   // looked up in the live companies for price/RS. Falls back to same-sector RS
   // leaders only if none of the related tickers are in the synced universe.
-  // Raw related-tickers Polygon returned for this symbol (before we require a
-  // live price for each). This is "how many peers are in the response".
+  // Raw related-tickers Polygon returned for this symbol. This is "how many
+  // peers are in the response".
+  type PeerRow = { t: string; c: number; rsRating: number | null; name: string | null };
   const rawPeerTickers = (liveCompany?.peers ?? []).filter(t => t !== sym);
-  const relatedPeersAll = rawPeerTickers
-    .map(t => companies.find(c => c.ticker === t))
-    .filter((c): c is CompanyDoc => !!c && c.pctChange != null)
-    .map(c => ({ t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating }));
-  // Fallback to same-sector RS leaders only if none of the related tickers are
-  // in the synced universe.
-  const peersAll = relatedPeersAll.length
+  const inUniverse = new Set(companies.map(c => c.ticker));
+  // Peers not in the synced universe are priced on demand (one snapshot call),
+  // so EVERY peer Polygon returned can be shown — not just the synced ones.
+  const missingPeers = rawPeerTickers.filter(t => !inUniverse.has(t));
+  const { data: peerQuotes } = useApiResource<Array<{ ticker: string; name: string | null; price: number | null; pctChange: number | null }>>(
+    missingPeers.length ? `/live/quotes?tickers=${missingPeers.join(",")}` : null,
+  );
+  const quoteByTicker = new Map((peerQuotes ?? []).map(q => [q.ticker, q]));
+
+  const relatedPeersAll: PeerRow[] = rawPeerTickers.map(t => {
+    const c = companies.find(x => x.ticker === t);
+    if (c && c.pctChange != null) return { t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating, name: c.name };
+    const q = quoteByTicker.get(t);
+    if (q && q.pctChange != null) return { t, c: q.pctChange, rsRating: null, name: q.name };
+    return null;
+  }).filter((x): x is PeerRow => !!x);
+  // Fallback to same-sector RS leaders only if none of the related tickers resolve.
+  const peersAll: PeerRow[] = relatedPeersAll.length
     ? relatedPeersAll
     : companies
         .filter(c => c.sector === group && c.ticker !== sym && c.pctChange != null)
         .sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0))
-        .map(c => ({ t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating }));
+        .map(c => ({ t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating, name: c.name }));
   const peers = peersAll.slice(0, 5);       // card shows the top few
   const peersTotal = peersAll.length;        // and the drawer shows all of them
   const pcs = peersAll.map(x => x.c);
@@ -1647,7 +1659,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 {peersAll.length === 0 ? (
                   <DataState loading={companiesLoading || liveCompanyLoading} label={`No live peers found for ${sym}.`} />
                 ) : peersAll.map(peer => {
-                  const c = companies.find(x => x.ticker === peer.t);
                   return (
                       <div key={peer.t} className="minirow" style={{ cursor: "pointer" }}
                         onClick={() => { setInnerDrawer(null); openStock(peer.t); }}>
@@ -1655,7 +1666,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                           fontWeight: 700, minWidth: 52,
                           color: peer.t === sym ? "var(--brand-2)" : "var(--text-hi)",
                         }}>{peer.t}</span>
-                        <span className="mid" style={{ fontSize: ".76rem" }}>{c?.name ?? peer.t}</span>
+                        <span className="mid" style={{ fontSize: ".76rem" }}>{peer.name ?? peer.t}</span>
                         {peer.rsRating != null && <span className="pill" style={{ fontSize: ".66rem", background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>RS {peer.rsRating}</span>}
                         <span className={`mono ${cls(peer.c)}`} style={{ fontSize: ".82rem" }}>{sign(peer.c)}</span>
                       </div>
