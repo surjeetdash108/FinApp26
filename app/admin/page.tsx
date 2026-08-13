@@ -88,7 +88,7 @@ export default function AdminPage() {
           // owns the write — PATCH /admin/plans/:id (AdminGuard) sets only this
           // one entitlement (dotted path server-side), so a whole-map set can't
           // clobber a concurrent edit to a different flag.
-          await apiPatch(`/admin/plans/${encodeURIComponent(planId)}`, {
+          await apiPatch(`/api/admin/plans/${encodeURIComponent(planId)}`, {
             featureFlags: { [key]: value },
           });
           reply({ ok: true });
@@ -143,20 +143,20 @@ export default function AdminPage() {
         };
         await blogWrite("admin:blogSaveResult", async () => {
           if (d.id) {
-            await apiPatch(`/admin/blogs/${encodeURIComponent(String(d.id))}`, body);
+            await apiPatch(`/api/admin/blogs/${encodeURIComponent(String(d.id))}`, body);
           } else {
-            await apiPost("/admin/blogs", body);
+            await apiPost("/api/admin/blogs", body);
           }
         });
       }
       if (d.type === "admin:blogDelete") {
         await blogWrite("admin:blogDeleteResult", async () => {
-          await apiDelete(`/admin/blogs/${encodeURIComponent(String(d.id))}`);
+          await apiDelete(`/api/admin/blogs/${encodeURIComponent(String(d.id))}`);
         });
       }
       if (d.type === "admin:blogPublish") {
         await blogWrite("admin:blogPublishResult", async () => {
-          await apiPatch(`/admin/blogs/${encodeURIComponent(String(d.id))}`, {
+          await apiPatch(`/api/admin/blogs/${encodeURIComponent(String(d.id))}`, {
             status: d.status,
           });
         });
@@ -175,7 +175,7 @@ export default function AdminPage() {
               const patch: Record<string, unknown> = { rank: Number(o.rank) };
               // A cross-zone move carries the new zone; a plain reorder omits it.
               if (typeof o.zone === "string") patch.zone = o.zone;
-              return apiPatch(`/admin/blogs/${encodeURIComponent(String(o.id))}`, patch);
+              return apiPatch(`/api/admin/blogs/${encodeURIComponent(String(o.id))}`, patch);
             }),
           );
         });
@@ -187,7 +187,7 @@ export default function AdminPage() {
         const post = (m: Record<string, unknown>) =>
           iframeRef.current?.contentWindow?.postMessage({ type: "admin:apiHealthResult", ...m }, "*");
         try {
-          const data = await apiGet("/admin/apihealth");
+          const data = await apiGet("/api/admin/apihealth");
           post({ ok: true, data });
         } catch (err) {
           post({ ok: false, error: (err as Error).message });

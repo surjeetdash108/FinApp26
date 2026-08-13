@@ -1898,14 +1898,44 @@ window.addEventListener('message', function(e){
   if (!d.ok) document.getElementById('monitorSrc').textContent = 'Re-check failed: ' + (d.error || 'error');
 });
 
-function switchView(name){
+/* Known views ↔ URL segments map 1:1 by name (overview → the bare /admin). The
+   console is a same-origin iframe, so it drives the PARENT's URL/history so each
+   screen deep-links (/admin/users, /admin/subs, …). All parent access is wrapped
+   in try/catch — standalone review of console.html has no parent. */
+const KNOWN_VIEWS = ['overview','users','subs','revenue','usage','monitor','studio','blogs'];
+
+function viewFromParentPath(){
+  try{
+    const seg = (window.parent.location.pathname.replace(/^\/admin\/?/, '').split('/')[0] || 'overview');
+    return KNOWN_VIEWS.includes(seg) ? seg : 'overview';
+  }catch(e){ return 'overview'; }
+}
+
+function switchView(name, opts){
+  opts = opts || {};
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.view===name));
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id===name));
   if (name === 'monitor') renderMonitor();
   document.getElementById('pageTitle').innerHTML=TITLES[name]||name;
   document.querySelector('.main').scrollTo({top:0});
+  // Reflect the active screen in the parent URL — but never when the switch was
+  // itself triggered by a popstate (that would fight the browser's own history).
+  if (!opts.fromPop){
+    try {
+      const p = name === 'overview' ? '/admin' : '/admin/' + name;
+      if (window.parent && window.parent.location.pathname !== p) window.parent.history.pushState({}, '', p);
+    } catch(e){}
+  }
 }
 document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>switchView(n.dataset.view));
+
+// Deep-link on load: open the tab named by the parent path (default overview).
+switchView(viewFromParentPath(), { fromPop:true });
+
+// Browser back/forward re-switches the tab without pushing a new entry.
+try {
+  window.parent.addEventListener('popstate', () => switchView(viewFromParentPath(), { fromPop:true }));
+} catch(e){}
 </script>
 
 <!-- Change-password modal (admin) -->

@@ -259,7 +259,7 @@ function toConsoleBlog(b: BackendBlog): ConsoleBlogRow {
  */
 export async function fetchAdminBlogs(): Promise<ConsoleBlogRow[]> {
   try {
-    const res = await apiGet<{ blogs: BackendBlog[] }>("/admin/blogs");
+    const res = await apiGet<{ blogs: BackendBlog[] }>("/api/admin/blogs");
     return (res.blogs ?? []).map(toConsoleBlog);
   } catch {
     return [];
@@ -331,15 +331,15 @@ export async function buildAdminDataset(): Promise<ConsoleDataset> {
   // protected (or public, for /plans) backend routes; the browser touches no
   // Firestore. Payments may be empty → subscriptions falls back to [].
   const [usersRes, subsRes, plansRes, adoptRes, apiHealthRes, blogs] = await Promise.all([
-    apiGet<{ users: BackendUserRow[] }>("/admin/users?limit=500"),
-    apiGet<{ subscriptions: BackendPaymentRow[] }>("/admin/subscriptions?limit=1000").catch(
+    apiGet<{ users: BackendUserRow[] }>("/api/admin/users?limit=500"),
+    apiGet<{ subscriptions: BackendPaymentRow[] }>("/api/admin/subscriptions?limit=1000").catch(
       () => ({ subscriptions: [] as BackendPaymentRow[] }),
     ),
     apiGet<{ plans: BackendPlan[] }>("/plans"),
-    apiGet<{ adoption: BackendAdoptionRow[] }>("/admin/feature-adoption").catch(
+    apiGet<{ adoption: BackendAdoptionRow[] }>("/api/admin/feature-adoption").catch(
       () => ({ adoption: [] as BackendAdoptionRow[] }),
     ),
-    apiGet<ApiHealthReport>("/admin/apihealth").catch(() => null),
+    apiGet<ApiHealthReport>("/api/admin/apihealth").catch(() => null),
     fetchAdminBlogs(),
   ]);
 
