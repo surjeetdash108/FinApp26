@@ -377,8 +377,8 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .zdrop:hover,.zdrop.drag{border-color:var(--brand);color:var(--brand2);background:#7c6cf50e}
 .zdrop svg{display:block;margin:0 auto 5px;color:var(--brand2)}
 .zdrop b{color:var(--hi);font-weight:600}
-.zlist{display:flex;flex-direction:column;gap:9px;overflow:auto}
-.z-b .zlist{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.zlist{display:flex;flex-direction:column;gap:9px;overflow-y:auto;overflow-x:hidden;max-height:470px}
+.z-b .zlist{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-height:none}
 /* drag to reorder / move between zones */
 .zcard{position:relative;border:1px solid var(--border);border-radius:10px;background:var(--surface2);padding:11px 12px;cursor:pointer;transition:border-color .12s}
 .zcard[draggable]{cursor:grab}
