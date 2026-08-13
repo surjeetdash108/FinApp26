@@ -23,6 +23,20 @@ export function useApiResource<T>(path: string | null, refetchMs?: number) {
     }
     let cancelled = false;
 
+    // On a path change (e.g. switching ticker), re-raise the spinner and drop
+    // the previous path's data so the screen shows "Loading…" instead of the
+    // stale result while the new — now live/slow — request is in flight. Done
+    // once per effect run (path change), NOT inside load(), so poll refetches
+    // (refetchMs) refresh silently without flashing the spinner. queueMicrotask
+    // keeps this out of the synchronous effect body (react-hooks lint).
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setLoading(true);
+        setData(null);
+        setError(null);
+      }
+    });
+
     async function load() {
       try {
         const result = await apiGet<T>(path as string);

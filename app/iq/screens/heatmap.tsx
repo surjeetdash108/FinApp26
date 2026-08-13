@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIQActions } from "../shell";
-import { sign, heatCol, fmt, StockLogo, NotAvailable } from "../utils";
+import { sign, heatCol, fmt, StockLogo, NotAvailable, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { buildSectorList } from "../live-market-indices";
 import { INDEX_MEMBERS, HEATMAP_TAB_KEYS } from "../index-constituents";
@@ -61,8 +61,11 @@ export function HeatmapScreen() {
   // Clicking a tile opens the stock in a slide-in drawer (same as Movers),
   // rather than navigating away to the full stock page.
   const [selectedSym, setSelectedSym] = useState<string | null>(null);
-  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
-  const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
+  const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: sectorsLive, loading: sectorsLoading } = useApiList<SectorApiDoc>("/market-data/sectors");
+  // Sectors is now a live per-request vendor call (~3s); show a spinner while
+  // either feed is still loading instead of flashing the "no constituents" card.
+  const dataLoading = companiesLoading || sectorsLoading;
   const fullSectorList = buildSectorList(companies, sectorsLive);
 
   const [tab, setTab]     = useState(0);
@@ -136,7 +139,12 @@ export function HeatmapScreen() {
         borderRadius: 10, overflow: "hidden",
         border: "1px solid var(--border)", background: "var(--bg)",
       }}>
-        {mergedSectorList.length === 0 && (
+        {mergedSectorList.length === 0 && dataLoading && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <DataState loading label="" />
+          </div>
+        )}
+        {mergedSectorList.length === 0 && !dataLoading && (
           <div style={{
             position: "absolute", inset: 0, display: "flex",
             flexDirection: "column", alignItems: "center", justifyContent: "center",
