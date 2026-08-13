@@ -9,15 +9,15 @@ import type { StoredProfile } from "../../store/profile-slice";
 import { useIQActions, type FontKey } from "../shell";
 import { apiPatch } from "../backend";
 
-const FONTS: { key: FontKey; label: string; desc: string; stack: string }[] = [
-  { key: "geist",         label: "Geist",         desc: "Clean & neutral · Minimal sans",      stack: "var(--font-geist-sans,'Geist Sans',sans-serif)" },
-  { key: "inter",         label: "Inter",          desc: "Balanced & highly readable",          stack: "var(--font-inter,'Inter',sans-serif)" },
-  { key: "dm-sans",       label: "DM Sans",        desc: "Geometric · Modern & friendly · Default", stack: "var(--font-dm-sans,'DM Sans',sans-serif)" },
-  { key: "space-grotesk",    label: "Space Grotesk",    desc: "Bold geometric · Dashboard feel",        stack: "var(--font-space-grotesk,'Space Grotesk',sans-serif)" },
-  { key: "plus-jakarta-sans", label: "Plus Jakarta Sans", desc: "Refined & versatile · UI favourite",      stack: "var(--font-plus-jakarta-sans,'Plus Jakarta Sans',sans-serif)" },
-  { key: "ibm-plex-sans",    label: "IBM Plex Sans",    desc: "Technical & trustworthy · Finance fit",   stack: "var(--font-ibm-plex-sans,'IBM Plex Sans',sans-serif)" },
-  { key: "outfit",           label: "Outfit",           desc: "Sharp geometric · Minimal & confident",   stack: "var(--font-outfit,'Outfit',sans-serif)" },
-  { key: "manrope",          label: "Manrope",          desc: "Elegant & airy · Premium editorial feel", stack: "var(--font-manrope,'Manrope',sans-serif)" },
+const FONTS: { key: FontKey; rank: number; label: string; desc: string; stack: string }[] = [
+  { key: "geist", rank: 6,         label: "Geist",         desc: "Clean & neutral · Minimal sans",      stack: "var(--font-geist-sans,'Geist Sans',sans-serif)" },
+  { key: "inter", rank: 1,         label: "Inter",          desc: "Balanced & highly readable",          stack: "var(--font-inter,'Inter',sans-serif)" },
+  { key: "dm-sans", rank: 4,       label: "DM Sans",        desc: "Geometric · Modern & friendly · Default", stack: "var(--font-dm-sans,'DM Sans',sans-serif)" },
+  { key: "space-grotesk", rank: 5,    label: "Space Grotesk",    desc: "Bold geometric · Dashboard feel",        stack: "var(--font-space-grotesk,'Space Grotesk',sans-serif)" },
+  { key: "plus-jakarta-sans", rank: 7, label: "Plus Jakarta Sans", desc: "Refined & versatile · UI favourite",      stack: "var(--font-plus-jakarta-sans,'Plus Jakarta Sans',sans-serif)" },
+  { key: "ibm-plex-sans", rank: 2,    label: "IBM Plex Sans",    desc: "Technical & trustworthy · Finance fit",   stack: "var(--font-ibm-plex-sans,'IBM Plex Sans',sans-serif)" },
+  { key: "outfit", rank: 8,           label: "Outfit",           desc: "Sharp geometric · Minimal & confident",   stack: "var(--font-outfit,'Outfit',sans-serif)" },
+  { key: "manrope", rank: 3,          label: "Manrope",          desc: "Elegant & airy · Premium editorial feel", stack: "var(--font-manrope,'Manrope',sans-serif)" },
 ];
 
 function ConfirmModal({
@@ -410,7 +410,7 @@ export function SettingsScreen() {
                     fontFamily: f.stack,
                     marginBottom: 2,
                   }}>
-                    {f.label}
+                    <span style={{ opacity: 0.55, fontWeight: 600 }}>{f.rank}. </span>{f.label}
                   </div>
                   <div style={{ fontSize: "0.7188rem", color: "var(--text-dim-solid)" }}>{f.desc}</div>
                 </div>

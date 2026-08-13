@@ -13,7 +13,7 @@ const StockScreenEmbed = dynamic<{ initialSym?: string }>(
 );
 import { signOut } from "firebase/auth";
 import { firebaseAuth } from "../firebase";
-import { apiGet, apiPatch, apiPost, apiDelete } from "./backend";
+import { apiGet, apiPatch, apiPost } from "./backend";
 import { useAppSelector } from "../store/hooks";
 import { AuthGuard } from "../dashboard/auth-guard";
 import { menuItems } from "../dashboard/menu-items";
@@ -27,7 +27,7 @@ import { useApiList } from "./hooks/useApiList";
 import { useWatchlists, WatchlistsContext } from "./hooks/useWatchlists";
 import { WatchlistPicker } from "./watchlist-picker";
 import { pulseFromLive, tapeItemsToIndexDocs } from "./live-market-indices";
-import type { CompanyDoc, SectorApiDoc, LiveEarningsDoc, WatchlistDoc } from "./types";
+import type { CompanyDoc, SectorApiDoc, LiveEarningsDoc } from "./types";
 
 // ---- Route helpers ----
 function slugToHref(slug: string): string {
@@ -793,7 +793,6 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   const displayName = profile?.name || user?.displayName || user?.email || "User";
   const initials = displayName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
   const profileImage = profile?.profile_image || user?.photoURL || null;
-  const tier = profile?.tier === "free" ? "Free" : "Premium";
 
   // First-time Google sign-ins arrive with only name/email — flag the profile as
   // incomplete (drives the "Pending" pill on My Profile) until every field is filled.

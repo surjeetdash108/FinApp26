@@ -1,14 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
-import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc } from "../types";
+import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc, LiveMoverDoc } from "../types";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
+
+// Market-cap tiers derived from companies.marketCap (raw USD). Used to filter
+// the feed by the size of the company each news item is about.
+const CAP_TIERS = ["All", "Mega", "Large", "Mid", "Small", "Micro"];
+function capTier(mc: number | null | undefined): string | null {
+  if (mc == null) return null;
+  if (mc >= 200e9) return "Mega";
+  if (mc >= 10e9) return "Large";
+  if (mc >= 2e9) return "Mid";
+  if (mc >= 300e6) return "Small";
+  return "Micro";
+}
 
 function catCol(c: string | null): string {
   if (c === "earnings") return "var(--warn)";
@@ -93,14 +105,18 @@ export function CommentaryScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
   const { data: liveNews, loading: liveNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
+  const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
   const { data: filingsWire } = useApiList<FilingsWireDoc>("/market-data/filings-wire");
   const filingsSorted = [...filingsWire].sort((a, b) => b.filingDate.localeCompare(a.filingDate));
   const { data: regimeList } = useApiList<MacroRegimeDoc>("/market-data/macro-regime");
   const regime = regimeList.find(r => r.id === "current") ?? regimeList[0] ?? null;
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
+  const [secFilter,     setSecFilter]     = useState("All");
+  const [capFilter,     setCapFilter]     = useState("All");
   const searchRef = useRef<HTMLInputElement>(null);
-  const [suggOpen, setSuggOpen] = useState(false);
+
+  const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
 
   const [mySymbols, setMySymbols] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -133,13 +149,31 @@ export function CommentaryScreen() {
     return sorted;
   })();
 
-  /* Filter the feed by the typed text (applied on top of the active tab). */
-  const displayFeed = q
-    ? tabFeed.filter(n =>
-        (n.ticker ?? "").toLowerCase().includes(q) ||
+  // Sector dropdown uses the SAME list as the Movers screen — the distinct
+  // sectors from the /market-data/movers feed (GICS). Both screens read the
+  // same normalized sector strings, so filtering the feed by company.sector
+  // still matches these options.
+  const feedSectors = ["All", ...Array.from(
+    new Set(liveMovers.map(m => m.sector).filter((s): s is string => !!s && s !== "—")),
+  ).sort()];
+  const effSec = feedSectors.includes(secFilter) ? secFilter : "All";
+
+  /* Filter the feed by the typed text + sector + market-cap (on top of the tab).
+     Sector/cap are resolved from the companies doc for each item's ticker; an
+     item whose ticker isn't in the companies collection is excluded once either
+     of those filters is active (it can't be classified). */
+  const displayFeed = tabFeed.filter(n => {
+    if (q &&
+      !((n.ticker ?? "").toLowerCase().includes(q) ||
         (n.headline ?? "").toLowerCase().includes(q) ||
-        (n.summary ?? "").toLowerCase().includes(q))
-    : tabFeed;
+        (n.summary ?? "").toLowerCase().includes(q))) return false;
+    if (effSec !== "All" || capFilter !== "All") {
+      const c = companyByTicker.get(n.ticker);
+      if (effSec !== "All" && c?.sector !== effSec) return false;
+      if (capFilter !== "All" && capTier(c?.marketCap) !== capFilter) return false;
+    }
+    return true;
+  });
 
   const feedLabel = (() => {
     if (activeTab === 0) return { title: "Intraday commentary", badge: <span className="live"><span className="dot" />Live · streaming</span> };
@@ -181,11 +215,22 @@ export function CommentaryScreen() {
             <button className="chip ghost" onClick={() => setSearch("")} title="Clear search">Clear</button>
           )}
 
+          {/* Sector + market-cap filters — narrow the feed to news about
+              companies in a given sector and/or size tier. */}
+          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 4 }}>Sector</span>
+          <select className="mv-sel" style={{ textTransform: "lowercase" }} value={effSec} onChange={e => setSecFilter(e.target.value)}>
+            {feedSectors.map(s => <option key={s} value={s}>{s.toLowerCase()}</option>)}
+          </select>
+          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Market cap</span>
+          <select className="mv-sel" value={capFilter} onChange={e => setCapFilter(e.target.value)}>
+            {CAP_TIERS.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {search.trim()
-              ? `Showing ${displayFeed.length} item${displayFeed.length === 1 ? "" : "s"} for “${search.trim()}”`
-              : "Type anything to filter the feed — ticker, company or keyword"}
+            {search.trim() || effSec !== "All" || capFilter !== "All"
+              ? `Showing ${displayFeed.length} item${displayFeed.length === 1 ? "" : "s"}`
+              : "Filter the feed — search text, sector or market cap"}
           </span>
         </div>
 

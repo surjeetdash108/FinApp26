@@ -61,14 +61,16 @@
 }
 
 .iq-root[data-theme="light"] {
-  --bg: #EDF1F7;
-  --surface-0: #E4E9F2;
-  --surface-1: #FFFFFF;
-  --surface-2: #F7F9FC;
-  --surface-3: #EEF2F9;
-  --border: #C9D4E4;
-  --border-soft: #D8E0EE;
-  --border-strong: #B0BDD2;
+  /* Warm off-white palette matching the public blog (blog-board.css light),
+     replacing the old cool/pure-white light theme. */
+  --bg: #f4f0e8;
+  --surface-0: #ece7dd;
+  --surface-1: #fffdf9;
+  --surface-2: #f3eee6;
+  --surface-3: #ece7dd;
+  --border: #ded6c8;
+  --border-soft: #e6e0d5;
+  --border-strong: #c9bfae;
   --text-hi: #0D1525;
   --text: #3A4562;
   /* #8892A8 read ~3.3:1 against white/surface-1 — under the 4.5:1 AA floor
@@ -202,6 +204,11 @@
 .topbar-clock {
   font-size: .72rem; color: var(--text-dim-solid);
   font-family: var(--f-mono); white-space: nowrap; flex-shrink: 0;
+  /* Right-align the clock (and the market-open pill + icons after it): the
+     search is max-width-capped, so it fills to 30rem first, then this auto
+     margin absorbs the rest — parking the date/time immediately left of the
+     "Market open" pill instead of floating mid-bar. */
+  margin-left: auto;
 }
 @media (max-width: 720px) { .topbar-clock { display: none; } }
 .logo {
@@ -292,7 +299,9 @@
   padding: 3px 10px; border-radius: 99px;
   background: var(--up-dim); border: 1px solid var(--up);
   font-size: 0.6875rem; font-weight: 600; color: var(--up);
-  margin-left: auto;
+  /* Right-alignment now lives on .topbar-clock (the first item of the right
+     cluster) so the clock sits immediately left of this pill. A second
+     margin-left:auto here would split the free space and re-center the clock. */
 }
 /* Market-session states — dot + ping inherit the pill's text color. */
 .statuspill.mkt-ext {

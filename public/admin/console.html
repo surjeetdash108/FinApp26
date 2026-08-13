@@ -324,6 +324,107 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 @media(max-width:980px){.studio{grid-template-columns:1fr}.preview-card{position:static}}
 @media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.plancards{grid-template-columns:1fr}}
 @media(max-width:720px){.app{grid-template-columns:1fr}.side{display:none}}
+/* ===== blog board (ported) ===== */
+/* blogs */
+.blog-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start}
+.blog-preview{position:sticky;top:76px}
+.blog-editor .fl{display:block;font:600 10px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin:15px 0 7px}
+.dropz{display:flex;align-items:center;gap:14px;border:1.5px dashed var(--border2);background:var(--surface2);border-radius:12px;padding:16px 18px;cursor:pointer;color:var(--dim);transition:border-color .15s,background .15s}
+.dropz:hover,.dropz.drag{border-color:var(--brand);background:#7c6cf50e}
+.dropz svg{color:var(--brand2);flex:none}
+.dropz b{display:block;color:var(--hi);font-size:13.5px}
+.dropz span{font-size:12px;color:var(--dim2);font-family:var(--f-mono)}
+.brow2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.brow3{display:grid;grid-template-columns:1fr 1fr .7fr;gap:12px}
+.blog-body-edit{min-height:200px;max-height:340px;overflow:auto;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:14px 16px;color:var(--text);font-size:14px;line-height:1.6;outline:none}
+.blog-body-edit:focus{border-color:var(--brand)}
+.blog-body-edit:empty::before{content:attr(data-ph);color:var(--dim2)}
+.blog-body-edit h1,.blog-body-edit h2,.blog-body-edit h3{font-family:var(--f-disp);color:var(--hi);margin:14px 0 8px}
+.blog-body-edit h2{font-size:18px}.blog-body-edit h3{font-size:16px}
+.blog-body-edit p{margin:0 0 12px}.blog-body-edit ul,.blog-body-edit ol{padding-left:20px}
+.blog-body-edit img{max-width:100%;border-radius:8px}
+.blog-body-edit table{border-collapse:collapse;width:100%;font-size:12.5px}.blog-body-edit td,.blog-body-edit th{border:1px solid var(--border2);padding:6px 9px}
+/* preview article */
+.bp-stage{background:#faf8f2;border-radius:10px;overflow:hidden;max-height:640px;overflow-y:auto}
+.bp-art{padding:26px 30px 34px;color:#181713;font-family:'Newsreader',Georgia,serif}
+.bp-art .kick{font:600 11px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}
+.bp-art h1{font-family:'Fraunces',Georgia,serif;font-weight:900;font-size:30px;line-height:1.05;letter-spacing:-.02em;margin:8px 0 12px;color:#181713}
+.bp-art .meta{display:flex;gap:12px;font:600 10px var(--f-mono);letter-spacing:.05em;text-transform:uppercase;color:#736f66;border-top:1px solid #ddd8cc;border-bottom:1px solid #ddd8cc;padding:8px 0;margin-bottom:16px}
+.bp-art .fig{height:170px;border-radius:5px;overflow:hidden;margin-bottom:16px;background:#0b1020}
+.bp-art .fig svg{width:100%;height:100%}
+.bp-art .body{font-size:16px;line-height:1.62;color:#221f1a}
+.bp-art .body h2{font-family:'Fraunces',Georgia,serif;font-size:20px;margin:18px 0 8px}
+.bp-art .body p{margin:0 0 13px}
+.bp-art .body p:first-of-type::first-letter{font-family:'Fraunces',Georgia,serif;font-weight:900;font-size:50px;float:left;line-height:.8;padding:4px 8px 0 0}
+.bp-art .body blockquote{border-left:3px solid var(--brand);margin:16px 0;padding-left:16px;font-family:'Fraunces',Georgia,serif;font-size:18px;color:#181713}
+.bp-art .body ul,.bp-art .body ol{padding-left:20px}
+.bp-empty{padding:60px 24px;text-align:center;color:var(--dim2);font-size:13px}
+.zone-pill{display:inline-flex;align-items:center;gap:6px;font:600 10px var(--f-mono);padding:3px 9px;border-radius:20px}
+.z-lead{color:var(--brand2);background:#7c6cf51c}.z-stock{color:var(--info);background:#38d6e618}.z-news{color:var(--up);background:#2fe6a616}.z-edu{color:var(--warn);background:#ffb5471a}
+/* blog zone board */
+.board-note{font-size:13px;color:var(--dim);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 15px;margin-bottom:16px}
+.board-note .cash{font-family:var(--f-mono);color:var(--brand2)}
+.blogboard{display:grid;grid-template-columns:1fr 1.7fr 1fr;grid-template-areas:"left center right" "bottom bottom bottom";gap:14px}
+.z-l{grid-area:left}.z-c{grid-area:center}.z-r{grid-area:right}.z-b{grid-area:bottom}
+.bzone{border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:14px;display:flex;flex-direction:column;min-height:230px}
+.bzone.z-c{min-height:340px}
+.bzone .zh{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.bzone .zh .zdot{width:9px;height:9px;border-radius:3px;flex:none}
+.bzone .zh h4{font-family:var(--f-disp);font-size:14px;font-weight:600;margin:0;color:var(--hi)}
+.bzone .zh .zpos{font:600 9px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
+.bzone .zh .zn{margin-left:auto;font:600 11px var(--f-mono);color:var(--dim2)}
+.zdrop{border:1.5px dashed var(--border2);border-radius:10px;background:var(--surface2);padding:13px;text-align:center;color:var(--dim2);cursor:pointer;font-size:12px;transition:.15s;margin-bottom:11px}
+.zdrop:hover,.zdrop.drag{border-color:var(--brand);color:var(--brand2);background:#7c6cf50e}
+.zdrop svg{display:block;margin:0 auto 5px;color:var(--brand2)}
+.zdrop b{color:var(--hi);font-weight:600}
+.zlist{display:flex;flex-direction:column;gap:9px;overflow-y:auto;overflow-x:hidden;max-height:470px}
+.z-b .zlist{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-height:none}
+/* drag to reorder / move between zones */
+.zcard{position:relative;border:1px solid var(--border);border-radius:10px;background:var(--surface2);padding:11px 12px;cursor:pointer;transition:border-color .12s}
+.zcard[draggable]{cursor:grab}
+.zcard.dragging{opacity:.4;cursor:grabbing}
+.zcard.over-top::before,.zcard.over-bot::after{content:"";position:absolute;left:6px;right:6px;height:2px;background:var(--brand);border-radius:2px}
+.zcard.over-top::before{top:-6px}.zcard.over-bot::after{bottom:-6px}
+.bzone.carddrag{background:#7c6cf50a;border-color:var(--brand)}
+.bzone.filedrag{border-color:var(--brand);background:#7c6cf512}
+.zlist.tail-over{box-shadow:inset 0 -2px 0 var(--brand)}
+.zcard:hover{border-color:var(--brand)}
+.zcard .zk{font:600 9px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--brand2)}
+.zcard h5{font-family:var(--f-disp);font-weight:600;font-size:14px;line-height:1.2;margin:5px 0 5px;color:var(--hi)}
+.bzone.z-c .zcard.lead h5{font-size:17px}
+.zcard .zd{font-size:12px;color:var(--dim);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.zcard .zby{font:600 9px var(--f-mono);color:var(--dim2);margin-top:6px;text-transform:uppercase}
+.zcard .zx{position:absolute;top:7px;right:7px;width:20px;height:20px;border:none;border-radius:6px;background:#0006;color:var(--dim);cursor:pointer;display:none;place-items:center;font-size:13px}
+.zcard:hover .zx{display:grid}.zcard .zx:hover{color:var(--down);background:#ff5d7a22}
+/* rank badge + reorder controls */
+.zcard .zrk{position:absolute;top:8px;left:-1px;font:600 9px var(--f-mono);background:var(--brand);color:#fff;padding:2px 6px;border-radius:0 6px 6px 0}
+.zcard{padding-left:16px}
+.zmove{display:flex;gap:4px;margin-top:8px}
+.zmove button{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--dim);border-radius:6px;padding:3px 0;cursor:pointer;font-size:11px;line-height:1.4;transition:.12s}
+.zmove button:hover:not(:disabled){border-color:var(--brand);color:var(--brand2)}
+.zmove button:disabled{opacity:.3;cursor:default}
+.zempty{color:var(--dim2);font-size:12px;text-align:center;padding:16px 0}
+/* per-card publish/draft toggle */
+.zcard .zst{position:absolute;top:7px;right:33px;border:1px solid transparent;border-radius:6px;padding:2px 7px;font:600 8.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;background:#2fe6a618;color:#2fe6a6;border-color:#2fe6a633;transition:.12s}
+.zcard .zst.draft{background:#ffb54718;color:#ffb547;border-color:#ffb54733}
+.zcard .zst:hover{filter:brightness(1.15)}
+/* staged-changes bar */
+.pubbar{position:sticky;bottom:16px;z-index:15;display:none;align-items:center;gap:13px;margin-top:18px;
+  background:linear-gradient(180deg,var(--surface),var(--surface2));border:1px solid var(--brand);
+  border-radius:13px;padding:13px 16px;box-shadow:0 16px 40px -18px #000,0 0 0 4px #7c6cf514}
+.pubbar.on{display:flex;animation:pbin .22s ease both}
+@keyframes pbin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.pubbar .pdot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none;box-shadow:0 0 0 4px #ffb54722}
+.pubbar .ptxt{display:flex;flex-direction:column;gap:2px;margin-right:auto;min-width:0}
+.pubbar .ptxt b{font-size:13.5px;color:var(--hi);font-weight:600}
+.pubbar .ptxt span{font:500 11px var(--f-mono);color:var(--dim2)}
+.pubbar .btn{flex:none;padding:9px 16px}
+.pubbar .btn-pub{flex:none;padding:10px 20px}
+.bm-place{display:inline-flex;align-items:center;gap:7px;font:600 11px var(--f-mono);padding:5px 11px;border-radius:20px;margin-bottom:8px}
+@media(max-width:1000px){.blogboard{grid-template-columns:1fr;grid-template-areas:"center" "left" "right" "bottom"}.z-b .zlist{grid-template-columns:1fr 1fr}}
+.chan{display:inline-flex;gap:5px;align-items:center}
+.chan .ci{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;color:#fff}
+
 </style>
 </head>
 <body>
@@ -341,6 +442,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
     <div class="nav" data-view="monitor"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Monitor</div>
     <div class="navlbl">Grow</div>
     <div class="nav" data-view="studio"><svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.3" fill="currentColor"/></svg>Social Studio<span class="badge-ig">IG</span></div>
+    <div class="nav" data-view="blogs"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5h13a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Z" stroke="currentColor" stroke-width="2"/><path d="M8 9h7M8 13h7M8 17h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Blogs</div>
     <div class="side-foot">
       <div class="av" id="admAv">A</div>
       <div class="who" style="flex:1"><b id="admName">admin</b><span id="admEmail">Owner · admin</span></div>
@@ -524,6 +626,12 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
         </div>
       </section>
 
+      <section class="view" id="blogs">
+        <div class="board-note">Drop a <b>Word</b> or <b>PDF</b> file anywhere on a section below — it converts, you confirm the details, and it saves straight to your site. Use each card's <b>Live / Draft</b> toggle to control whether it shows publicly. <b>Drag cards</b> to reorder them or move them between sections; the order here is the order on the site. This board mirrors <span class="cash">marketcatalyst.ai</span> · the newspaper page.</div>
+        <div class="blogboard" id="blogboard"></div>
+        <input type="file" id="blogFile" accept=".docx,.pdf" hidden>
+      </section>
+
       <!-- SETTINGS -->
     </div>
   </main>
@@ -551,9 +659,42 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
   <div class="mf"><button class="btn" style="flex:none" onclick="testEndpoint()">Test connection</button><button class="btn-pub" style="flex:none;padding:11px 20px" onclick="saveSetup()">Save</button></div>
 </div>
 
+<!-- BLOG PUBLISH / EDIT MODAL (ported) -->
+<div class="scrim" id="blogScrim" onclick="closeBlogModal()"></div>
+<div class="modal" id="blogModal" style="width:600px">
+  <div class="mh"><h3 id="bmTitle">New article</h3><button class="x" onclick="closeBlogModal()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
+  <div class="mb">
+    <div class="bm-place" id="bmPlace"></div>
+    <label class="fl">Title/file name</label><input id="bTitle" class="inp" maxlength="120" placeholder="Article headline or file name">
+    <div class="brow2">
+      <div><label class="fl">Kicker / category</label><input id="bKick" class="inp" placeholder="Analysis · $NVDA"></div>
+      <div><label class="fl">Placement</label><select id="bZone" class="inp">
+        <option value="lead">Featured — center</option><option value="stock">Stock 101 — left</option><option value="news">Market 101 — bottom</option><option value="edu">Educational 101 — right</option></select></div>
+    </div>
+    <div class="brow3">
+      <div><label class="fl">Author</label><input id="bAuthor" class="inp" placeholder="Desk"></div>
+      <div><label class="fl">Read time</label><input id="bRead" class="inp" placeholder="4 min"></div>
+      <div><label class="fl">Rank</label><input id="bRank" class="inp" type="number" min="1" step="1" placeholder="1"></div>
+    </div>
+    <label class="fl">Summary / dek</label><textarea id="bDek" class="inp" rows="2" placeholder="One or two sentences that tease the piece."></textarea>
+    <div id="bDekErr" style="display:none;color:var(--down);font-size:11.5px;margin-top:4px">Summary is required.</div>
+    <label class="fl">Body <span class="cc" id="bWords"></span></label>
+    <div id="bBody" class="blog-body-edit" contenteditable="true" data-ph="Drop a file to fill this, or type your article here…"></div>
+  </div>
+  <div class="mf"><button class="btn" style="flex:none" onclick="closeBlogModal()">Cancel</button><button class="btn-pub sch" style="flex:none;padding:11px 22px" id="bPublish">Publish</button></div>
+</div>
+
+
 <!-- DRAWER -->
 <div class="scrim" id="scrim" onclick="closeUser()"></div>
 <div class="drawer" id="drawer"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- Blog articles are read/written through the postMessage bridge to the React
+     parent (app/admin/page.tsx), which owns the admin token and calls the
+     backend's /admin/blogs surface. This iframe holds no Firebase SDK. -->
 
 <script>
 /* ---------------- mock data ---------------- */
@@ -1343,8 +1484,312 @@ function initStudio(){
 }
 initStudio();
 
+/* ================= BLOGS (zone board) ================= */
+const ZONES={
+  lead:{label:'Featured',pos:'center',cls:'z-lead',dot:'#7c6cf5',area:'z-c'},
+  stock:{label:'Stock 101',pos:'left column',cls:'z-stock',dot:'#38d6e6',area:'z-l'},
+  edu:{label:'Educational 101',pos:'right column',cls:'z-edu',dot:'#ffb547',area:'z-r'},
+  news:{label:'Market 101',pos:'bottom',cls:'z-news',dot:'#2fe6a6',area:'z-b'}
+};
+const ZORDER=['stock','lead','edu','news'];
+/* ---------------------------------------------------------------
+   REAL CONTENT — the board reads its articles from the staged admin
+   dataset (REAL.blogs), delivered by the React parent before this
+   iframe loads, and writes them straight to the backend through the
+   postMessage bridge. There is no local staging/publish step and no
+   demo seed: an empty backend shows an empty board.
+   --------------------------------------------------------------- */
+/* Normalises a raw blog row (staged snapshot OR a refreshed list posted back
+   after a write) into the shape the board renders. Missing fields default so a
+   partial row never breaks a render. */
+function normalizeBlog(p){
+  p=p||{};
+  return {
+    id:p.id,
+    zone:p.zone||'lead',
+    rank:(typeof p.rank==='number')?p.rank:999,
+    kick:p.kick||'',
+    title:p.title||'',
+    dek:p.dek||'',
+    author:p.author||'',
+    read:p.read||'',
+    date:p.date||'',
+    html:p.html||'',
+    status:p.status||'Published'
+  };
+}
+/* The live working set. Seeded from the staged dataset; replaced wholesale by
+   the refreshed list the parent posts back after every successful write. */
+let BLOGS=(REAL&&Array.isArray(REAL.blogs))?REAL.blogs.map(normalizeBlog):[];
+/* The bridge is live whenever we loaded inside the admin app with real data.
+   Opened standalone (design review, no staged data) there is no parent backend
+   to talk to, so writes are suppressed and the board is read-only/empty. */
+const BLOG_BRIDGE=!IS_DEMO;
+function blogPost(msg){ try{ parent.postMessage(msg,'*'); }catch(e){} }
+const bEl=id=>document.getElementById(id);
+let _targetZone='lead', _editId=null;
+
+async function convertFile(file){
+  const name=(file.name||'').toLowerCase();
+  try{
+    let html='';
+    if(name.endsWith('.docx')){
+      if(typeof mammoth==='undefined'){toast('Converter still loading — try again in a moment');return null;}
+      html=(await mammoth.convertToHtml({arrayBuffer:await file.arrayBuffer()})).value||'<p>(empty document)</p>';
+    } else if(name.endsWith('.pdf')){
+      if(typeof pdfjsLib==='undefined'){toast('PDF reader still loading — try again in a moment');return null;}
+      const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+      for(let i=1;i<=pdf.numPages;i++){const tc=await (await pdf.getPage(i)).getTextContent();let line='',lastY=null;const paras=[];
+        tc.items.forEach(it=>{const y=it.transform[5];if(lastY!==null&&Math.abs(y-lastY)>6){if(line.trim())paras.push(line.trim());line='';}line+=it.str+' ';lastY=y;});
+        if(line.trim())paras.push(line.trim());
+        html+=paras.map(p=>`<p>${xesc(p)}</p>`).join('');}
+      html=html||'<p>(No selectable text — this PDF looks scanned. Try a Word file for formatting.)</p>';
+    } else {toast('Please upload a .docx or .pdf');return null;}
+    toast('Imported '+file.name);
+    return {title:file.name.replace(/\.(docx|pdf)$/i,'').replace(/[-_]/g,' '),html};
+  }catch(e){toast('Could not read file: '+e.message);return null;}
+}
+/* Articles inside a zone are ordered by rank, lowest first. Rank 1 sits at the
+   top of the tray on the live site (and is the featured slot in the centre). */
+function zoneposts(z){
+  return BLOGS.filter(p=>p.zone===z).sort((a,b)=>(a.rank??999)-(b.rank??999));
+}
+function nextRank(z,exceptId){
+  const n=BLOGS.filter(p=>p.zone===z&&p.id!==exceptId).length;
+  return n+1;
+}
+/* Flattens a zone's ranks to a clean 1..n (lowest first) after an optimistic
+   local reorder, and returns the {id,zone,rank} order to send to the backend. */
+function renumber(z){
+  return zoneposts(z).map((p,i)=>{ p.rank=i+1; return {id:p.id,zone:z,rank:i+1}; });
+}
+/* Sends a batch of {id,zone,rank} rows to the backend via the bridge. The
+   parent PATCHes each and posts the refreshed list back (admin:blogReorderResult). */
+function sendReorder(orders){
+  if(!BLOG_BRIDGE){ renderBoard(); return; }   // standalone review: local only
+  blogPost({type:'admin:blogReorder',orders});
+}
+function moveBlog(id,dir){
+  const p=BLOGS.find(x=>x.id===id); if(!p) return;
+  const posts=zoneposts(p.zone), i=posts.findIndex(x=>x.id===id), j=i+dir;
+  if(j<0||j>=posts.length) return;
+  if(!confirm('Change the article order? The new order goes live on the site immediately.')) return;                    // Cancel: no change
+  posts.splice(i,1); posts.splice(j,0,p);       // reorder the temp array…
+  const orders=posts.map((x,k)=>{ x.rank=k+1; return {id:x.id,zone:p.zone,rank:k+1}; }); // …then renumber
+  renderBoard();                                 // optimistic
+  sendReorder(orders);
+  toast('Moved to #'+(j+1));
+}
+function zdropSVG(){return '<svg width="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M7 9l5-5 5 5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round"/></svg>';}
+function renderBoard(){
+  const board=bEl('blogboard');if(!board)return;
+  board.innerHTML=ZORDER.map(z=>{
+    const m=ZONES[z], posts=zoneposts(z);
+    const cards=posts.length?posts.map((p,i)=>`<div class="zcard ${z==='lead'&&i===0?'lead':''}" draggable="true" data-id="${p.id}" onclick="openBlogModal('${z}','${p.id}')">
+        <span class="zrk">${i+1}</span>
+        <button class="zst ${p.status==='Draft'?'draft':''}" title="${p.status==='Draft'?'Draft — click to publish':'Live — click to unpublish'}" onclick="event.stopPropagation();togglePublish('${p.id}')">${p.status==='Draft'?'Draft':'Live'}</button>
+        <button class="zx" title="Remove" onclick="event.stopPropagation();deleteBlog('${p.id}')">×</button>
+        <div class="zk">${xesc(p.kick||'')}</div><h5>${xesc(p.title||'Untitled')}</h5>
+        ${p.dek?`<div class="zd">${xesc(p.dek)}</div>`:''}
+        <div class="zby">${xesc(p.author||'Desk')} · ${xesc(p.read||'')}</div>
+        <div class="zmove">
+          <button title="Move up" ${i===0?'disabled':''} onclick="event.stopPropagation();moveBlog('${p.id}',-1)">↑</button>
+          <button title="Move down" ${i===posts.length-1?'disabled':''} onclick="event.stopPropagation();moveBlog('${p.id}',1)">↓</button>
+        </div></div>`).join('')
+      :`<div class="zempty">No articles here yet</div>`;
+    return `<div class="bzone ${m.area}" data-zone="${z}">
+      <div class="zh"><span class="zdot" style="background:${m.dot}"></span><h4>${m.label}</h4><span class="zpos">${m.pos}</span><span class="zn">${posts.length}</span></div>
+      <div class="zdrop" data-zone="${z}">${zdropSVG()}<b>Drop .docx / .pdf</b> anywhere here, or click</div>
+      <div class="zlist">${cards}</div></div>`;
+  }).join('');
+  board.querySelectorAll('.zdrop').forEach(dz=>{
+    const z=dz.dataset.zone;
+    dz.onclick=()=>{_targetZone=z;const f=bEl('blogFile');f.value='';f.click();};
+  });
+  wireCardDrag(board);
+  wireFileDrop(board);
+}
+
+/* ---- drag a card: reorder inside a zone, or move it to another zone ---- */
+let _drag=null;
+const isFile=e=>Array.from(e.dataTransfer.types||[]).includes('Files');
+function clearMarks(board){
+  board.querySelectorAll('.over-top,.over-bot').forEach(n=>n.classList.remove('over-top','over-bot'));
+  board.querySelectorAll('.carddrag').forEach(n=>n.classList.remove('carddrag'));
+  board.querySelectorAll('.tail-over').forEach(n=>n.classList.remove('tail-over'));
+}
+function wireCardDrag(board){
+  board.querySelectorAll('.zcard[draggable]').forEach(card=>{
+    card.addEventListener('dragstart',e=>{
+      _drag=card.dataset.id;
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',_drag);   // Firefox needs a payload
+      setTimeout(()=>card.classList.add('dragging'),0);
+    });
+    card.addEventListener('dragend',()=>{_drag=null;card.classList.remove('dragging');clearMarks(board);});
+    card.addEventListener('dragover',e=>{
+      if(!_drag||isFile(e))return;
+      e.preventDefault();e.stopPropagation();
+      const r=card.getBoundingClientRect(), after=(e.clientY-r.top)>r.height/2;
+      card.classList.toggle('over-bot',after);card.classList.toggle('over-top',!after);
+    });
+    card.addEventListener('dragleave',()=>card.classList.remove('over-top','over-bot'));
+    card.addEventListener('drop',async e=>{
+      if(!_drag||isFile(e))return;
+      e.preventDefault();e.stopPropagation();
+      const r=card.getBoundingClientRect(), after=(e.clientY-r.top)>r.height/2;
+      const zone=card.closest('.bzone').dataset.zone;
+      const order=zoneposts(zone).map(p=>p.id).filter(id=>id!==_drag);
+      let at=order.indexOf(card.dataset.id); if(at<0)at=order.length; if(after)at++;
+      await placeAt(_drag,zone,at);
+    });
+  });
+  /* dropping past the last card, or on an empty zone, appends */
+  board.querySelectorAll('.bzone').forEach(zone=>{
+    zone.addEventListener('dragover',e=>{
+      if(!_drag||isFile(e))return;
+      e.preventDefault();zone.classList.add('carddrag');
+      const list=zone.querySelector('.zlist'); if(list)list.classList.add('tail-over');
+    });
+    zone.addEventListener('dragleave',e=>{
+      if(zone.contains(e.relatedTarget))return;
+      zone.classList.remove('carddrag');
+      const list=zone.querySelector('.zlist'); if(list)list.classList.remove('tail-over');
+    });
+    zone.addEventListener('drop',async e=>{
+      if(!_drag||isFile(e))return;
+      e.preventDefault();
+      const z=zone.dataset.zone;
+      await placeAt(_drag,z,zoneposts(z).filter(p=>p.id!==_drag).length);
+    });
+  });
+}
+/* Puts a post at index `at` of `zone`, then renumbers the affected zone(s) to a
+   clean 1..n and sends the new order (plus the moved card's new zone) to the
+   backend. A cross-zone move carries `zone` per row so the parent PATCHes it. */
+async function placeAt(id,zone,at){
+  const p=BLOGS.find(x=>x.id===id); if(!p)return;
+  const from=p.zone, moved=from!==zone;
+  if(!confirm('Change the article order? The new order goes live on the site immediately.')){ renderBoard(); return; }   // Cancel: restore board, no change
+  const rest=zoneposts(zone).filter(x=>x.id!==id);
+  const idx=Math.max(0,Math.min(at,rest.length));
+  rest.splice(idx,0,p);
+  p.zone=zone;
+  const orders=rest.map((x,i)=>{ x.rank=i+1; return {id:x.id,zone,rank:i+1}; });
+  if(moved){ orders.push(...renumber(from)); }   // resequence the source zone too
+  renderBoard();                                  // optimistic
+  sendReorder(orders);
+  toast(moved?('Moved to '+(ZONES[zone]||ZONES.lead).label+' · #'+(idx+1))
+             :('Now #'+(idx+1)));
+}
+
+/* ---- drop a .docx/.pdf anywhere on a zone, not just the dashed strip ---- */
+function wireFileDrop(board){
+  board.querySelectorAll('.bzone').forEach(zone=>{
+    const z=zone.dataset.zone;
+    zone.addEventListener('dragover',e=>{
+      if(!isFile(e))return;
+      e.preventDefault();e.dataTransfer.dropEffect='copy';zone.classList.add('filedrag');
+    });
+    zone.addEventListener('dragleave',e=>{ if(!zone.contains(e.relatedTarget))zone.classList.remove('filedrag'); });
+    zone.addEventListener('drop',async e=>{
+      if(!isFile(e))return;
+      e.preventDefault();zone.classList.remove('filedrag');
+      const files=Array.from(e.dataTransfer.files||[]);
+      if(!files.length)return;
+      if(files.length>1)toast('One file at a time — taking '+files[0].name);
+      const d=await convertFile(files[0]);
+      if(d){_targetZone=z;openBlogModal(z,null,d);}
+    });
+  });
+}
+function updateBlogWords(){const t=(bEl('bBody').innerText||'').trim();bEl('bWords').textContent=t?(t.split(/\s+/).length+' words'):'';}
+function updatePlaceChip(){const z=bEl('bZone').value||'lead',m=ZONES[z]||ZONES.lead;bEl('bmPlace').className='bm-place '+m.cls;bEl('bmPlace').innerHTML=`<span style="width:8px;height:8px;border-radius:3px;background:${m.dot};display:inline-block"></span>${m.label} · ${m.pos}`;}
+function openBlogModal(zone,editId,draft){
+  _editId=editId||null;
+  const p=editId?(BLOGS.find(x=>x.id===editId)||{}):{zone,kick:'',title:draft?draft.title:'',dek:'',author:'',read:'',html:draft?draft.html:''};
+  const z=p.zone||zone;
+  bEl('bmTitle').textContent=editId?'Edit article':'New article';
+  bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';bEl('bBody').innerHTML=p.html||'';
+  bEl('bRank').value=p.rank||nextRank(z,editId);
+  bEl('bDek').style.borderColor='';bEl('bDekErr').style.display='none';
+  updatePlaceChip();updateBlogWords();
+  bEl('bPublish').textContent=editId?'Update':'Publish';
+  bEl('blogModal').classList.add('on');bEl('blogScrim').classList.add('on');
+}
+function closeBlogModal(){bEl('blogModal').classList.remove('on');bEl('blogScrim').classList.remove('on');_editId=null;}
+/* Modal save = write straight to the backend through the bridge. The parent
+   POSTs (new) or PATCHes (edit), then posts the refreshed list back. */
+function savePublish(){
+  const d={zone:bEl('bZone').value||'lead',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value,author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
+  if(!d.title){toast('Add a title first');return;}
+  if(!d.dek.trim()){ const dk=bEl('bDek'); dk.style.borderColor='var(--down)'; bEl('bDekErr').style.display='block'; dk.focus(); return; }
+  const typed=parseInt(bEl('bRank').value,10);
+  d.rank=(typed&&typed>0)?typed:nextRank(d.zone,_editId);
+  // Preserve an existing article's published/draft state across edits; a brand
+  // new one defaults to Published (visible on the site immediately).
+  const existing=_editId?BLOGS.find(x=>x.id===_editId):null;
+  d.status=existing?(existing.status||'Published'):'Published';
+  if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to save'); closeBlogModal(); return; }
+  if(!confirm('Publish “'+d.title+'”? It will go live on the site immediately.')) return;   // Cancel: keep editing, nothing is saved
+  const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status};
+  if(_editId)msg.id=_editId;
+  blogPost(msg);
+  toast(_editId?'Saving edit…':'Publishing article…');
+  closeBlogModal();
+}
+function deleteBlog(id){
+  const p=BLOGS.find(x=>x.id===id);if(!p)return;
+  if(!confirm('Delete “'+(p.title||'this article')+'”? This removes it from your site.'))return;
+  if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to delete'); return; }
+  const i=BLOGS.findIndex(x=>x.id===id);if(i>=0)BLOGS.splice(i,1);
+  renderBoard();                                  // optimistic; result reconciles
+  blogPost({type:'admin:blogDelete',id});
+  toast('Deleting…');
+}
+/* Per-card Live/Draft toggle: flips status on the backend. */
+function togglePublish(id){
+  const p=BLOGS.find(x=>x.id===id);if(!p)return;
+  const next=(p.status==='Draft')?'Published':'Draft';
+  if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin'); return; }
+  if(!confirm((next==='Published'?'Publish “':'Unpublish “')+(p.title||'this article')+'”?')) return;   // Cancel: no change
+  p.status=next;                                  // optimistic
+  renderBoard();
+  blogPost({type:'admin:blogPublish',id,status:next});
+  toast(next==='Published'?'Publishing…':'Unpublishing…');
+}
+
+/* ---- write results from the parent ----
+   Every blog write (save / delete / publish / reorder) is answered by the
+   parent with { ok, error?, blogs? }. When the refreshed list is present we
+   replace the working set wholesale and re-render, so the board always ends up
+   matching the true backend state — reverting any optimistic edit that failed. */
+window.addEventListener('message',function(e){
+  const d=e.data||{};
+  if(!/^admin:blog(Save|Delete|Publish|Reorder)Result$/.test(d.type||''))return;
+  if(Array.isArray(d.blogs)){
+    BLOGS=d.blogs.map(normalizeBlog);
+    renderBoard();
+  }
+  if(d.ok===false){
+    toast('Could not save: '+(d.error||'unknown error'));
+  }
+});
+
+function initBlogs(){
+  const file=bEl('blogFile');
+  file.onchange=async e=>{const f=e.target.files[0];if(f){const d=await convertFile(f);if(d)openBlogModal(_targetZone||'lead',null,d);}};
+  bEl('bBody').addEventListener('input',updateBlogWords);
+  bEl('bDek').addEventListener('input',()=>{ bEl('bDek').style.borderColor=''; bEl('bDekErr').style.display='none'; });
+  bEl('bZone').addEventListener('change',updatePlaceChip);
+  bEl('bPublish').onclick=savePublish;
+  try{if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}catch(e){}
+  renderBoard();
+}
+initBlogs();
+
 /* ---------- nav ---------- */
-const TITLES={overview:'Overview <span>· last 30 days</span>',users:'Users',subs:'Subscriptions',revenue:'Revenue',usage:'Usage &amp; API',monitor:'Monitor <span>· backend services</span>',studio:'Social Studio <span>· push to Instagram &amp; more</span>'};
+const TITLES={overview:'Overview <span>· last 30 days</span>',users:'Users',subs:'Subscriptions',revenue:'Revenue',usage:'Usage &amp; API',monitor:'Monitor <span>· backend services</span>',studio:'Social Studio <span>· push to Instagram &amp; more</span>',blogs:'Blogs <span>· publish articles to your site</span>'};
 /* The backend monitor is loaded LAZILY, on first visit to the Monitor tab.
    Mounting its iframe at page load would fire a cross-origin request on every
    admin session — including the ones that never open this tab — and, since the
@@ -1461,14 +1906,44 @@ window.addEventListener('message', function(e){
   if (!d.ok) document.getElementById('monitorSrc').textContent = 'Re-check failed: ' + (d.error || 'error');
 });
 
-function switchView(name){
+/* Known views ↔ URL segments map 1:1 by name (overview → the bare /admin). The
+   console is a same-origin iframe, so it drives the PARENT's URL/history so each
+   screen deep-links (/admin/users, /admin/subs, …). All parent access is wrapped
+   in try/catch — standalone review of console.html has no parent. */
+const KNOWN_VIEWS = ['overview','users','subs','revenue','usage','monitor','studio','blogs'];
+
+function viewFromParentPath(){
+  try{
+    const seg = (window.parent.location.pathname.replace(/^\/admin\/?/, '').split('/')[0] || 'overview');
+    return KNOWN_VIEWS.includes(seg) ? seg : 'overview';
+  }catch(e){ return 'overview'; }
+}
+
+function switchView(name, opts){
+  opts = opts || {};
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.view===name));
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id===name));
   if (name === 'monitor') renderMonitor();
   document.getElementById('pageTitle').innerHTML=TITLES[name]||name;
   document.querySelector('.main').scrollTo({top:0});
+  // Reflect the active screen in the parent URL — but never when the switch was
+  // itself triggered by a popstate (that would fight the browser's own history).
+  if (!opts.fromPop){
+    try {
+      const p = name === 'overview' ? '/admin' : '/admin/' + name;
+      if (window.parent && window.parent.location.pathname !== p) window.parent.history.pushState({}, '', p);
+    } catch(e){}
+  }
 }
 document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>switchView(n.dataset.view));
+
+// Deep-link on load: open the tab named by the parent path (default overview).
+switchView(viewFromParentPath(), { fromPop:true });
+
+// Browser back/forward re-switches the tab without pushing a new entry.
+try {
+  window.parent.addEventListener('popstate', () => switchView(viewFromParentPath(), { fromPop:true }));
+} catch(e){}
 </script>
 
 <!-- Change-password modal (admin) -->

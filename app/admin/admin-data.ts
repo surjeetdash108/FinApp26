@@ -40,17 +40,6 @@ const AVATAR_COLORS = [
 // `import { ADMIN_EMAIL } from "./admin-data"` keeps working.
 export { ADMIN_EMAIL };
 
-/**
- * Staff accounts are excluded from every metric. The BACKEND already filters
- * staff out of `/admin/users` (AdminAnalyticsService.isStaff), so this set is a
- * second belt-and-braces guard for any client-side derivation.
- */
-const STAFF_EMAILS = new Set<string>([ADMIN_EMAIL]);
-
-export function isStaffAccount(email: string | null | undefined): boolean {
-  return !!email && STAFF_EMAILS.has(email.trim().toLowerCase());
-}
-
 export interface ConsoleUserRow {
   id: string;
   name: string;
@@ -97,6 +86,27 @@ export interface ConsolePlanRow {
   sortOrder: number;
 }
 
+/** A blog article for the console's newspaper-layout board. Mirrors the backend
+ *  `/admin/blogs` row shape; the console reads/writes these through the
+ *  postMessage bridge (it has no backend token of its own). */
+export interface ConsoleBlogRow {
+  id: string;
+  /** Board zone: lead | stock | edu | news. */
+  zone: string;
+  /** 1-based order within the zone (lowest first). */
+  rank: number;
+  kick: string;
+  title: string;
+  dek: string;
+  author: string;
+  read: string;
+  html: string;
+  /** "Published" | "Draft". */
+  status: string;
+  /** Display date string, as stored. */
+  date: string;
+}
+
 export interface ApiHealthEndpoint {
   method: string;
   path: string;
@@ -137,6 +147,9 @@ export interface ConsoleDataset {
   users: ConsoleUserRow[];
   /** Full plans, so the console can render and edit per-plan entitlements. */
   plans: ConsolePlanRow[];
+  /** Blog articles for the console's zone board. Mutations flow back through
+   *  the postMessage bridge (parent → backend); this is the initial snapshot. */
+  blogs: ConsoleBlogRow[];
   /** The entitlement catalog: label, one-line description, group and the
    *  staffOnly / unbuilt markers the editor renders. Includes every key, so a
    *  plan document missing one still shows it as an off toggle. */
@@ -205,6 +218,53 @@ interface BackendPlan {
   active?: boolean;
   sortOrder?: number;
 }
+interface BackendBlog {
+  id: string;
+  zone?: string;
+  rank?: number;
+  kick?: string;
+  title?: string;
+  dek?: string;
+  author?: string;
+  read?: string;
+  html?: string;
+  status?: string;
+  date?: string;
+}
+
+/** Presentation mapping for one backend blog row → the console's shape. Missing
+ *  fields default so a partial row still renders (never crashes the board). */
+function toConsoleBlog(b: BackendBlog): ConsoleBlogRow {
+  return {
+    id: b.id,
+    zone: b.zone ?? "lead",
+    rank: typeof b.rank === "number" ? b.rank : 999,
+    kick: b.kick ?? "",
+    title: b.title ?? "",
+    dek: b.dek ?? "",
+    author: b.author ?? "",
+    read: b.read ?? "",
+    html: b.html ?? "",
+    status: b.status ?? "Published",
+    date: b.date ?? "",
+  };
+}
+
+/**
+ * Fetches the blog board's articles from the AdminGuard-protected backend
+ * (`GET /admin/blogs`). Used both for the initial staged dataset and to re-fetch
+ * after a write so the board can reconcile to the true backend state. Returns []
+ * (never throws) when the endpoint is unavailable, so a missing blogs surface
+ * degrades to an empty board rather than blanking the whole console.
+ */
+export async function fetchAdminBlogs(): Promise<ConsoleBlogRow[]> {
+  try {
+    const res = await apiGet<{ blogs: BackendBlog[] }>("/api/admin/blogs");
+    return (res.blogs ?? []).map(toConsoleBlog);
+  } catch {
+    return [];
+  }
+}
 
 /** The console's status vocabulary, lower-case. */
 function toConsoleStatus(status: string): string {
@@ -270,16 +330,17 @@ export async function buildAdminDataset(): Promise<ConsoleDataset> {
   // UI → backend → Firebase → backend → UI. All three reads hit AdminGuard-
   // protected (or public, for /plans) backend routes; the browser touches no
   // Firestore. Payments may be empty → subscriptions falls back to [].
-  const [usersRes, subsRes, plansRes, adoptRes, apiHealthRes] = await Promise.all([
-    apiGet<{ users: BackendUserRow[] }>("/admin/users?limit=500"),
-    apiGet<{ subscriptions: BackendPaymentRow[] }>("/admin/subscriptions?limit=1000").catch(
+  const [usersRes, subsRes, plansRes, adoptRes, apiHealthRes, blogs] = await Promise.all([
+    apiGet<{ users: BackendUserRow[] }>("/api/admin/users?limit=500"),
+    apiGet<{ subscriptions: BackendPaymentRow[] }>("/api/admin/subscriptions?limit=1000").catch(
       () => ({ subscriptions: [] as BackendPaymentRow[] }),
     ),
     apiGet<{ plans: BackendPlan[] }>("/plans"),
-    apiGet<{ adoption: BackendAdoptionRow[] }>("/admin/feature-adoption").catch(
+    apiGet<{ adoption: BackendAdoptionRow[] }>("/api/admin/feature-adoption").catch(
       () => ({ adoption: [] as BackendAdoptionRow[] }),
     ),
-    apiGet<ApiHealthReport>("/admin/apihealth").catch(() => null),
+    apiGet<ApiHealthReport>("/api/admin/apihealth").catch(() => null),
+    fetchAdminBlogs(),
   ]);
 
   const backendUsers = usersRes.users ?? [];
@@ -357,6 +418,7 @@ export async function buildAdminDataset(): Promise<ConsoleDataset> {
   return {
     users,
     plans: planRows,
+    blogs,
     entitlementCatalog: ENTITLEMENT_CATALOG,
     backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ?? null,
     apiHealth,

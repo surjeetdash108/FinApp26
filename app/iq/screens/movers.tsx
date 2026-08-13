@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { type Mover, maPostureLabel } from "../data";
-import { fmt, sign, cls, arr, Spark, StockLogo, DataState } from "../utils";
+import { fmt, sign, arr, Spark, StockLogo } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { LiveMoverDoc, CompanyDoc } from "../types";
 
@@ -75,14 +75,18 @@ export function MoversScreen() {
   const availableCaps = ["All", ...CAP_ORDER.filter(c => movers.some(m => m.cap === c))];
   const effCap = availableCaps.includes(cap) ? cap : "All";
 
-  const filtered = movers
-    .filter(m => {
-      if (sector !== "All" && m.sector !== sector) return false;
-      if (effCap !== "All" && m.cap    !== effCap) return false;
-      if (tab === "win")  return m.pctChange > 0;
-      if (tab === "lose") return m.pctChange < 0;
-      return true;
-    })
+  // Rows matching the current tab + cap, but NOT the sector filter — this feeds
+  // the clickable sector tags below so every available sector stays selectable
+  // (a sector-filtered tally would collapse to a single tag after one click).
+  const tabCapRows = movers.filter(m => {
+    if (effCap !== "All" && m.cap !== effCap) return false;
+    if (tab === "win")  return m.pctChange > 0;
+    if (tab === "lose") return m.pctChange < 0;
+    return true;
+  });
+
+  const filtered = tabCapRows
+    .filter(m => sector === "All" || m.sector === sector)
     .sort((a, b) => {
       if (tab === "win")  return b.pctChange    - a.pctChange;
       if (tab === "lose") return a.pctChange    - b.pctChange;
@@ -92,7 +96,7 @@ export function MoversScreen() {
     .slice(0, 20);
 
   const tally: Record<string, number> = {};
-  filtered.forEach(m => { tally[m.sector] = (tally[m.sector] || 0) + 1; });
+  tabCapRows.forEach(m => { tally[m.sector] = (tally[m.sector] || 0) + 1; });
   const sectorTally = Object.entries(tally).sort((a, b) => b[1] - a[1]);
 
   const val = (m: Mover) => tab === "week" ? m.weekPct : m.pctChange;
@@ -115,25 +119,36 @@ export function MoversScreen() {
       {/* Filter bar */}
       <div className="fbar">
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Sector</span>
-        <select className="mv-sel" value={sector} onChange={e => setSector(e.target.value)}>
-          {sectors.map(s => <option key={s}>{s}</option>)}
+        <select className="mv-sel" style={{ textTransform: "lowercase" }} value={sector} onChange={e => setSector(e.target.value)}>
+          {sectors.map(s => <option key={s} value={s}>{s.toLowerCase()}</option>)}
         </select>
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 10 }}>Market cap</span>
-        <select className="mv-sel" value={effCap} onChange={e => setCap(e.target.value)}>
-          {availableCaps.map(c => <option key={c}>{c}</option>)}
+        <select className="mv-sel" style={{ textTransform: "lowercase" }} value={effCap} onChange={e => setCap(e.target.value)}>
+          {availableCaps.map(c => <option key={c} value={c}>{c.toLowerCase()}</option>)}
         </select>
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{filtered.length} stocks</span>
       </div>
 
-      {/* Sector tally */}
+      {/* Clickable sector tags — click to filter the movers by that sector,
+          click the active one again to clear back to All. */}
       {sectorTally.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-          {sectorTally.map(([sec, count]) => (
-            <span key={sec} className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>
-              {sec} <b style={{ color: "var(--text-hi)" }}>{count}</b>
-            </span>
-          ))}
+          {sectorTally.map(([sec, count]) => {
+            const active = sector === sec;
+            return (
+              <span key={sec} className="pill"
+                onClick={() => setSector(active ? "All" : sec)}
+                style={{
+                  cursor: "pointer",
+                  background: active ? "var(--brand-2)" : "var(--surface-3)",
+                  color: active ? "#fff" : "var(--text-dim-solid)",
+                }}
+              >
+                {sec} <b style={{ color: active ? "#fff" : "var(--text-hi)" }}>{count}</b>
+              </span>
+            );
+          })}
         </div>
       )}
 

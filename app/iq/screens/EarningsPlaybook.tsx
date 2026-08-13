@@ -167,6 +167,15 @@ function Spark({ rows }: { rows: Row[] }) {
   );
 }
 
+function Stat({ k, children }: { k: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ font: "600 .62rem var(--f-mono)", letterSpacing: ".08em", color: "var(--text-dim-solid)", textTransform: "uppercase" }}>{k}</div>
+      <div style={{ marginTop: 5 }}>{children}</div>
+    </div>
+  );
+}
+
 export function EarningsPlaybook({ sym, reports }: { sym: string; reports: PlaybookReport[] }) {
   const { bars, loading } = useBackendBars(sym, "5Y");
   const model = useMemo(() => buildModel(reports, bars), [reports, bars]);
@@ -177,13 +186,6 @@ export function EarningsPlaybook({ sym, reports }: { sym: string; reports: Playb
 
   const { rows, typicalMove, fromOpen, normalDayX, beatAvg, beatCount, missAvg, missCount, gapHolds, gapTotal, driftAvg } = model;
   const hasBeatMiss = beatCount + missCount > 0;
-
-  const Stat = ({ k, children }: { k: string; children: React.ReactNode }) => (
-    <div>
-      <div style={{ font: "600 .62rem var(--f-mono)", letterSpacing: ".08em", color: "var(--text-dim-solid)", textTransform: "uppercase" }}>{k}</div>
-      <div style={{ marginTop: 5 }}>{children}</div>
-    </div>
-  );
 
   return (
     <div>

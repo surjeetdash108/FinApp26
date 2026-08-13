@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { signOut, updatePassword } from "firebase/auth";
 import { firebaseAuth } from "../firebase";
-import { apiGet, apiPatch } from "../iq/backend";
-import { buildAdminDataset, ADMIN_DATA_KEY, ADMIN_EMAIL } from "./admin-data";
+import { apiGet, apiPatch, apiPost, apiDelete } from "../iq/backend";
+import { buildAdminDataset, fetchAdminBlogs, ADMIN_DATA_KEY, ADMIN_EMAIL } from "./admin-data";
+import type { ConsoleBlogRow } from "./admin-data";
 
 /**
  * Admin console gate. The console itself is the exact static HTML at
@@ -87,13 +88,97 @@ export default function AdminPage() {
           // owns the write — PATCH /admin/plans/:id (AdminGuard) sets only this
           // one entitlement (dotted path server-side), so a whole-map set can't
           // clobber a concurrent edit to a different flag.
-          await apiPatch(`/admin/plans/${encodeURIComponent(planId)}`, {
+          await apiPatch(`/api/admin/plans/${encodeURIComponent(planId)}`, {
             featureFlags: { [key]: value },
           });
           reply({ ok: true });
         } catch (err) {
           reply({ ok: false, error: (err as Error).message });
         }
+      }
+      // ── Blog board writes ──────────────────────────────────────────────
+      // The console iframe has no backend token, so every blog mutation is
+      // delegated here (same bridge as admin:setPlanFlag). We hit the
+      // AdminGuard-protected /admin/blogs REST surface, then ALWAYS re-fetch
+      // the full list and post it back — even on failure — so the board
+      // reconciles to the true backend state and any optimistic edit that
+      // didn't persist is reverted.
+      const blogWrite = async (
+        resultType: string,
+        write: () => Promise<void>,
+      ) => {
+        const post = (m: Record<string, unknown>) =>
+          iframeRef.current?.contentWindow?.postMessage({ type: resultType, ...m }, "*");
+        let ok = true;
+        let error: string | undefined;
+        try {
+          await write();
+        } catch (err) {
+          ok = false;
+          error = (err as Error).message;
+        }
+        // Re-fetch independently of the write outcome. fetchAdminBlogs never
+        // throws (returns [] on failure); we only attach `blogs` when the read
+        // itself succeeded so a transient read failure doesn't blank the board.
+        let blogs: ConsoleBlogRow[] | null = null;
+        try {
+          blogs = await fetchAdminBlogs();
+        } catch {
+          blogs = null;
+        }
+        post({ ok, ...(error ? { error } : {}), ...(blogs ? { blogs } : {}) });
+      };
+
+      if (d.type === "admin:blogSave") {
+        const body = {
+          zone: d.zone,
+          rank: d.rank,
+          kick: d.kick,
+          title: d.title,
+          dek: d.dek,
+          author: d.author,
+          read: d.read,
+          html: d.html,
+          status: d.status,
+        };
+        await blogWrite("admin:blogSaveResult", async () => {
+          if (d.id) {
+            await apiPatch(`/api/admin/blogs/${encodeURIComponent(String(d.id))}`, body);
+          } else {
+            await apiPost("/api/admin/blogs", body);
+          }
+        });
+      }
+      if (d.type === "admin:blogDelete") {
+        await blogWrite("admin:blogDeleteResult", async () => {
+          await apiDelete(`/api/admin/blogs/${encodeURIComponent(String(d.id))}`);
+        });
+      }
+      if (d.type === "admin:blogPublish") {
+        await blogWrite("admin:blogPublishResult", async () => {
+          await apiPatch(`/api/admin/blogs/${encodeURIComponent(String(d.id))}`, {
+            status: d.status,
+          });
+        });
+      }
+      if (d.type === "admin:blogReorder") {
+        // Accept either a single {id, rank[, zone]} or a batch {orders:[…]}.
+        const orders: Array<{ id: unknown; rank: unknown; zone?: unknown }> =
+          Array.isArray(d.orders)
+            ? d.orders
+            : d.id != null
+              ? [{ id: d.id, rank: d.rank, zone: d.zone }]
+              : [];
+        await blogWrite("admin:blogReorderResult", async () => {
+          await Promise.all(
+            orders.map((o) => {
+              const patch: Record<string, unknown> = { rank: Number(o.rank) };
+              // A cross-zone move carries the new zone; a plain reorder omits it.
+              if (typeof o.zone === "string") patch.zone = o.zone;
+              return apiPatch(`/api/admin/blogs/${encodeURIComponent(String(o.id))}`, patch);
+            }),
+          );
+        });
       }
       if (d.type === "admin:apiHealth") {
         // Live re-check for the Monitor tab. The iframe has no token, so it asks
@@ -102,7 +187,7 @@ export default function AdminPage() {
         const post = (m: Record<string, unknown>) =>
           iframeRef.current?.contentWindow?.postMessage({ type: "admin:apiHealthResult", ...m }, "*");
         try {
-          const data = await apiGet("/admin/apihealth");
+          const data = await apiGet("/api/admin/apihealth");
           post({ ok: true, data });
         } catch (err) {
           post({ ok: false, error: (err as Error).message });
