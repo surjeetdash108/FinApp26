@@ -404,6 +404,10 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .zmove button:hover:not(:disabled){border-color:var(--brand);color:var(--brand2)}
 .zmove button:disabled{opacity:.3;cursor:default}
 .zempty{color:var(--dim2);font-size:12px;text-align:center;padding:16px 0}
+/* per-card publish/draft toggle */
+.zcard .zst{position:absolute;top:7px;right:33px;border:1px solid transparent;border-radius:6px;padding:2px 7px;font:600 8.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;background:#2fe6a618;color:#2fe6a6;border-color:#2fe6a633;transition:.12s}
+.zcard .zst.draft{background:#ffb54718;color:#ffb547;border-color:#ffb54733}
+.zcard .zst:hover{filter:brightness(1.15)}
 /* staged-changes bar */
 .pubbar{position:sticky;bottom:16px;z-index:15;display:none;align-items:center;gap:13px;margin-top:18px;
   background:linear-gradient(180deg,var(--surface),var(--surface2));border:1px solid var(--brand);
@@ -623,16 +627,8 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
       </section>
 
       <section class="view" id="blogs">
-        <div class="board-note">Drop a <b>Word</b> or <b>PDF</b> file anywhere on a section below — it converts, you confirm the details, and it lands on this board as a draft. Nothing reaches the site until you hit <b>Publish changes</b>. <b>Drag cards</b> to reorder them or move them between sections; the order here is the order on the site. This board mirrors <span class="cash">marketcatalyst.ai</span> · the newspaper page.</div>
+        <div class="board-note">Drop a <b>Word</b> or <b>PDF</b> file anywhere on a section below — it converts, you confirm the details, and it saves straight to your site. Use each card's <b>Live / Draft</b> toggle to control whether it shows publicly. <b>Drag cards</b> to reorder them or move them between sections; the order here is the order on the site. This board mirrors <span class="cash">marketcatalyst.ai</span> · the newspaper page.</div>
         <div class="blogboard" id="blogboard"></div>
-
-        <!-- staged-changes bar: nothing reaches the site until this is used -->
-        <div class="pubbar" id="pubBar">
-          <span class="pdot"></span>
-          <div class="ptxt"><b id="pubCount"></b><span id="pubDetail"></span></div>
-          <button class="btn" id="pubCancel">Discard</button>
-          <button class="btn-pub sch" id="pubGo">Publish changes</button>
-        </div>
         <input type="file" id="blogFile" accept=".docx,.pdf" hidden>
       </section>
 
@@ -695,31 +691,9 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
-<!-- ===== Firebase / Firestore blog layer (shared with the public blog page) ===== -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, collection, addDoc, getDocs, deleteDoc, updateDoc, doc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-  // ↓↓↓ PASTE your Firebase web config: Firebase console → Project settings → General → Your apps → SDK setup ↓↓↓
-  const firebaseConfig = {
-    apiKey: "PASTE_API_KEY",
-    authDomain: "marketcatalyst.firebaseapp.com",
-    projectId: "marketcatalyst",
-    storageBucket: "marketcatalyst.appspot.com",
-    messagingSenderId: "PASTE_SENDER_ID",
-    appId: "PASTE_APP_ID"
-  };
-  const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("PASTE");
-  let db = null;
-  if (configured) { try { db = getFirestore(initializeApp(firebaseConfig)); } catch (e) { console.warn("Firebase init failed:", e); } }
-  window.MCBlog = {
-    ready: !!db,
-    async list(){ const snap = await getDocs(query(collection(db,"posts"), orderBy("createdAt","desc"))); return snap.docs.map(d => ({ id:d.id, ...d.data() })); },
-    async add(post){ const ref = await addDoc(collection(db,"posts"), { ...post, createdAt: serverTimestamp() }); return ref.id; },
-    async update(id, patch){ await updateDoc(doc(db,"posts", id), { ...patch, updatedAt: serverTimestamp() }); },
-    async remove(id){ await deleteDoc(doc(db,"posts", id)); }
-  };
-  window.dispatchEvent(new Event("mcblog-ready"));
-</script>
+<!-- Blog articles are read/written through the postMessage bridge to the React
+     parent (app/admin/page.tsx), which owns the admin token and calls the
+     backend's /admin/blogs surface. This iframe holds no Firebase SDK. -->
 
 <script>
 /* ---------------- mock data ---------------- */
@@ -1518,40 +1492,39 @@ const ZONES={
 };
 const ZORDER=['stock','lead','edu','news'];
 /* ---------------------------------------------------------------
-   DEMO CONTENT — sample articles so the layout can be reviewed
-   before anything real is uploaded. Delete this array (leave it as
-   []) when you go live. Nothing here is written to Firestore.
+   REAL CONTENT — the board reads its articles from the staged admin
+   dataset (REAL.blogs), delivered by the React parent before this
+   iframe loads, and writes them straight to the backend through the
+   postMessage bridge. There is no local staging/publish step and no
+   demo seed: an empty backend shows an empty board.
    --------------------------------------------------------------- */
-const DEMO=[
- {zone:'lead',rank:1,kick:'Analysis · $NVDA',title:"Nvidia's guidance raise rewires the AI trade",dek:'The beat was expected. The raised outlook was not, and that is the part worth reading closely.',author:'A. Rao',read:'6 min',date:'Aug 10',html:'<p>Nvidia did not merely beat expectations this quarter; it rewrote what the next two look like. Revenue came in ahead, but the number that moved the tape was the forward guide.</p><h2>Why guidance matters more than the beat</h2><p>A beat tells you about a quarter that has already happened. Guidance tells you what management believes about demand it can already see in the order book. When a company raises the second, it is making a statement about visibility, not history.</p><p>The read-through runs down the supply chain: memory, networking, and the power and cooling names that sit behind every rack.</p><h2>What to watch next</h2><p>Two things. First, whether the hyperscalers echo the same capex tone on their own calls. Second, whether gross margin holds as the mix shifts toward complete systems rather than chips alone.</p>'},
- {zone:'lead',rank:2,kick:'Analysis',title:'The rate-cut trade is crowded again',dek:'Positioning has run ahead of the data twice this year. Here is how to tell if it has happened a third time.',author:'A. Rao',read:'5 min',date:'Aug 9',html:'<p>Every few months the market decides cuts are imminent, and every few months it has to walk that back. The pattern is consistent enough to be worth a checklist.</p><p>Start with the front end of the curve, which moves first and lies least. Then compare it to what fed funds futures imply. When the gap widens without new data to justify it, you are looking at positioning rather than information.</p>'},
- {zone:'lead',rank:3,kick:'Analysis · Sectors',title:'Why defensives stopped acting defensive',dek:'Staples and utilities have decoupled from their usual playbook. Rates explain most of it.',author:'A. Rao',read:'4 min',date:'Aug 5',html:'<p>The textbook says defensives outperform when growth slows. That has not held this cycle, and the reason is that both groups now trade partly as bond proxies.</p>'},
-
- {zone:'stock',rank:1,kick:'$CRM',title:'Salesforce: three upgrades in a week',dek:'A cluster of upgrades usually front-runs a sentiment shift rather than following one.',author:'L. Park',read:'4 min',date:'Aug 8',html:'<p>Third upgrade this week as the margin story takes hold. What changed is not the revenue line but what management is willing to commit to on operating margin.</p><p>Watch the net revenue retention number next quarter — that is where the thesis either holds or breaks.</p>'},
- {zone:'stock',rank:2,kick:'$AAPL',title:'Apple services margin quietly sets a record',dek:'The hardware story gets the headlines. Services pays the bills.',author:'L. Park',read:'5 min',date:'Aug 7',html:'<p>Services margin set a record this quarter, and the mix shift is now large enough to move the consolidated number on its own.</p>'},
- {zone:'stock',rank:3,kick:'$JPM',title:'What the loan-loss provision is telling you',dek:'Provisions are a forecast dressed up as an accounting entry. Read them that way.',author:'L. Park',read:'5 min',date:'Aug 6',html:'<p>A provision is management stating, in dollars, what it expects to lose. Rising provisions in a stable economy usually mean the bank sees something in its own book that the macro data has not caught up to yet.</p>'},
- {zone:'stock',rank:4,kick:'$TSLA',title:'Deliveries beat, margins did not',dek:'Two numbers pointing opposite directions, and only one of them is discretionary.',author:'L. Park',read:'4 min',date:'Aug 4',html:'<p>Volume can be bought with price. The question each quarter is how much was.</p>'},
- {zone:'stock',rank:5,kick:'$KO',title:'Pricing power, measured properly',dek:'Volume growth and price growth tell very different stories about a consumer brand.',author:'L. Park',read:'3 min',date:'Aug 2',html:'<p>Split revenue growth into price and volume before deciding a brand has pricing power. Growth that is entirely price is a warning, not a moat.</p>'},
- {zone:'stock',rank:6,kick:'$XOM',title:'Reading an energy major through the cycle',dek:'Free cash flow at mid-cycle prices matters more than any single quarter.',author:'L. Park',read:'5 min',date:'Jul 31',html:'<p>Normalise for the commodity price before judging the operator.</p>'},
-
- {zone:'edu',rank:1,kick:'Explainer',title:'What is Relative Strength (RS) rank?',dek:'A 1–99 score for how a stock has performed against the market. Here is how to use it without over-reading it.',author:'Learn',read:'5 min',date:'Aug 8',html:'<p>Relative strength compares a stock\u2019s move to the market\u2019s over the same window, then ranks every name from 1 to 99. A score of 90 means the stock outperformed 90% of the market.</p><h2>What it does not tell you</h2><p>RS is descriptive, not predictive. It says what has happened, and a high score can mean a strong trend or a stock that has already run. Use it to filter, never to decide.</p>'},
- {zone:'edu',rank:2,kick:'How-to',title:'Read an earnings report in five minutes',dek:'The four lines that matter, and the noise you can skip on a first pass.',author:'Learn',read:'6 min',date:'Aug 6',html:'<p>Start with revenue, then guidance, then margin, then cash flow. Everything else is context for those four.</p><h2>1. Revenue</h2><p>Compare it to the same quarter last year, not the previous quarter, unless the business is genuinely seasonal.</p><h2>2. Guidance</h2><p>The forward number moves the stock more often than the reported one.</p><h2>3. Margin</h2><p>Growing revenue with shrinking margin is a different business than it was a year ago.</p><h2>4. Cash flow</h2><p>Profit is an opinion; cash is a fact. If they diverge for more than a couple of quarters, find out why.</p>'},
- {zone:'edu',rank:3,kick:'Explainer',title:'Market cap, enterprise value, and which to use',dek:'They answer different questions. Using the wrong one makes cheap companies look expensive.',author:'Learn',read:'4 min',date:'Aug 3',html:'<p>Market cap is what the equity costs. Enterprise value is what the whole business costs, debt included, cash netted off.</p>'},
- {zone:'edu',rank:4,kick:'Basics',title:'How to read a candlestick chart',dek:'Four numbers per bar. That is the entire vocabulary.',author:'Learn',read:'4 min',date:'Aug 1',html:'<p>Open, high, low, close. Every pattern people talk about is a description of how those four sit relative to each other.</p>'},
- {zone:'edu',rank:5,kick:'Basics',title:'Limit orders, market orders, and slippage',dek:'The order type you choose is a decision about price versus certainty.',author:'Learn',read:'3 min',date:'Jul 29',html:'<p>A market order buys certainty of execution and gives up certainty of price. A limit order does the reverse.</p>'},
- {zone:'edu',rank:6,kick:'Explainer',title:'What a P/E ratio actually compares',dek:'Two companies can carry the same multiple and mean completely different things by it.',author:'Learn',read:'5 min',date:'Jul 27',html:'<p>A multiple is a shorthand for expected growth, risk, and capital intensity all at once. Comparing across industries usually compares nothing at all.</p>'},
-
- {zone:'news',rank:1,kick:'Markets',title:'Cooler CPI sends stocks to record highs',dek:'Softer inflation revived rate-cut bets across the curve.',author:'Wire',read:'2 min',date:'Aug 10',html:'<p>A cooler inflation print revived September cut bets, with the front end moving first.</p>'},
- {zone:'news',rank:2,kick:'Sectors',title:'Semis lead as AI capex guidance climbs',dek:'Chip names paced the tape for a third straight session.',author:'Wire',read:'2 min',date:'Aug 10',html:'<p>Chip names paced the tape again as capex commentary stayed strong.</p>'},
- {zone:'news',rank:3,kick:'Rates',title:'Two-year yield slips below 4%',dek:'The short end moved first, as it usually does.',author:'Wire',read:'2 min',date:'Aug 9',html:'<p>The short end moved first, widening the gap against fed funds pricing.</p>'},
- {zone:'news',rank:4,kick:'Earnings',title:'Retailers flag a cautious consumer',dek:'Three of four majors trimmed their second-half outlook.',author:'Wire',read:'3 min',date:'Aug 8',html:'<p>Discretionary categories softened while essentials held.</p>'},
- {zone:'news',rank:5,kick:'Commodities',title:'Crude holds range despite supply headlines',dek:'The market has stopped reacting to announcements alone.',author:'Wire',read:'2 min',date:'Aug 7',html:'<p>Physical differentials have not confirmed the headline risk.</p>'},
- {zone:'news',rank:6,kick:'FX',title:'Dollar softens on narrowing rate differentials',dek:'The move tracked the rates story almost exactly.',author:'Wire',read:'2 min',date:'Aug 6',html:'<p>Rate differentials did most of the work.</p>'}
-];
-
-/* Demo posts load as unpublished drafts: Discard clears them, Publish makes
-   them real. Every other article on the board comes from a file you upload. */
-const BLOGS=DEMO.map((p,i)=>({...p,id:'demo-'+i,status:'Published',_cloud:true}));
+/* Normalises a raw blog row (staged snapshot OR a refreshed list posted back
+   after a write) into the shape the board renders. Missing fields default so a
+   partial row never breaks a render. */
+function normalizeBlog(p){
+  p=p||{};
+  return {
+    id:p.id,
+    zone:p.zone||'lead',
+    rank:(typeof p.rank==='number')?p.rank:999,
+    kick:p.kick||'',
+    title:p.title||'',
+    dek:p.dek||'',
+    author:p.author||'',
+    read:p.read||'',
+    date:p.date||'',
+    html:p.html||'',
+    status:p.status||'Published'
+  };
+}
+/* The live working set. Seeded from the staged dataset; replaced wholesale by
+   the refreshed list the parent posts back after every successful write. */
+let BLOGS=(REAL&&Array.isArray(REAL.blogs))?REAL.blogs.map(normalizeBlog):[];
+/* The bridge is live whenever we loaded inside the admin app with real data.
+   Opened standalone (design review, no staged data) there is no parent backend
+   to talk to, so writes are suppressed and the board is read-only/empty. */
+const BLOG_BRIDGE=!IS_DEMO;
+function blogPost(msg){ try{ parent.postMessage(msg,'*'); }catch(e){} }
 const bEl=id=>document.getElementById(id);
 let _targetZone='lead', _editId=null;
 
@@ -1584,22 +1557,26 @@ function nextRank(z,exceptId){
   const n=BLOGS.filter(p=>p.zone===z&&p.id!==exceptId).length;
   return n+1;
 }
-/* ---- staging ----
-   Nothing below writes to Firestore. Every edit lands in BLOGS only; COMMITTED
-   holds what's actually live, and publishChanges() reconciles the two. That's
-   what lets the board be a draft you can discard. */
+/* Flattens a zone's ranks to a clean 1..n (lowest first) after an optimistic
+   local reorder, and returns the {id,zone,rank} order to send to the backend. */
 function renumber(z){
-  zoneposts(z).forEach((p,i)=>{ p.rank=i+1; });
+  return zoneposts(z).map((p,i)=>{ p.rank=i+1; return {id:p.id,zone:z,rank:i+1}; });
+}
+/* Sends a batch of {id,zone,rank} rows to the backend via the bridge. The
+   parent PATCHes each and posts the refreshed list back (admin:blogReorderResult). */
+function sendReorder(orders){
+  if(!BLOG_BRIDGE){ renderBoard(); return; }   // standalone review: local only
+  blogPost({type:'admin:blogReorder',orders});
 }
 function moveBlog(id,dir){
   const p=BLOGS.find(x=>x.id===id); if(!p) return;
   const posts=zoneposts(p.zone), i=posts.findIndex(x=>x.id===id), j=i+dir;
   if(j<0||j>=posts.length) return;
-  const a=posts[i].rank??i+1, b=posts[j].rank??j+1;
-  posts[i].rank=b; posts[j].rank=a;
-  renumber(p.zone);
-  renderBoard();
-  toast('Moved to #'+(j+1)+' — publish to apply');
+  posts.splice(i,1); posts.splice(j,0,p);       // reorder the temp array…
+  const orders=posts.map((x,k)=>{ x.rank=k+1; return {id:x.id,zone:p.zone,rank:k+1}; }); // …then renumber
+  renderBoard();                                 // optimistic
+  sendReorder(orders);
+  toast('Moved to #'+(j+1));
 }
 function zdropSVG(){return '<svg width="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M7 9l5-5 5 5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round"/></svg>';}
 function renderBoard(){
@@ -1608,6 +1585,7 @@ function renderBoard(){
     const m=ZONES[z], posts=zoneposts(z);
     const cards=posts.length?posts.map((p,i)=>`<div class="zcard ${z==='lead'&&i===0?'lead':''}" draggable="true" data-id="${p.id}" onclick="openBlogModal('${z}','${p.id}')">
         <span class="zrk">${i+1}</span>
+        <button class="zst ${p.status==='Draft'?'draft':''}" title="${p.status==='Draft'?'Draft — click to publish':'Live — click to unpublish'}" onclick="event.stopPropagation();togglePublish('${p.id}')">${p.status==='Draft'?'Draft':'Live'}</button>
         <button class="zx" title="Remove" onclick="event.stopPropagation();deleteBlog('${p.id}')">×</button>
         <div class="zk">${xesc(p.kick||'')}</div><h5>${xesc(p.title||'Untitled')}</h5>
         ${p.dek?`<div class="zd">${xesc(p.dek)}</div>`:''}
@@ -1628,7 +1606,6 @@ function renderBoard(){
   });
   wireCardDrag(board);
   wireFileDrop(board);
-  if(typeof updateBar==='function')updateBar();   // board and bar always agree
 }
 
 /* ---- drag a card: reorder inside a zone, or move it to another zone ---- */
@@ -1685,22 +1662,22 @@ function wireCardDrag(board){
     });
   });
 }
-/* Puts a post at index `at` of `zone`. Fractional ranks slot it between
-   neighbours, then renumber() flattens the zone back to 1..n. */
+/* Puts a post at index `at` of `zone`, then renumbers the affected zone(s) to a
+   clean 1..n and sends the new order (plus the moved card's new zone) to the
+   backend. A cross-zone move carries `zone` per row so the parent PATCHes it. */
 async function placeAt(id,zone,at){
   const p=BLOGS.find(x=>x.id===id); if(!p)return;
   const from=p.zone, moved=from!==zone;
   const rest=zoneposts(zone).filter(x=>x.id!==id);
-  const before=rest[at-1], after=rest[at];
+  const idx=Math.max(0,Math.min(at,rest.length));
+  rest.splice(idx,0,p);
   p.zone=zone;
-  p.rank = !before ? ((after?.rank ?? 1)-0.5)
-         : !after  ? ((before.rank ?? rest.length)+0.5)
-         : ((before.rank+after.rank)/2);
-  renumber(zone);
-  if(moved)renumber(from);
-  renderBoard();
-  toast(moved?('Moved to '+(ZONES[zone]||ZONES.lead).label+' · #'+(at+1)+' — publish to apply')
-             :('Now #'+(at+1)+' — publish to apply'));
+  const orders=rest.map((x,i)=>{ x.rank=i+1; return {id:x.id,zone,rank:i+1}; });
+  if(moved){ orders.push(...renumber(from)); }   // resequence the source zone too
+  renderBoard();                                  // optimistic
+  sendReorder(orders);
+  toast(moved?('Moved to '+(ZONES[zone]||ZONES.lead).label+' · #'+(idx+1))
+             :('Now #'+(idx+1)));
 }
 
 /* ---- drop a .docx/.pdf anywhere on a zone, not just the dashed strip ---- */
@@ -1737,120 +1714,60 @@ function openBlogModal(zone,editId,draft){
   bEl('blogModal').classList.add('on');bEl('blogScrim').classList.add('on');
 }
 function closeBlogModal(){bEl('blogModal').classList.remove('on');bEl('blogScrim').classList.remove('on');_editId=null;}
-/* Modal save = stage only. Nothing reaches the site until Publish changes. */
+/* Modal save = write straight to the backend through the bridge. The parent
+   POSTs (new) or PATCHes (edit), then posts the refreshed list back. */
 function savePublish(){
   const d={zone:bEl('bZone').value||'lead',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value,author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
   if(!d.title){toast('Add a title first');return;}
-  /* A typed rank wins; .5 nudges it just above whatever holds that slot,
-     then renumber() flattens everything back to clean 1..n. */
   const typed=parseInt(bEl('bRank').value,10);
-  d.rank=(typed&&typed>0)?typed-0.5:nextRank(d.zone,_editId);
-  const post={...d,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}),status:'Published'};
-  const oldZone=_editId?(BLOGS.find(x=>x.id===_editId)||{}).zone:null;
-  if(_editId){
-    const idx=BLOGS.findIndex(x=>x.id===_editId), old=BLOGS[idx]||{};
-    BLOGS[idx]={...post,id:_editId,_cloud:!!old._cloud};
-    toast('Edit staged — publish to apply');
-  }else{
-    BLOGS.unshift({...post,id:'draft-'+Date.now().toString(36)});
-    toast('Article staged — publish to apply');
-  }
-  renumber(d.zone);
-  if(oldZone&&oldZone!==d.zone)renumber(oldZone);
-  renderBoard();closeBlogModal();
+  d.rank=(typed&&typed>0)?typed:nextRank(d.zone,_editId);
+  // Preserve an existing article's published/draft state across edits; a brand
+  // new one defaults to Published (visible on the site immediately).
+  const existing=_editId?BLOGS.find(x=>x.id===_editId):null;
+  d.status=existing?(existing.status||'Published'):'Published';
+  if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to save'); closeBlogModal(); return; }
+  const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status};
+  if(_editId)msg.id=_editId;
+  blogPost(msg);
+  toast(_editId?'Saving edit…':'Publishing article…');
+  closeBlogModal();
 }
 function deleteBlog(id){
-  const i=BLOGS.findIndex(x=>x.id===id);if(i<0)return;
-  const p=BLOGS[i];
-  BLOGS.splice(i,1);renumber(p.zone);renderBoard();
-  toast('Removal staged — publish to apply');
+  const p=BLOGS.find(x=>x.id===id);if(!p)return;
+  if(!confirm('Delete “'+(p.title||'this article')+'”? This removes it from your site.'))return;
+  if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to delete'); return; }
+  const i=BLOGS.findIndex(x=>x.id===id);if(i>=0)BLOGS.splice(i,1);
+  renderBoard();                                  // optimistic; result reconciles
+  blogPost({type:'admin:blogDelete',id});
+  toast('Deleting…');
+}
+/* Per-card Live/Draft toggle: flips status on the backend. */
+function togglePublish(id){
+  const p=BLOGS.find(x=>x.id===id);if(!p)return;
+  const next=(p.status==='Draft')?'Published':'Draft';
+  if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin'); return; }
+  p.status=next;                                  // optimistic
+  renderBoard();
+  blogPost({type:'admin:blogPublish',id,status:next});
+  toast(next==='Published'?'Publishing…':'Unpublishing…');
 }
 
-/* ================= STAGING / PUBLISH ================= */
-/* COMMITTED mirrors what's live on the site. BLOGS is the working draft.
-   diffChanges() compares them; publishChanges() makes the site match. */
-let COMMITTED=[], _publishing=false;
-const FIELDS=['zone','rank','kick','title','dek','author','read','html','date','status'];
-const sig=p=>FIELDS.map(f=>String(p[f]??'')).join('\u0001');
-function commit(){COMMITTED=BLOGS.map(p=>({...p}));updateBar();}
-
-function diffChanges(){
-  const was=new Map(COMMITTED.map(p=>[p.id,p]));
-  const now=new Map(BLOGS.map(p=>[p.id,p]));
-  return {
-    adds   : BLOGS.filter(p=>!p._cloud),
-    updates: BLOGS.filter(p=>p._cloud&&was.has(p.id)&&sig(p)!==sig(was.get(p.id))),
-    deletes: COMMITTED.filter(p=>p._cloud&&!now.has(p.id))
-  };
-}
-function updateBar(){
-  const bar=bEl('pubBar');if(!bar)return;
-  const d=diffChanges(), n=d.adds.length+d.updates.length+d.deletes.length;
-  bar.classList.toggle('on',n>0);
-  if(!n)return;
-  const bits=[];
-  if(d.adds.length)   bits.push(d.adds.length+' new');
-  if(d.updates.length)bits.push(d.updates.length+' edited');
-  if(d.deletes.length)bits.push(d.deletes.length+' removed');
-  bEl('pubCount').textContent=n+(n===1?' unpublished change':' unpublished changes');
-  bEl('pubDetail').textContent=bits.join(' · ');
-}
-function discardChanges(){
-  const d=diffChanges(), n=d.adds.length+d.updates.length+d.deletes.length;
-  if(!n)return;
-  if(!confirm('Discard '+n+' unpublished change'+(n===1?'':'s')+'? The board goes back to what\u2019s live on the site.'))return;
-  BLOGS.length=0;COMMITTED.forEach(p=>BLOGS.push({...p}));
-  renderBoard();updateBar();toast('Changes discarded');
-}
-async function publishChanges(){
-  if(_publishing)return;
-  const d=diffChanges(), n=d.adds.length+d.updates.length+d.deletes.length;
-  if(!n)return;
-  if(!(window.MCBlog&&window.MCBlog.ready)){
-    commit();renderBoard();
-    toast('Saved locally — add your Firebase config to publish to the site');
-    return;
+/* ---- write results from the parent ----
+   Every blog write (save / delete / publish / reorder) is answered by the
+   parent with { ok, error?, blogs? }. When the refreshed list is present we
+   replace the working set wholesale and re-render, so the board always ends up
+   matching the true backend state — reverting any optimistic edit that failed. */
+window.addEventListener('message',function(e){
+  const d=e.data||{};
+  if(!/^admin:blog(Save|Delete|Publish|Reorder)Result$/.test(d.type||''))return;
+  if(Array.isArray(d.blogs)){
+    BLOGS=d.blogs.map(normalizeBlog);
+    renderBoard();
   }
-  _publishing=true;
-  const btn=bEl('pubGo'),orig=btn.textContent;btn.disabled=true;btn.textContent='Publishing…';
-  try{
-    for(const p of d.deletes) await window.MCBlog.remove(p.id);
-    for(const p of d.updates){
-      const body={};FIELDS.forEach(f=>body[f]=p[f]);
-      await window.MCBlog.update(p.id,body);
-    }
-    for(const p of d.adds){
-      const body={};FIELDS.forEach(f=>body[f]=p[f]);
-      const id=await window.MCBlog.add(body);
-      p.id=id;p._cloud=true;                     // draft id swaps for the real one
-    }
-    commit();renderBoard();
-    toast('Published — '+n+' change'+(n===1?'':'s')+' now live on your site');
-  }catch(e){
-    toast('Publish failed: '+e.message+' — your board is unchanged, try again');
-    updateBar();
-  }finally{
-    _publishing=false;btn.disabled=false;btn.textContent=orig;
+  if(d.ok===false){
+    toast('Could not save: '+(d.error||'unknown error'));
   }
-}
-
-async function syncBlogsFromCloud(){
-  if(!(window.MCBlog&&window.MCBlog.ready))return;
-  const d=diffChanges();
-  const onlyDemo=BLOGS.every(p=>String(p.id).startsWith('demo-'));
-  if(!onlyDemo&&d.adds.length+d.updates.length+d.deletes.length){
-    toast('You have unpublished changes — not reloading from the site');
-    return;                                       // never clobber a draft
-  }
-  try{
-    const posts=await window.MCBlog.list();
-    BLOGS.length=0;
-    posts.forEach(p=>BLOGS.push({...p,_cloud:true,status:p.status||'Published',date:p.date||''}));
-    /* older posts predate ranking — give them one so ordering works */
-    ZORDER.forEach(z=>{let n=0;zoneposts(z).forEach(p=>{n++;if(typeof p.rank!=='number')p.rank=n;});});
-    commit();renderBoard();
-  }catch(e){console.warn('blog sync:',e);}
-}
+});
 
 function initBlogs(){
   const file=bEl('blogFile');
@@ -1858,17 +1775,8 @@ function initBlogs(){
   bEl('bBody').addEventListener('input',updateBlogWords);
   bEl('bZone').addEventListener('change',updatePlaceChip);
   bEl('bPublish').onclick=savePublish;
-  bEl('pubGo').onclick=publishChanges;
-  bEl('pubCancel').onclick=discardChanges;
   try{if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}catch(e){}
-  commit();                       // demo posts stay pending
-  renderBoard();updateBar();
-  window.addEventListener('mcblog-ready',syncBlogsFromCloud);
-  if(window.MCBlog&&window.MCBlog.ready)syncBlogsFromCloud();
-  window.addEventListener('beforeunload',e=>{
-    const d=diffChanges();
-    if(d.adds.length+d.updates.length+d.deletes.length){e.preventDefault();e.returnValue='';}
-  });
+  renderBoard();
 }
 initBlogs();
 
