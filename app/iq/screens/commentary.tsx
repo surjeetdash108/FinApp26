@@ -108,7 +108,7 @@ export function CommentaryScreen() {
   const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
   const { data: filingsWire } = useApiList<FilingsWireDoc>("/market-data/filings-wire");
   const filingsSorted = [...filingsWire].sort((a, b) => b.filingDate.localeCompare(a.filingDate));
-  const { data: regimeList } = useApiList<MacroRegimeDoc>("/market-data/macro-regime");
+  const { data: regimeList, loading: regimeLoading } = useApiList<MacroRegimeDoc>("/market-data/macro-regime");
   const regime = regimeList.find(r => r.id === "current") ?? regimeList[0] ?? null;
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
@@ -350,7 +350,7 @@ export function CommentaryScreen() {
               </div>
               <div className="card-b">
                 {!regime ? (
-                  <DataState label="Regime read populates once the macro-regime job has run (FRED-derived: curve, VIX, credit, trend, jobs)." />
+                  <DataState loading={regimeLoading} label="No macro regime read available (FRED-derived: curve, VIX, credit, trend, jobs)." />
                 ) : (
                   <>
                     <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginBottom: 8 }}>
