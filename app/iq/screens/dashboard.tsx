@@ -254,7 +254,10 @@ export function DashboardScreen() {
   // (Phase 1) — not a direct market_indices Firestore listener.
   const { frame: tapeFrame } = useTapeStream();
   const liveIndices = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items) : [];
-  const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
+  // Widget only ever shows its top 6 of a side — capping the vendor fetch to
+  // 10 gainers/10 losers (vs. the Movers screen's full 20/20) cuts the
+  // per-ticker enrichment fan-out in half and gets this back much faster.
+  const { data: liveMovers, loading: moversLoading } = useApiList<LiveMoverDoc>("/market-data/movers?limit=10");
   const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
@@ -521,20 +524,26 @@ export function DashboardScreen() {
               ))}
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
-              {(moversTab === 0
-                ? [...movers].filter(m => m.pctChange > 0).sort((a, b) => b.pctChange - a.pctChange)
-                : moversTab === 1
-                ? [...movers].filter(m => m.pctChange < 0).sort((a, b) => a.pctChange - b.pctChange)
-                : [...movers].sort((a, b) => b.rvolRatio - a.rvolRatio)
-              ).slice(0, 6).map(m => (
-                <div key={m.ticker} className="minirow mv-dash-row" style={{ cursor: "pointer" }} onClick={() => openMoverModal(m.ticker)}>
-                  <StockLogo sym={m.ticker} size={26} />
-                  <span className="tkr">{m.ticker}</span>
-                  <span className="mid">{moversTab === 2 ? `${m.rvolRatio}× vol` : m.name}</span>
-                  <span className={`r ${cls(m.pctChange)}`}>{sign(m.pctChange)}</span>
-                  <MoverPopup m={m} />
-                </div>
-              ))}
+              {(() => {
+                const shown = (moversTab === 0
+                  ? [...movers].filter(m => m.pctChange > 0).sort((a, b) => b.pctChange - a.pctChange)
+                  : moversTab === 1
+                  ? [...movers].filter(m => m.pctChange < 0).sort((a, b) => a.pctChange - b.pctChange)
+                  : [...movers].sort((a, b) => b.rvolRatio - a.rvolRatio)
+                ).slice(0, 6);
+                if (shown.length === 0) {
+                  return <DataState loading={moversLoading} label="No movers synced yet." height={80} />;
+                }
+                return shown.map(m => (
+                  <div key={m.ticker} className="minirow mv-dash-row" style={{ cursor: "pointer" }} onClick={() => openMoverModal(m.ticker)}>
+                    <StockLogo sym={m.ticker} size={26} />
+                    <span className="tkr">{m.ticker}</span>
+                    <span className="mid">{moversTab === 2 ? `${m.rvolRatio}× vol` : m.name}</span>
+                    <span className={`r ${cls(m.pctChange)}`}>{sign(m.pctChange)}</span>
+                    <MoverPopup m={m} />
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         </div>
