@@ -243,7 +243,11 @@ function MetricBars({
 }) {
   const gid = "gb-" + title.replace(/\W/g, "");
   const vals = data.map(d => d.v).filter((v): v is number => v != null);
-  const W = 340, H = 210, PADT = 22, PADB = 34, PADX = 6;
+  // PADB/label baseline give the -45°-rotated period labels room to extend
+  // down-left without clipping at the viewBox bottom (they used to lose their
+  // first 1-2 chars, e.g. "Jan-24" → "n-24"). ih is unchanged so bars keep size.
+  const W = 340, H = 222, PADT = 22, PADB = 46, PADX = 6;
+  const LABEL_Y = H - 30;
   const iw = W - PADX * 2, ih = H - PADT - PADB;
   const maxV = Math.max(0, ...vals);
   const minV = Math.min(0, ...vals);
@@ -276,9 +280,9 @@ function MetricBars({
               <text x={cx.toFixed(1)} y={(above ? y - 4 : y + h + 9).toFixed(1)}
                 textAnchor="middle" fontSize="8" fontFamily="JetBrains Mono,monospace"
                 fill="var(--text-hi)">{fmt(d.v)}</text>
-              <text x={cx.toFixed(1)} y={(H - 9).toFixed(1)} textAnchor="end"
+              <text x={cx.toFixed(1)} y={LABEL_Y.toFixed(1)} textAnchor="end"
                 fontSize="7.5" fill="var(--text-dim-solid)"
-                transform={`rotate(-45 ${cx.toFixed(1)} ${(H - 9).toFixed(1)})`}>{d.label}</text>
+                transform={`rotate(-45 ${cx.toFixed(1)} ${LABEL_Y.toFixed(1)})`}>{d.label}</text>
             </g>
           );
         })}

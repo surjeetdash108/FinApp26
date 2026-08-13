@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
+import { backendUrl } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc } from "../types";
@@ -321,7 +322,9 @@ function EcChip({ sym, selected, onSelect }: { sym: string; selected: boolean; o
       <span className="ec-logo" style={{ background: "#27314a", color: "#cdd6e6" }}>
         {sym[0]}
         <img
-          src={`https://assets.parqet.com/logos/symbol/${sym}?format=png`}
+          // Polygon branding logo via the backend proxy (no third-party CDN);
+          // a 404 hides the img and the letter behind it shows through.
+          src={backendUrl(`/live/logo?ticker=${encodeURIComponent(sym)}`)}
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
           alt=""
         />
@@ -420,7 +423,7 @@ function CalTable({
 
 export function EarningsScreen() {
   const { openStockFull } = useIQActions();
-  const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   const { data: earningsAnnouncements } = useApiList<EarningsAnnouncementDoc>("/market-data/earnings-announcements");
   const liveEarningsData = liveEarnings;
 
@@ -429,7 +432,6 @@ export function EarningsScreen() {
   // The filter bar (session / cap / sort / min-move / view / news / auto-refresh)
   // was removed — the live earnings feed has no data to drive those — so these
   // stay at fixed defaults.
-  const session: SessionKey = "both";
   const sort: SortKey = "symbol";
   const view: CalView = "eps";
   const [pickerOpen, setPickerOpen]   = useState(false);
@@ -450,9 +452,25 @@ export function EarningsScreen() {
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
 
   const dayRows = rowsForDate(anchor, liveEarningsData).map(toCalRow);
-  // Single reporting list — the data has no before-open/after-close session tag,
-  // so the day view is one table rather than a BMO/AMC/TBD split.
   const visibleRows = filterSortRows(dayRows, { sort, session: "both" });
+
+  // Pre-market (Before Open) / post-market (After Close) session comes from the
+  // EDGAR 8-K `earnings_announcements` feed — Polygon's earnings_events carries
+  // no session — joined by ticker + reporting date. Rows with no 8-K session
+  // match fall into a "Time not specified" group rather than being hidden.
+  const annSessionByKey = new Map<string, "BMO" | "AMC">();
+  for (const a of earningsAnnouncements) {
+    if (a.session === "BMO" || a.session === "AMC") {
+      annSessionByKey.set(`${a.ticker}|${a.announceDate}`, a.session);
+    }
+  }
+  const withSess = (rows: CalRow[], iso: string): CalRow[] =>
+    rows.map(r => (r.sess ? r : { ...r, sess: annSessionByKey.get(`${r.s}|${iso}`) ?? null }));
+
+  const daySessRows = withSess(visibleRows, anchor);
+  const bmoRows = daySessRows.filter(r => r.sess === "BMO");
+  const amcRows = daySessRows.filter(r => r.sess === "AMC");
+  const tbdRows = daySessRows.filter(r => r.sess !== "BMO" && r.sess !== "AMC");
 
   const anchorDate = new Date(`${anchor}T00:00:00Z`);
   const DOW3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -486,7 +504,11 @@ export function EarningsScreen() {
     calNode = (
       <>
         {visibleRows.length > 0 ? (
-          <CalTable title="Companies reporting" rows={visibleRows} sel={sel} onSelect={setSel} view={view} />
+          <>
+            <CalTable title="Before open · Pre-market" rows={bmoRows} sel={sel} onSelect={setSel} view={view} />
+            <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={setSel} view={view} />
+            <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={setSel} view={view} />
+          </>
         ) : (
           <div className="ecal-empty">
             <div className="ecal-empty-h">No companies reporting</div>

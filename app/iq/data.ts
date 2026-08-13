@@ -3,7 +3,6 @@
 // ============================================================
 
 export interface PulseItem { label: string; value: number; change: number; open: number; prevClose: number; dayHigh?: number; dayLow?: number; }
-export interface WMNItem { headline: string; body: string; tag: 'macro' | 'earn' | 'sector'; }
 export interface Earning {
   ticker: string; name: string; session: string; marketCap: string; sector: string;
   // nullable: the live earnings feed supplies estimate/actual only, and not
@@ -29,13 +28,6 @@ export function maPostureLabel(above50?: boolean | null, above200?: boolean | nu
   if (!above50 && !above200) return "Below 50 & 200 DMA";
   return above50 ? "Above 50 · below 200" : "Below 50 · above 200";
 }
-export interface AnalystAction {
-  ticker: string; name: string; firm: string;
-  actionType: 'up' | 'down' | 'init' | 'hold';
-  previousRating: string; newRating: string;
-  prevPriceTarget: number; newPriceTarget: number;
-  priceChangeSince: number; actionsLast30Days: number; owned: boolean;
-}
 export interface FolioItem {
   ticker: string; name: string;
   price: number;
@@ -48,31 +40,9 @@ export interface FolioItem {
   conviction: "High" | "Medium" | "Low";
   eventNote: string;
 }
-export interface Fund {
-  fundName: string; avatar: string; managerName: string;
-  aum: string; totalPositions: number; topHolding: string;
-  newPositions: number; exitCount: number; quarter: string;
-}
-export interface FundDetail {
-  holdings: [string, number, string][];
-  buys: [string, string][];
-  exits: [string, string][];
-  theme: string;
-  conc: string;
-}
 export interface WatchItem {
   ticker: string; name: string; price: number; pctChange: number;
   nextEarningsDate: string; lastAnalystAction: string | null; hasOptions: boolean; latestHeadline: string;
-}
-export interface StockInfo {
-  name: string; price: number; pctChange: number; marketCap: string;
-  peRatio: number; eps: number; week52High: number; week52Low: number;
-  dividendYield: number; beta: number; sector: string;
-  aiRating: string; aiThesis: string; aiRisk: string;
-  aiMetrics: { label: string; value: string; }[];
-  financials: { label: string; value: string; }[];
-  news: { headline: string; date: string; }[];
-  insiderActivity: { name: string; action: string; date: string; }[];
 }
 /**
  * name/items (sector taxonomy + ticker membership) are fixed structural
@@ -91,17 +61,6 @@ export interface ScreenerStock {
   grossMargin: number;
   rvolRatio: number;
   techRating: string;
-}
-export interface CommentaryItem {
-  cat: string; accent: string; time: string; text: string; why: string;
-}
-export interface RecapData {
-  date: string; subtitle: string; headline: string;
-  indices: { label: string; value: number }[];
-  stories: string[];
-  tomorrow: { time: string; event: string }[];
-  movers: { ticker: string; reason: string; pctChange: number }[];
-  internals: { label: string; value: string; direction: number }[];
 }
 
 // ---- Market Pulse (10 items) ----

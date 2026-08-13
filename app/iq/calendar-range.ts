@@ -67,25 +67,3 @@ export function rangeFor(tab: RangeTabKey, now: Date): { from: string; to: strin
 
 export const inRange = (iso: string, r: { from: string; to: string }) =>
   iso >= r.from && iso <= r.to;
-
-/** Human label for a tab, built from the real dates rather than hardcoded prose. */
-export function rangeLabel(tab: RangeTabKey, now: Date): string {
-  const r = rangeFor(tab, now);
-  const one = fmtMonthDay(r.from);
-  switch (tab) {
-    case 'today':  return `Today · ${one}`;
-    case 'yest':   return `Yesterday · ${one}`;
-    case 'tom':    return `Tomorrow · ${one}`;
-    case 'week':   return `This Week · ${one}–${fmtMonthDay(r.to)}`;
-    case 'prev':   return `Last Week · ${one}–${fmtMonthDay(r.to)}`;
-    case 'next':   return `Next Week · ${one}–${fmtMonthDay(r.to)}`;
-    case 'lmonth': {
-      const [y, m] = r.from.split('-').map(Number);
-      return `Last Month · ${MON_ABBR[m - 1]} ${y}`;
-    }
-    default: {
-      const [y, m] = r.from.split('-').map(Number);
-      return `${MON_ABBR[m - 1]} ${y}`;
-    }
-  }
-}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useMemo } from "react";
+import { backendUrl } from "./backend";
 
 // ---- "Not available" / loading placeholders ----
 // The single reusable primitive for "we removed the mock value here and there
@@ -118,15 +119,19 @@ export function StockLogo({ sym, size = 22 }: { sym: string; size?: number }) {
     }}>
       {sym[0]}
       <img
-        src={`https://assets.parqet.com/logos/symbol/${sym}?format=png`}
+        // Logos come from Polygon's ticker `branding`, proxied by the backend
+        // (`/live/logo`) so the API key stays server-side — no third-party CDN.
+        // A 404 (Polygon has no branding for this ticker) hides the img and the
+        // coloured letter tile behind it shows through.
+        src={backendUrl(`/live/logo?ticker=${encodeURIComponent(sym)}`)}
         alt=""
         onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         style={{
-          // Parqet symbol logos are opaque, full-bleed square tiles, so they
-          // cover the square edge-to-edge. No white backdrop or own radius —
-          // both left a 1px white ring at the parent's rounded corners; the
-          // parent's overflow:hidden does the rounding. cover avoids any
-          // letterbox on a rare non-square logo.
+          // Branding logos are opaque, near-square tiles, so they cover the
+          // square edge-to-edge. No white backdrop or own radius — both left a
+          // 1px white ring at the parent's rounded corners; the parent's
+          // overflow:hidden does the rounding. cover avoids any letterbox on a
+          // rare non-square logo.
           position: 'absolute', inset: 0, width: '100%', height: '100%',
           objectFit: 'cover',
         }}
@@ -598,20 +603,3 @@ export function RsiPane({ rsi14, loading }: { rsi14: number | null; loading?: bo
   );
 }
 
-// ---- Tag chip helper ----
-export function tagClass(tag: string): string {
-  const t = tag.toLowerCase();
-  if (t === 'beat') return 'beat';
-  if (t === 'miss') return 'miss';
-  if (t === 'raised') return 'raised';
-  if (t === 'lowered') return 'lowered';
-  if (t === 'owned') return 'owned';
-  return '';
-}
-
-// ---- Analyst action color ----
-export function actionColor(type: string): string {
-  if (type === 'upgrade') return 'var(--up)';
-  if (type === 'downgrade') return 'var(--down)';
-  return 'var(--brand-2)';
-}

@@ -324,6 +324,103 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 @media(max-width:980px){.studio{grid-template-columns:1fr}.preview-card{position:static}}
 @media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.plancards{grid-template-columns:1fr}}
 @media(max-width:720px){.app{grid-template-columns:1fr}.side{display:none}}
+/* ===== blog board (ported) ===== */
+/* blogs */
+.blog-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start}
+.blog-preview{position:sticky;top:76px}
+.blog-editor .fl{display:block;font:600 10px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin:15px 0 7px}
+.dropz{display:flex;align-items:center;gap:14px;border:1.5px dashed var(--border2);background:var(--surface2);border-radius:12px;padding:16px 18px;cursor:pointer;color:var(--dim);transition:border-color .15s,background .15s}
+.dropz:hover,.dropz.drag{border-color:var(--brand);background:#7c6cf50e}
+.dropz svg{color:var(--brand2);flex:none}
+.dropz b{display:block;color:var(--hi);font-size:13.5px}
+.dropz span{font-size:12px;color:var(--dim2);font-family:var(--f-mono)}
+.brow2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.brow3{display:grid;grid-template-columns:1fr 1fr .7fr;gap:12px}
+.blog-body-edit{min-height:200px;max-height:340px;overflow:auto;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:14px 16px;color:var(--text);font-size:14px;line-height:1.6;outline:none}
+.blog-body-edit:focus{border-color:var(--brand)}
+.blog-body-edit:empty::before{content:attr(data-ph);color:var(--dim2)}
+.blog-body-edit h1,.blog-body-edit h2,.blog-body-edit h3{font-family:var(--f-disp);color:var(--hi);margin:14px 0 8px}
+.blog-body-edit h2{font-size:18px}.blog-body-edit h3{font-size:16px}
+.blog-body-edit p{margin:0 0 12px}.blog-body-edit ul,.blog-body-edit ol{padding-left:20px}
+.blog-body-edit img{max-width:100%;border-radius:8px}
+.blog-body-edit table{border-collapse:collapse;width:100%;font-size:12.5px}.blog-body-edit td,.blog-body-edit th{border:1px solid var(--border2);padding:6px 9px}
+/* preview article */
+.bp-stage{background:#faf8f2;border-radius:10px;overflow:hidden;max-height:640px;overflow-y:auto}
+.bp-art{padding:26px 30px 34px;color:#181713;font-family:'Newsreader',Georgia,serif}
+.bp-art .kick{font:600 11px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}
+.bp-art h1{font-family:'Fraunces',Georgia,serif;font-weight:900;font-size:30px;line-height:1.05;letter-spacing:-.02em;margin:8px 0 12px;color:#181713}
+.bp-art .meta{display:flex;gap:12px;font:600 10px var(--f-mono);letter-spacing:.05em;text-transform:uppercase;color:#736f66;border-top:1px solid #ddd8cc;border-bottom:1px solid #ddd8cc;padding:8px 0;margin-bottom:16px}
+.bp-art .fig{height:170px;border-radius:5px;overflow:hidden;margin-bottom:16px;background:#0b1020}
+.bp-art .fig svg{width:100%;height:100%}
+.bp-art .body{font-size:16px;line-height:1.62;color:#221f1a}
+.bp-art .body h2{font-family:'Fraunces',Georgia,serif;font-size:20px;margin:18px 0 8px}
+.bp-art .body p{margin:0 0 13px}
+.bp-art .body p:first-of-type::first-letter{font-family:'Fraunces',Georgia,serif;font-weight:900;font-size:50px;float:left;line-height:.8;padding:4px 8px 0 0}
+.bp-art .body blockquote{border-left:3px solid var(--brand);margin:16px 0;padding-left:16px;font-family:'Fraunces',Georgia,serif;font-size:18px;color:#181713}
+.bp-art .body ul,.bp-art .body ol{padding-left:20px}
+.bp-empty{padding:60px 24px;text-align:center;color:var(--dim2);font-size:13px}
+.zone-pill{display:inline-flex;align-items:center;gap:6px;font:600 10px var(--f-mono);padding:3px 9px;border-radius:20px}
+.z-lead{color:var(--brand2);background:#7c6cf51c}.z-stock{color:var(--info);background:#38d6e618}.z-news{color:var(--up);background:#2fe6a616}.z-edu{color:var(--warn);background:#ffb5471a}
+/* blog zone board */
+.board-note{font-size:13px;color:var(--dim);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 15px;margin-bottom:16px}
+.board-note .cash{font-family:var(--f-mono);color:var(--brand2)}
+.blogboard{display:grid;grid-template-columns:1fr 1.7fr 1fr;grid-template-areas:"left center right" "bottom bottom bottom";gap:14px}
+.z-l{grid-area:left}.z-c{grid-area:center}.z-r{grid-area:right}.z-b{grid-area:bottom}
+.bzone{border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:14px;display:flex;flex-direction:column;min-height:230px}
+.bzone.z-c{min-height:340px}
+.bzone .zh{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.bzone .zh .zdot{width:9px;height:9px;border-radius:3px;flex:none}
+.bzone .zh h4{font-family:var(--f-disp);font-size:14px;font-weight:600;margin:0;color:var(--hi)}
+.bzone .zh .zpos{font:600 9px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
+.bzone .zh .zn{margin-left:auto;font:600 11px var(--f-mono);color:var(--dim2)}
+.zdrop{border:1.5px dashed var(--border2);border-radius:10px;background:var(--surface2);padding:13px;text-align:center;color:var(--dim2);cursor:pointer;font-size:12px;transition:.15s;margin-bottom:11px}
+.zdrop:hover,.zdrop.drag{border-color:var(--brand);color:var(--brand2);background:#7c6cf50e}
+.zdrop svg{display:block;margin:0 auto 5px;color:var(--brand2)}
+.zdrop b{color:var(--hi);font-weight:600}
+.zlist{display:flex;flex-direction:column;gap:9px;overflow:auto}
+.z-b .zlist{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+/* drag to reorder / move between zones */
+.zcard{position:relative;border:1px solid var(--border);border-radius:10px;background:var(--surface2);padding:11px 12px;cursor:pointer;transition:border-color .12s}
+.zcard[draggable]{cursor:grab}
+.zcard.dragging{opacity:.4;cursor:grabbing}
+.zcard.over-top::before,.zcard.over-bot::after{content:"";position:absolute;left:6px;right:6px;height:2px;background:var(--brand);border-radius:2px}
+.zcard.over-top::before{top:-6px}.zcard.over-bot::after{bottom:-6px}
+.bzone.carddrag{background:#7c6cf50a;border-color:var(--brand)}
+.bzone.filedrag{border-color:var(--brand);background:#7c6cf512}
+.zlist.tail-over{box-shadow:inset 0 -2px 0 var(--brand)}
+.zcard:hover{border-color:var(--brand)}
+.zcard .zk{font:600 9px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--brand2)}
+.zcard h5{font-family:var(--f-disp);font-weight:600;font-size:14px;line-height:1.2;margin:5px 0 5px;color:var(--hi)}
+.bzone.z-c .zcard.lead h5{font-size:17px}
+.zcard .zd{font-size:12px;color:var(--dim);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.zcard .zby{font:600 9px var(--f-mono);color:var(--dim2);margin-top:6px;text-transform:uppercase}
+.zcard .zx{position:absolute;top:7px;right:7px;width:20px;height:20px;border:none;border-radius:6px;background:#0006;color:var(--dim);cursor:pointer;display:none;place-items:center;font-size:13px}
+.zcard:hover .zx{display:grid}.zcard .zx:hover{color:var(--down);background:#ff5d7a22}
+/* rank badge + reorder controls */
+.zcard .zrk{position:absolute;top:8px;left:-1px;font:600 9px var(--f-mono);background:var(--brand);color:#fff;padding:2px 6px;border-radius:0 6px 6px 0}
+.zcard{padding-left:16px}
+.zmove{display:flex;gap:4px;margin-top:8px}
+.zmove button{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--dim);border-radius:6px;padding:3px 0;cursor:pointer;font-size:11px;line-height:1.4;transition:.12s}
+.zmove button:hover:not(:disabled){border-color:var(--brand);color:var(--brand2)}
+.zmove button:disabled{opacity:.3;cursor:default}
+.zempty{color:var(--dim2);font-size:12px;text-align:center;padding:16px 0}
+/* staged-changes bar */
+.pubbar{position:sticky;bottom:16px;z-index:15;display:none;align-items:center;gap:13px;margin-top:18px;
+  background:linear-gradient(180deg,var(--surface),var(--surface2));border:1px solid var(--brand);
+  border-radius:13px;padding:13px 16px;box-shadow:0 16px 40px -18px #000,0 0 0 4px #7c6cf514}
+.pubbar.on{display:flex;animation:pbin .22s ease both}
+@keyframes pbin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.pubbar .pdot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none;box-shadow:0 0 0 4px #ffb54722}
+.pubbar .ptxt{display:flex;flex-direction:column;gap:2px;margin-right:auto;min-width:0}
+.pubbar .ptxt b{font-size:13.5px;color:var(--hi);font-weight:600}
+.pubbar .ptxt span{font:500 11px var(--f-mono);color:var(--dim2)}
+.pubbar .btn{flex:none;padding:9px 16px}
+.pubbar .btn-pub{flex:none;padding:10px 20px}
+.bm-place{display:inline-flex;align-items:center;gap:7px;font:600 11px var(--f-mono);padding:5px 11px;border-radius:20px;margin-bottom:8px}
+@media(max-width:1000px){.blogboard{grid-template-columns:1fr;grid-template-areas:"center" "left" "right" "bottom"}.z-b .zlist{grid-template-columns:1fr 1fr}}
+.chan{display:inline-flex;gap:5px;align-items:center}
+.chan .ci{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;color:#fff}
+
 </style>
 </head>
 <body>
@@ -341,6 +438,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
     <div class="nav" data-view="monitor"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Monitor</div>
     <div class="navlbl">Grow</div>
     <div class="nav" data-view="studio"><svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.3" fill="currentColor"/></svg>Social Studio<span class="badge-ig">IG</span></div>
+    <div class="nav" data-view="blogs"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5h13a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Z" stroke="currentColor" stroke-width="2"/><path d="M8 9h7M8 13h7M8 17h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Blogs</div>
     <div class="side-foot">
       <div class="av" id="admAv">A</div>
       <div class="who" style="flex:1"><b id="admName">admin</b><span id="admEmail">Owner · admin</span></div>
@@ -524,6 +622,20 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
         </div>
       </section>
 
+      <section class="view" id="blogs">
+        <div class="board-note">Drop a <b>Word</b> or <b>PDF</b> file anywhere on a section below — it converts, you confirm the details, and it lands on this board as a draft. Nothing reaches the site until you hit <b>Publish changes</b>. <b>Drag cards</b> to reorder them or move them between sections; the order here is the order on the site. This board mirrors <span class="cash">marketcatalyst.ai</span> · the newspaper page.</div>
+        <div class="blogboard" id="blogboard"></div>
+
+        <!-- staged-changes bar: nothing reaches the site until this is used -->
+        <div class="pubbar" id="pubBar">
+          <span class="pdot"></span>
+          <div class="ptxt"><b id="pubCount"></b><span id="pubDetail"></span></div>
+          <button class="btn" id="pubCancel">Discard</button>
+          <button class="btn-pub sch" id="pubGo">Publish changes</button>
+        </div>
+        <input type="file" id="blogFile" accept=".docx,.pdf" hidden>
+      </section>
+
       <!-- SETTINGS -->
     </div>
   </main>
@@ -551,9 +663,63 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
   <div class="mf"><button class="btn" style="flex:none" onclick="testEndpoint()">Test connection</button><button class="btn-pub" style="flex:none;padding:11px 20px" onclick="saveSetup()">Save</button></div>
 </div>
 
+<!-- BLOG PUBLISH / EDIT MODAL (ported) -->
+<div class="scrim" id="blogScrim" onclick="closeBlogModal()"></div>
+<div class="modal" id="blogModal" style="width:600px">
+  <div class="mh"><h3 id="bmTitle">New article</h3><button class="x" onclick="closeBlogModal()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
+  <div class="mb">
+    <div class="bm-place" id="bmPlace"></div>
+    <label class="fl">Title</label><input id="bTitle" class="inp" maxlength="120" placeholder="Article headline">
+    <div class="brow2">
+      <div><label class="fl">Kicker / category</label><input id="bKick" class="inp" placeholder="Analysis · $NVDA"></div>
+      <div><label class="fl">Placement</label><select id="bZone" class="inp">
+        <option value="lead">Featured — center</option><option value="stock">Stock 101 — left</option><option value="news">Market 101 — bottom</option><option value="edu">Educational 101 — right</option></select></div>
+    </div>
+    <div class="brow3">
+      <div><label class="fl">Author</label><input id="bAuthor" class="inp" placeholder="Desk"></div>
+      <div><label class="fl">Read time</label><input id="bRead" class="inp" placeholder="4 min"></div>
+      <div><label class="fl">Rank</label><input id="bRank" class="inp" type="number" min="1" step="1" placeholder="1"></div>
+    </div>
+    <label class="fl">Summary / dek</label><textarea id="bDek" class="inp" rows="2" placeholder="One or two sentences that tease the piece."></textarea>
+    <label class="fl">Body <span class="cc" id="bWords"></span></label>
+    <div id="bBody" class="blog-body-edit" contenteditable="true" data-ph="Drop a file to fill this, or type your article here…"></div>
+  </div>
+  <div class="mf"><button class="btn" style="flex:none" onclick="closeBlogModal()">Cancel</button><button class="btn-pub sch" style="flex:none;padding:11px 22px" id="bPublish">Publish</button></div>
+</div>
+
+
 <!-- DRAWER -->
 <div class="scrim" id="scrim" onclick="closeUser()"></div>
 <div class="drawer" id="drawer"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- ===== Firebase / Firestore blog layer (shared with the public blog page) ===== -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, deleteDoc, updateDoc, doc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  // ↓↓↓ PASTE your Firebase web config: Firebase console → Project settings → General → Your apps → SDK setup ↓↓↓
+  const firebaseConfig = {
+    apiKey: "PASTE_API_KEY",
+    authDomain: "marketcatalyst.firebaseapp.com",
+    projectId: "marketcatalyst",
+    storageBucket: "marketcatalyst.appspot.com",
+    messagingSenderId: "PASTE_SENDER_ID",
+    appId: "PASTE_APP_ID"
+  };
+  const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("PASTE");
+  let db = null;
+  if (configured) { try { db = getFirestore(initializeApp(firebaseConfig)); } catch (e) { console.warn("Firebase init failed:", e); } }
+  window.MCBlog = {
+    ready: !!db,
+    async list(){ const snap = await getDocs(query(collection(db,"posts"), orderBy("createdAt","desc"))); return snap.docs.map(d => ({ id:d.id, ...d.data() })); },
+    async add(post){ const ref = await addDoc(collection(db,"posts"), { ...post, createdAt: serverTimestamp() }); return ref.id; },
+    async update(id, patch){ await updateDoc(doc(db,"posts", id), { ...patch, updatedAt: serverTimestamp() }); },
+    async remove(id){ await deleteDoc(doc(db,"posts", id)); }
+  };
+  window.dispatchEvent(new Event("mcblog-ready"));
+</script>
 
 <script>
 /* ---------------- mock data ---------------- */
@@ -1343,8 +1509,371 @@ function initStudio(){
 }
 initStudio();
 
+/* ================= BLOGS (zone board) ================= */
+const ZONES={
+  lead:{label:'Featured',pos:'center',cls:'z-lead',dot:'#7c6cf5',area:'z-c'},
+  stock:{label:'Stock 101',pos:'left column',cls:'z-stock',dot:'#38d6e6',area:'z-l'},
+  edu:{label:'Educational 101',pos:'right column',cls:'z-edu',dot:'#ffb547',area:'z-r'},
+  news:{label:'Market 101',pos:'bottom',cls:'z-news',dot:'#2fe6a6',area:'z-b'}
+};
+const ZORDER=['stock','lead','edu','news'];
+/* ---------------------------------------------------------------
+   DEMO CONTENT — sample articles so the layout can be reviewed
+   before anything real is uploaded. Delete this array (leave it as
+   []) when you go live. Nothing here is written to Firestore.
+   --------------------------------------------------------------- */
+const DEMO=[
+ {zone:'lead',rank:1,kick:'Analysis · $NVDA',title:"Nvidia's guidance raise rewires the AI trade",dek:'The beat was expected. The raised outlook was not, and that is the part worth reading closely.',author:'A. Rao',read:'6 min',date:'Aug 10',html:'<p>Nvidia did not merely beat expectations this quarter; it rewrote what the next two look like. Revenue came in ahead, but the number that moved the tape was the forward guide.</p><h2>Why guidance matters more than the beat</h2><p>A beat tells you about a quarter that has already happened. Guidance tells you what management believes about demand it can already see in the order book. When a company raises the second, it is making a statement about visibility, not history.</p><p>The read-through runs down the supply chain: memory, networking, and the power and cooling names that sit behind every rack.</p><h2>What to watch next</h2><p>Two things. First, whether the hyperscalers echo the same capex tone on their own calls. Second, whether gross margin holds as the mix shifts toward complete systems rather than chips alone.</p>'},
+ {zone:'lead',rank:2,kick:'Analysis',title:'The rate-cut trade is crowded again',dek:'Positioning has run ahead of the data twice this year. Here is how to tell if it has happened a third time.',author:'A. Rao',read:'5 min',date:'Aug 9',html:'<p>Every few months the market decides cuts are imminent, and every few months it has to walk that back. The pattern is consistent enough to be worth a checklist.</p><p>Start with the front end of the curve, which moves first and lies least. Then compare it to what fed funds futures imply. When the gap widens without new data to justify it, you are looking at positioning rather than information.</p>'},
+ {zone:'lead',rank:3,kick:'Analysis · Sectors',title:'Why defensives stopped acting defensive',dek:'Staples and utilities have decoupled from their usual playbook. Rates explain most of it.',author:'A. Rao',read:'4 min',date:'Aug 5',html:'<p>The textbook says defensives outperform when growth slows. That has not held this cycle, and the reason is that both groups now trade partly as bond proxies.</p>'},
+
+ {zone:'stock',rank:1,kick:'$CRM',title:'Salesforce: three upgrades in a week',dek:'A cluster of upgrades usually front-runs a sentiment shift rather than following one.',author:'L. Park',read:'4 min',date:'Aug 8',html:'<p>Third upgrade this week as the margin story takes hold. What changed is not the revenue line but what management is willing to commit to on operating margin.</p><p>Watch the net revenue retention number next quarter — that is where the thesis either holds or breaks.</p>'},
+ {zone:'stock',rank:2,kick:'$AAPL',title:'Apple services margin quietly sets a record',dek:'The hardware story gets the headlines. Services pays the bills.',author:'L. Park',read:'5 min',date:'Aug 7',html:'<p>Services margin set a record this quarter, and the mix shift is now large enough to move the consolidated number on its own.</p>'},
+ {zone:'stock',rank:3,kick:'$JPM',title:'What the loan-loss provision is telling you',dek:'Provisions are a forecast dressed up as an accounting entry. Read them that way.',author:'L. Park',read:'5 min',date:'Aug 6',html:'<p>A provision is management stating, in dollars, what it expects to lose. Rising provisions in a stable economy usually mean the bank sees something in its own book that the macro data has not caught up to yet.</p>'},
+ {zone:'stock',rank:4,kick:'$TSLA',title:'Deliveries beat, margins did not',dek:'Two numbers pointing opposite directions, and only one of them is discretionary.',author:'L. Park',read:'4 min',date:'Aug 4',html:'<p>Volume can be bought with price. The question each quarter is how much was.</p>'},
+ {zone:'stock',rank:5,kick:'$KO',title:'Pricing power, measured properly',dek:'Volume growth and price growth tell very different stories about a consumer brand.',author:'L. Park',read:'3 min',date:'Aug 2',html:'<p>Split revenue growth into price and volume before deciding a brand has pricing power. Growth that is entirely price is a warning, not a moat.</p>'},
+ {zone:'stock',rank:6,kick:'$XOM',title:'Reading an energy major through the cycle',dek:'Free cash flow at mid-cycle prices matters more than any single quarter.',author:'L. Park',read:'5 min',date:'Jul 31',html:'<p>Normalise for the commodity price before judging the operator.</p>'},
+
+ {zone:'edu',rank:1,kick:'Explainer',title:'What is Relative Strength (RS) rank?',dek:'A 1–99 score for how a stock has performed against the market. Here is how to use it without over-reading it.',author:'Learn',read:'5 min',date:'Aug 8',html:'<p>Relative strength compares a stock\u2019s move to the market\u2019s over the same window, then ranks every name from 1 to 99. A score of 90 means the stock outperformed 90% of the market.</p><h2>What it does not tell you</h2><p>RS is descriptive, not predictive. It says what has happened, and a high score can mean a strong trend or a stock that has already run. Use it to filter, never to decide.</p>'},
+ {zone:'edu',rank:2,kick:'How-to',title:'Read an earnings report in five minutes',dek:'The four lines that matter, and the noise you can skip on a first pass.',author:'Learn',read:'6 min',date:'Aug 6',html:'<p>Start with revenue, then guidance, then margin, then cash flow. Everything else is context for those four.</p><h2>1. Revenue</h2><p>Compare it to the same quarter last year, not the previous quarter, unless the business is genuinely seasonal.</p><h2>2. Guidance</h2><p>The forward number moves the stock more often than the reported one.</p><h2>3. Margin</h2><p>Growing revenue with shrinking margin is a different business than it was a year ago.</p><h2>4. Cash flow</h2><p>Profit is an opinion; cash is a fact. If they diverge for more than a couple of quarters, find out why.</p>'},
+ {zone:'edu',rank:3,kick:'Explainer',title:'Market cap, enterprise value, and which to use',dek:'They answer different questions. Using the wrong one makes cheap companies look expensive.',author:'Learn',read:'4 min',date:'Aug 3',html:'<p>Market cap is what the equity costs. Enterprise value is what the whole business costs, debt included, cash netted off.</p>'},
+ {zone:'edu',rank:4,kick:'Basics',title:'How to read a candlestick chart',dek:'Four numbers per bar. That is the entire vocabulary.',author:'Learn',read:'4 min',date:'Aug 1',html:'<p>Open, high, low, close. Every pattern people talk about is a description of how those four sit relative to each other.</p>'},
+ {zone:'edu',rank:5,kick:'Basics',title:'Limit orders, market orders, and slippage',dek:'The order type you choose is a decision about price versus certainty.',author:'Learn',read:'3 min',date:'Jul 29',html:'<p>A market order buys certainty of execution and gives up certainty of price. A limit order does the reverse.</p>'},
+ {zone:'edu',rank:6,kick:'Explainer',title:'What a P/E ratio actually compares',dek:'Two companies can carry the same multiple and mean completely different things by it.',author:'Learn',read:'5 min',date:'Jul 27',html:'<p>A multiple is a shorthand for expected growth, risk, and capital intensity all at once. Comparing across industries usually compares nothing at all.</p>'},
+
+ {zone:'news',rank:1,kick:'Markets',title:'Cooler CPI sends stocks to record highs',dek:'Softer inflation revived rate-cut bets across the curve.',author:'Wire',read:'2 min',date:'Aug 10',html:'<p>A cooler inflation print revived September cut bets, with the front end moving first.</p>'},
+ {zone:'news',rank:2,kick:'Sectors',title:'Semis lead as AI capex guidance climbs',dek:'Chip names paced the tape for a third straight session.',author:'Wire',read:'2 min',date:'Aug 10',html:'<p>Chip names paced the tape again as capex commentary stayed strong.</p>'},
+ {zone:'news',rank:3,kick:'Rates',title:'Two-year yield slips below 4%',dek:'The short end moved first, as it usually does.',author:'Wire',read:'2 min',date:'Aug 9',html:'<p>The short end moved first, widening the gap against fed funds pricing.</p>'},
+ {zone:'news',rank:4,kick:'Earnings',title:'Retailers flag a cautious consumer',dek:'Three of four majors trimmed their second-half outlook.',author:'Wire',read:'3 min',date:'Aug 8',html:'<p>Discretionary categories softened while essentials held.</p>'},
+ {zone:'news',rank:5,kick:'Commodities',title:'Crude holds range despite supply headlines',dek:'The market has stopped reacting to announcements alone.',author:'Wire',read:'2 min',date:'Aug 7',html:'<p>Physical differentials have not confirmed the headline risk.</p>'},
+ {zone:'news',rank:6,kick:'FX',title:'Dollar softens on narrowing rate differentials',dek:'The move tracked the rates story almost exactly.',author:'Wire',read:'2 min',date:'Aug 6',html:'<p>Rate differentials did most of the work.</p>'}
+];
+
+/* Demo posts load as unpublished drafts: Discard clears them, Publish makes
+   them real. Every other article on the board comes from a file you upload. */
+const BLOGS=DEMO.map((p,i)=>({...p,id:'demo-'+i,status:'Published',_cloud:true}));
+const bEl=id=>document.getElementById(id);
+let _targetZone='lead', _editId=null;
+
+async function convertFile(file){
+  const name=(file.name||'').toLowerCase();
+  try{
+    let html='';
+    if(name.endsWith('.docx')){
+      if(typeof mammoth==='undefined'){toast('Converter still loading — try again in a moment');return null;}
+      html=(await mammoth.convertToHtml({arrayBuffer:await file.arrayBuffer()})).value||'<p>(empty document)</p>';
+    } else if(name.endsWith('.pdf')){
+      if(typeof pdfjsLib==='undefined'){toast('PDF reader still loading — try again in a moment');return null;}
+      const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+      for(let i=1;i<=pdf.numPages;i++){const tc=await (await pdf.getPage(i)).getTextContent();let line='',lastY=null;const paras=[];
+        tc.items.forEach(it=>{const y=it.transform[5];if(lastY!==null&&Math.abs(y-lastY)>6){if(line.trim())paras.push(line.trim());line='';}line+=it.str+' ';lastY=y;});
+        if(line.trim())paras.push(line.trim());
+        html+=paras.map(p=>`<p>${xesc(p)}</p>`).join('');}
+      html=html||'<p>(No selectable text — this PDF looks scanned. Try a Word file for formatting.)</p>';
+    } else {toast('Please upload a .docx or .pdf');return null;}
+    toast('Imported '+file.name);
+    return {title:file.name.replace(/\.(docx|pdf)$/i,'').replace(/[-_]/g,' '),html};
+  }catch(e){toast('Could not read file: '+e.message);return null;}
+}
+/* Articles inside a zone are ordered by rank, lowest first. Rank 1 sits at the
+   top of the tray on the live site (and is the featured slot in the centre). */
+function zoneposts(z){
+  return BLOGS.filter(p=>p.zone===z).sort((a,b)=>(a.rank??999)-(b.rank??999));
+}
+function nextRank(z,exceptId){
+  const n=BLOGS.filter(p=>p.zone===z&&p.id!==exceptId).length;
+  return n+1;
+}
+/* ---- staging ----
+   Nothing below writes to Firestore. Every edit lands in BLOGS only; COMMITTED
+   holds what's actually live, and publishChanges() reconciles the two. That's
+   what lets the board be a draft you can discard. */
+function renumber(z){
+  zoneposts(z).forEach((p,i)=>{ p.rank=i+1; });
+}
+function moveBlog(id,dir){
+  const p=BLOGS.find(x=>x.id===id); if(!p) return;
+  const posts=zoneposts(p.zone), i=posts.findIndex(x=>x.id===id), j=i+dir;
+  if(j<0||j>=posts.length) return;
+  const a=posts[i].rank??i+1, b=posts[j].rank??j+1;
+  posts[i].rank=b; posts[j].rank=a;
+  renumber(p.zone);
+  renderBoard();
+  toast('Moved to #'+(j+1)+' — publish to apply');
+}
+function zdropSVG(){return '<svg width="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M7 9l5-5 5 5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round"/></svg>';}
+function renderBoard(){
+  const board=bEl('blogboard');if(!board)return;
+  board.innerHTML=ZORDER.map(z=>{
+    const m=ZONES[z], posts=zoneposts(z);
+    const cards=posts.length?posts.map((p,i)=>`<div class="zcard ${z==='lead'&&i===0?'lead':''}" draggable="true" data-id="${p.id}" onclick="openBlogModal('${z}','${p.id}')">
+        <span class="zrk">${i+1}</span>
+        <button class="zx" title="Remove" onclick="event.stopPropagation();deleteBlog('${p.id}')">×</button>
+        <div class="zk">${xesc(p.kick||'')}</div><h5>${xesc(p.title||'Untitled')}</h5>
+        ${p.dek?`<div class="zd">${xesc(p.dek)}</div>`:''}
+        <div class="zby">${xesc(p.author||'Desk')} · ${xesc(p.read||'')}</div>
+        <div class="zmove">
+          <button title="Move up" ${i===0?'disabled':''} onclick="event.stopPropagation();moveBlog('${p.id}',-1)">↑</button>
+          <button title="Move down" ${i===posts.length-1?'disabled':''} onclick="event.stopPropagation();moveBlog('${p.id}',1)">↓</button>
+        </div></div>`).join('')
+      :`<div class="zempty">No articles here yet</div>`;
+    return `<div class="bzone ${m.area}" data-zone="${z}">
+      <div class="zh"><span class="zdot" style="background:${m.dot}"></span><h4>${m.label}</h4><span class="zpos">${m.pos}</span><span class="zn">${posts.length}</span></div>
+      <div class="zdrop" data-zone="${z}">${zdropSVG()}<b>Drop .docx / .pdf</b> anywhere here, or click</div>
+      <div class="zlist">${cards}</div></div>`;
+  }).join('');
+  board.querySelectorAll('.zdrop').forEach(dz=>{
+    const z=dz.dataset.zone;
+    dz.onclick=()=>{_targetZone=z;const f=bEl('blogFile');f.value='';f.click();};
+  });
+  wireCardDrag(board);
+  wireFileDrop(board);
+  if(typeof updateBar==='function')updateBar();   // board and bar always agree
+}
+
+/* ---- drag a card: reorder inside a zone, or move it to another zone ---- */
+let _drag=null;
+const isFile=e=>Array.from(e.dataTransfer.types||[]).includes('Files');
+function clearMarks(board){
+  board.querySelectorAll('.over-top,.over-bot').forEach(n=>n.classList.remove('over-top','over-bot'));
+  board.querySelectorAll('.carddrag').forEach(n=>n.classList.remove('carddrag'));
+  board.querySelectorAll('.tail-over').forEach(n=>n.classList.remove('tail-over'));
+}
+function wireCardDrag(board){
+  board.querySelectorAll('.zcard[draggable]').forEach(card=>{
+    card.addEventListener('dragstart',e=>{
+      _drag=card.dataset.id;
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',_drag);   // Firefox needs a payload
+      setTimeout(()=>card.classList.add('dragging'),0);
+    });
+    card.addEventListener('dragend',()=>{_drag=null;card.classList.remove('dragging');clearMarks(board);});
+    card.addEventListener('dragover',e=>{
+      if(!_drag||isFile(e))return;
+      e.preventDefault();e.stopPropagation();
+      const r=card.getBoundingClientRect(), after=(e.clientY-r.top)>r.height/2;
+      card.classList.toggle('over-bot',after);card.classList.toggle('over-top',!after);
+    });
+    card.addEventListener('dragleave',()=>card.classList.remove('over-top','over-bot'));
+    card.addEventListener('drop',async e=>{
+      if(!_drag||isFile(e))return;
+      e.preventDefault();e.stopPropagation();
+      const r=card.getBoundingClientRect(), after=(e.clientY-r.top)>r.height/2;
+      const zone=card.closest('.bzone').dataset.zone;
+      const order=zoneposts(zone).map(p=>p.id).filter(id=>id!==_drag);
+      let at=order.indexOf(card.dataset.id); if(at<0)at=order.length; if(after)at++;
+      await placeAt(_drag,zone,at);
+    });
+  });
+  /* dropping past the last card, or on an empty zone, appends */
+  board.querySelectorAll('.bzone').forEach(zone=>{
+    zone.addEventListener('dragover',e=>{
+      if(!_drag||isFile(e))return;
+      e.preventDefault();zone.classList.add('carddrag');
+      const list=zone.querySelector('.zlist'); if(list)list.classList.add('tail-over');
+    });
+    zone.addEventListener('dragleave',e=>{
+      if(zone.contains(e.relatedTarget))return;
+      zone.classList.remove('carddrag');
+      const list=zone.querySelector('.zlist'); if(list)list.classList.remove('tail-over');
+    });
+    zone.addEventListener('drop',async e=>{
+      if(!_drag||isFile(e))return;
+      e.preventDefault();
+      const z=zone.dataset.zone;
+      await placeAt(_drag,z,zoneposts(z).filter(p=>p.id!==_drag).length);
+    });
+  });
+}
+/* Puts a post at index `at` of `zone`. Fractional ranks slot it between
+   neighbours, then renumber() flattens the zone back to 1..n. */
+async function placeAt(id,zone,at){
+  const p=BLOGS.find(x=>x.id===id); if(!p)return;
+  const from=p.zone, moved=from!==zone;
+  const rest=zoneposts(zone).filter(x=>x.id!==id);
+  const before=rest[at-1], after=rest[at];
+  p.zone=zone;
+  p.rank = !before ? ((after?.rank ?? 1)-0.5)
+         : !after  ? ((before.rank ?? rest.length)+0.5)
+         : ((before.rank+after.rank)/2);
+  renumber(zone);
+  if(moved)renumber(from);
+  renderBoard();
+  toast(moved?('Moved to '+(ZONES[zone]||ZONES.lead).label+' · #'+(at+1)+' — publish to apply')
+             :('Now #'+(at+1)+' — publish to apply'));
+}
+
+/* ---- drop a .docx/.pdf anywhere on a zone, not just the dashed strip ---- */
+function wireFileDrop(board){
+  board.querySelectorAll('.bzone').forEach(zone=>{
+    const z=zone.dataset.zone;
+    zone.addEventListener('dragover',e=>{
+      if(!isFile(e))return;
+      e.preventDefault();e.dataTransfer.dropEffect='copy';zone.classList.add('filedrag');
+    });
+    zone.addEventListener('dragleave',e=>{ if(!zone.contains(e.relatedTarget))zone.classList.remove('filedrag'); });
+    zone.addEventListener('drop',async e=>{
+      if(!isFile(e))return;
+      e.preventDefault();zone.classList.remove('filedrag');
+      const files=Array.from(e.dataTransfer.files||[]);
+      if(!files.length)return;
+      if(files.length>1)toast('One file at a time — taking '+files[0].name);
+      const d=await convertFile(files[0]);
+      if(d){_targetZone=z;openBlogModal(z,null,d);}
+    });
+  });
+}
+function updateBlogWords(){const t=(bEl('bBody').innerText||'').trim();bEl('bWords').textContent=t?(t.split(/\s+/).length+' words'):'';}
+function updatePlaceChip(){const z=bEl('bZone').value||'lead',m=ZONES[z]||ZONES.lead;bEl('bmPlace').className='bm-place '+m.cls;bEl('bmPlace').innerHTML=`<span style="width:8px;height:8px;border-radius:3px;background:${m.dot};display:inline-block"></span>${m.label} · ${m.pos}`;}
+function openBlogModal(zone,editId,draft){
+  _editId=editId||null;
+  const p=editId?(BLOGS.find(x=>x.id===editId)||{}):{zone,kick:'',title:draft?draft.title:'',dek:'',author:'',read:'',html:draft?draft.html:''};
+  const z=p.zone||zone;
+  bEl('bmTitle').textContent=editId?'Edit article':'New article';
+  bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';bEl('bBody').innerHTML=p.html||'';
+  bEl('bRank').value=p.rank||nextRank(z,editId);
+  updatePlaceChip();updateBlogWords();
+  bEl('bPublish').textContent=editId?'Update':'Publish';
+  bEl('blogModal').classList.add('on');bEl('blogScrim').classList.add('on');
+}
+function closeBlogModal(){bEl('blogModal').classList.remove('on');bEl('blogScrim').classList.remove('on');_editId=null;}
+/* Modal save = stage only. Nothing reaches the site until Publish changes. */
+function savePublish(){
+  const d={zone:bEl('bZone').value||'lead',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value,author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
+  if(!d.title){toast('Add a title first');return;}
+  /* A typed rank wins; .5 nudges it just above whatever holds that slot,
+     then renumber() flattens everything back to clean 1..n. */
+  const typed=parseInt(bEl('bRank').value,10);
+  d.rank=(typed&&typed>0)?typed-0.5:nextRank(d.zone,_editId);
+  const post={...d,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}),status:'Published'};
+  const oldZone=_editId?(BLOGS.find(x=>x.id===_editId)||{}).zone:null;
+  if(_editId){
+    const idx=BLOGS.findIndex(x=>x.id===_editId), old=BLOGS[idx]||{};
+    BLOGS[idx]={...post,id:_editId,_cloud:!!old._cloud};
+    toast('Edit staged — publish to apply');
+  }else{
+    BLOGS.unshift({...post,id:'draft-'+Date.now().toString(36)});
+    toast('Article staged — publish to apply');
+  }
+  renumber(d.zone);
+  if(oldZone&&oldZone!==d.zone)renumber(oldZone);
+  renderBoard();closeBlogModal();
+}
+function deleteBlog(id){
+  const i=BLOGS.findIndex(x=>x.id===id);if(i<0)return;
+  const p=BLOGS[i];
+  BLOGS.splice(i,1);renumber(p.zone);renderBoard();
+  toast('Removal staged — publish to apply');
+}
+
+/* ================= STAGING / PUBLISH ================= */
+/* COMMITTED mirrors what's live on the site. BLOGS is the working draft.
+   diffChanges() compares them; publishChanges() makes the site match. */
+let COMMITTED=[], _publishing=false;
+const FIELDS=['zone','rank','kick','title','dek','author','read','html','date','status'];
+const sig=p=>FIELDS.map(f=>String(p[f]??'')).join('\u0001');
+function commit(){COMMITTED=BLOGS.map(p=>({...p}));updateBar();}
+
+function diffChanges(){
+  const was=new Map(COMMITTED.map(p=>[p.id,p]));
+  const now=new Map(BLOGS.map(p=>[p.id,p]));
+  return {
+    adds   : BLOGS.filter(p=>!p._cloud),
+    updates: BLOGS.filter(p=>p._cloud&&was.has(p.id)&&sig(p)!==sig(was.get(p.id))),
+    deletes: COMMITTED.filter(p=>p._cloud&&!now.has(p.id))
+  };
+}
+function updateBar(){
+  const bar=bEl('pubBar');if(!bar)return;
+  const d=diffChanges(), n=d.adds.length+d.updates.length+d.deletes.length;
+  bar.classList.toggle('on',n>0);
+  if(!n)return;
+  const bits=[];
+  if(d.adds.length)   bits.push(d.adds.length+' new');
+  if(d.updates.length)bits.push(d.updates.length+' edited');
+  if(d.deletes.length)bits.push(d.deletes.length+' removed');
+  bEl('pubCount').textContent=n+(n===1?' unpublished change':' unpublished changes');
+  bEl('pubDetail').textContent=bits.join(' · ');
+}
+function discardChanges(){
+  const d=diffChanges(), n=d.adds.length+d.updates.length+d.deletes.length;
+  if(!n)return;
+  if(!confirm('Discard '+n+' unpublished change'+(n===1?'':'s')+'? The board goes back to what\u2019s live on the site.'))return;
+  BLOGS.length=0;COMMITTED.forEach(p=>BLOGS.push({...p}));
+  renderBoard();updateBar();toast('Changes discarded');
+}
+async function publishChanges(){
+  if(_publishing)return;
+  const d=diffChanges(), n=d.adds.length+d.updates.length+d.deletes.length;
+  if(!n)return;
+  if(!(window.MCBlog&&window.MCBlog.ready)){
+    commit();renderBoard();
+    toast('Saved locally — add your Firebase config to publish to the site');
+    return;
+  }
+  _publishing=true;
+  const btn=bEl('pubGo'),orig=btn.textContent;btn.disabled=true;btn.textContent='Publishing…';
+  try{
+    for(const p of d.deletes) await window.MCBlog.remove(p.id);
+    for(const p of d.updates){
+      const body={};FIELDS.forEach(f=>body[f]=p[f]);
+      await window.MCBlog.update(p.id,body);
+    }
+    for(const p of d.adds){
+      const body={};FIELDS.forEach(f=>body[f]=p[f]);
+      const id=await window.MCBlog.add(body);
+      p.id=id;p._cloud=true;                     // draft id swaps for the real one
+    }
+    commit();renderBoard();
+    toast('Published — '+n+' change'+(n===1?'':'s')+' now live on your site');
+  }catch(e){
+    toast('Publish failed: '+e.message+' — your board is unchanged, try again');
+    updateBar();
+  }finally{
+    _publishing=false;btn.disabled=false;btn.textContent=orig;
+  }
+}
+
+async function syncBlogsFromCloud(){
+  if(!(window.MCBlog&&window.MCBlog.ready))return;
+  const d=diffChanges();
+  const onlyDemo=BLOGS.every(p=>String(p.id).startsWith('demo-'));
+  if(!onlyDemo&&d.adds.length+d.updates.length+d.deletes.length){
+    toast('You have unpublished changes — not reloading from the site');
+    return;                                       // never clobber a draft
+  }
+  try{
+    const posts=await window.MCBlog.list();
+    BLOGS.length=0;
+    posts.forEach(p=>BLOGS.push({...p,_cloud:true,status:p.status||'Published',date:p.date||''}));
+    /* older posts predate ranking — give them one so ordering works */
+    ZORDER.forEach(z=>{let n=0;zoneposts(z).forEach(p=>{n++;if(typeof p.rank!=='number')p.rank=n;});});
+    commit();renderBoard();
+  }catch(e){console.warn('blog sync:',e);}
+}
+
+function initBlogs(){
+  const file=bEl('blogFile');
+  file.onchange=async e=>{const f=e.target.files[0];if(f){const d=await convertFile(f);if(d)openBlogModal(_targetZone||'lead',null,d);}};
+  bEl('bBody').addEventListener('input',updateBlogWords);
+  bEl('bZone').addEventListener('change',updatePlaceChip);
+  bEl('bPublish').onclick=savePublish;
+  bEl('pubGo').onclick=publishChanges;
+  bEl('pubCancel').onclick=discardChanges;
+  try{if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}catch(e){}
+  commit();                       // demo posts stay pending
+  renderBoard();updateBar();
+  window.addEventListener('mcblog-ready',syncBlogsFromCloud);
+  if(window.MCBlog&&window.MCBlog.ready)syncBlogsFromCloud();
+  window.addEventListener('beforeunload',e=>{
+    const d=diffChanges();
+    if(d.adds.length+d.updates.length+d.deletes.length){e.preventDefault();e.returnValue='';}
+  });
+}
+initBlogs();
+
 /* ---------- nav ---------- */
-const TITLES={overview:'Overview <span>· last 30 days</span>',users:'Users',subs:'Subscriptions',revenue:'Revenue',usage:'Usage &amp; API',monitor:'Monitor <span>· backend services</span>',studio:'Social Studio <span>· push to Instagram &amp; more</span>'};
+const TITLES={overview:'Overview <span>· last 30 days</span>',users:'Users',subs:'Subscriptions',revenue:'Revenue',usage:'Usage &amp; API',monitor:'Monitor <span>· backend services</span>',studio:'Social Studio <span>· push to Instagram &amp; more</span>',blogs:'Blogs <span>· publish articles to your site</span>'};
 /* The backend monitor is loaded LAZILY, on first visit to the Monitor tab.
    Mounting its iframe at page load would fire a cross-origin request on every
    admin session — including the ones that never open this tab — and, since the

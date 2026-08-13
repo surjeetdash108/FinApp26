@@ -90,14 +90,6 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
   });
 }
 
-export function apiPut<T>(path: string, body?: unknown): Promise<T> {
-  return request<T>(path, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-}
-
 export function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, {
     method: "PATCH",
