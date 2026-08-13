@@ -423,7 +423,7 @@ function CalTable({
 
 export function EarningsScreen() {
   const { openStockFull } = useIQActions();
-  const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
+  const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   const { data: earningsAnnouncements } = useApiList<EarningsAnnouncementDoc>("/market-data/earnings-announcements");
   const liveEarningsData = liveEarnings;
 
@@ -509,10 +509,12 @@ export function EarningsScreen() {
             <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={setSel} view={view} />
             <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={setSel} view={view} />
           </>
+        ) : earningsLoading ? (
+          <DataState loading label="" />
         ) : (
           <div className="ecal-empty">
             <div className="ecal-empty-h">No companies reporting</div>
-            <div>Nothing scheduled for {dateLabel} in the synced calendar.</div>
+            <div>Nothing scheduled for {dateLabel}.</div>
           </div>
         )}
       </>
