@@ -57,11 +57,6 @@ export interface IndexDoc {
   dayHigh?: number; dayLow?: number;
 }
 
-export const PULSE_LABEL_TO_INDEX_ID: Record<string, string> = {
-  "S&P 500": "SPX", "Nasdaq": "NDX", "Dow": "DJI", "Russell 2K": "RUT",
-  "VIX": "VIX", "10Y Yield": "US10Y", "WTI Crude": "WTI", "Gold": "GOLD", "Dollar (DXY)": "DXY",
-};
-
 /**
  * Maps the backend tape's items onto IndexDoc — items without a price are
  * dropped rather than coerced to 0, so mergePulse's own mock-fallback covers

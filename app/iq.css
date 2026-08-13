@@ -202,6 +202,11 @@
 .topbar-clock {
   font-size: .72rem; color: var(--text-dim-solid);
   font-family: var(--f-mono); white-space: nowrap; flex-shrink: 0;
+  /* Right-align the clock (and the market-open pill + icons after it): the
+     search is max-width-capped, so it fills to 30rem first, then this auto
+     margin absorbs the rest — parking the date/time immediately left of the
+     "Market open" pill instead of floating mid-bar. */
+  margin-left: auto;
 }
 @media (max-width: 720px) { .topbar-clock { display: none; } }
 .logo {
@@ -292,7 +297,9 @@
   padding: 3px 10px; border-radius: 99px;
   background: var(--up-dim); border: 1px solid var(--up);
   font-size: 0.6875rem; font-weight: 600; color: var(--up);
-  margin-left: auto;
+  /* Right-alignment now lives on .topbar-clock (the first item of the right
+     cluster) so the clock sits immediately left of this pill. A second
+     margin-left:auto here would split the free space and re-center the clock. */
 }
 /* Market-session states — dot + ping inherit the pill's text color. */
 .statuspill.mkt-ext {

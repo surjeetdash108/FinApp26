@@ -1,12 +1,18 @@
 "use client";
 
 import { useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useIQActions } from "../shell";
 import { sign, heatCol, fmt, StockLogo, NotAvailable } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { buildSectorList } from "../live-market-indices";
 import { INDEX_MEMBERS, HEATMAP_TAB_KEYS } from "../index-constituents";
 import type { CompanyDoc, SectorApiDoc } from "../types";
+
+const StockScreenEmbed = dynamic<{ initialSym?: string }>(
+  () => import("./stock").then(m => ({ default: m.StockScreen })),
+  { ssr: false, loading: () => <div style={{ padding: 40, textAlign: "center", color: "var(--text-dim-solid)" }}>Loading…</div> }
+);
 
 const TABS = ["Stocks", "S&P 500", "Nasdaq", "Dow", "Russell 2000"];
 const HEADER_H = 24;
@@ -51,7 +57,10 @@ interface HoverStock {
 }
 
 export function HeatmapScreen() {
-  const { openSector, openStockFull } = useIQActions();
+  const { openSector } = useIQActions();
+  // Clicking a tile opens the stock in a slide-in drawer (same as Movers),
+  // rather than navigating away to the full stock page.
+  const [selectedSym, setSelectedSym] = useState<string | null>(null);
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
   const fullSectorList = buildSectorList(companies, sectorsLive);
@@ -198,7 +207,7 @@ export function HeatmapScreen() {
 
                     return (
                       <div key={sym}
-                        onClick={e => { e.stopPropagation(); openStockFull(sym); }}
+                        onClick={e => { e.stopPropagation(); setSelectedSym(sym); }}
                         onMouseEnter={e => showHover(e, sym, chg, mcap)}
                         onMouseLeave={hideHover}
                         title={`${sym}  ${sign(chg)}`}
@@ -250,7 +259,7 @@ export function HeatmapScreen() {
             onMouseLeave={hideHover}
           >
             {/* Hovered stock header */}
-            <div className="dp-head" style={{ cursor: "pointer" }} onClick={() => { setHover(null); openStockFull(hover.sym); }}>
+            <div className="dp-head" style={{ cursor: "pointer" }} onClick={() => { setHover(null); setSelectedSym(hover.sym); }}>
               <StockLogo sym={hover.sym} size={28} />
               <span className="dp-sym">{hover.sym}</span>
               <span className={`pill ${hover.chg >= 0 ? "up" : "dn"}`}>{sign(hover.chg)}</span>
@@ -270,7 +279,7 @@ export function HeatmapScreen() {
                 {hover.peers.map(([psym, pmcap, pchg]) => (
                   <div key={psym}
                     className={`hpop-row${psym === hover.sym ? " hpop-row-hi" : ""}`}
-                    onClick={() => { setHover(null); openStockFull(psym); }}
+                    onClick={() => { setHover(null); setSelectedSym(psym); }}
                   >
                     <StockLogo sym={psym} size={16} />
                     <span className="hpop-sym">{psym}</span>
@@ -284,6 +293,30 @@ export function HeatmapScreen() {
           </div>
         );
       })()}
+
+      {/* Sliding stock detail drawer (same pattern as Movers) */}
+      {selectedSym && (
+        <>
+          <div className="scrim" onClick={() => setSelectedSym(null)} />
+          <div className="stock-side-drawer">
+            <div className="drawer-h" style={{ paddingTop: 14, paddingBottom: 14 }}>
+              <StockLogo sym={selectedSym} size={32} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)" }}>
+                  {selectedSym} · Stock Details
+                </div>
+                <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+                  Full analysis · chart · technicals · peers
+                </div>
+              </div>
+              <button className="closebtn" onClick={() => setSelectedSym(null)}>✕</button>
+            </div>
+            <div className="drawer-b">
+              <StockScreenEmbed initialSym={selectedSym} />
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }

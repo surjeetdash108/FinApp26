@@ -6,7 +6,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
 import { tapeItemsToIndexDocs } from "../live-market-indices";
-import type { MacroEventDoc, DividendDoc, DividendHistoryDoc, CompanyDoc } from "../types";
+import type { MacroEventDoc, DividendHistoryDoc, CompanyDoc } from "../types";
 import type { MarketStatusPayload } from "../types/market-status";
 import { rangeFor, inRange, fmtMonthDay, type RangeTabKey } from "../calendar-range";
 
@@ -58,24 +58,7 @@ function ecoRowsFor(tabIdx: number, live: MacroEventDoc[], now: Date): MacroEven
     .map(toMacroEvent);
 }
 
-// ── Dividend calendar data ───────────────────────────────────────────────────
-type DivTabKey = "lmonth" | "prev" | "yest" | "today" | "tom" | "week" | "next" | "month";
-const DIV_RANGES: [DivTabKey, string][] = [
-  ["lmonth", "Last Month"],
-  ["prev",   "Last Week"],
-  ["yest",   "Yesterday"],
-  ["today",  "Today"],
-  ["tom",    "Tomorrow"],
-  ["week",   "This Week"],
-  ["next",   "Next Week"],
-  ["month",  "Month"],
-];
-
-// Today = Thu Jun 25, 2026
-// This week: Mon Jun 22 – Fri Jun 26  (weekDay 0=Mon … 4=Fri)
-// Last week: Mon Jun 15 – Fri Jun 19
-// Next week: Mon Jun 29 – Fri Jul 3
-// Last month: May 2026
+// ── Dividend data ────────────────────────────────────────────────────────────
 interface DivStock {
   sym: string; name: string; sector: string;
   exDate: string; payDate: string;   // display strings, e.g. "Jun 25"
@@ -85,60 +68,6 @@ interface DivStock {
   weekDay: number;                   // 0=Mon..4=Fri for week-grid view
 }
 
-
-/** Live Firestore dividend -> the shape the calendar renders. */
-function toDivStock(d: DividendDoc): DivStock {
-  const [, em, ed] = d.exDividendDate.split("-").map(Number);
-  const pay = d.paymentDate ? d.paymentDate.split("-").map(Number) : null;
-  const exDate = new Date(d.exDividendDate + "T00:00:00Z");
-  return {
-    sym: d.ticker,
-    // Company name and sector are not on the dividend doc; showing the ticker is
-    // honest, whereas inventing a name would not be.
-    name: d.ticker,
-    sector: "—",
-    exDate: fmtMonthDay(d.exDividendDate),
-    payDate: fmtMonthDay(d.paymentDate),
-    exMonth: em, exDay: ed,
-    payMonth: pay ? pay[1] : 0, payDay: pay ? pay[2] : 0,
-    amount: d.dividendAmount ?? 0,
-    // Polygon does not return dividend yield — null renders as "n/a" rather
-    // than a fabricated 0%.
-    yld: d.yieldPct ?? null,
-    freq: d.frequency ?? "—",
-    streak: null,
-    weekDay: (exDate.getUTCDay() + 6) % 7,
-  };
-}
-
-
-/**
- * Ex-dividend rows for a tab, from live Firestore dividend data only; returns
- * [] when there's none (no mock fallback).
- */
-function exDivFor(tab: DivTabKey, live: DividendDoc[], now: Date): DivStock[] {
-  if (live.length > 0) {
-    const r = rangeFor(tab as RangeTabKey, now);
-    return live
-      .filter(d => d.exDividendDate && inRange(d.exDividendDate, r))
-      .sort((a, b) => a.exDividendDate.localeCompare(b.exDividendDate) || a.ticker.localeCompare(b.ticker))
-      .map(toDivStock);
-  }
-  return [];
-}
-
-/** Pay-date rows, same rules. Only the single-day tabs show a pay-date block. */
-function payDivFor(tab: DivTabKey, live: DividendDoc[], now: Date): DivStock[] {
-  if (tab !== "today" && tab !== "yest" && tab !== "tom") return [];
-  if (live.length > 0) {
-    const r = rangeFor(tab as RangeTabKey, now);
-    return live
-      .filter(d => d.paymentDate && inRange(d.paymentDate, r))
-      .sort((a, b) => a.ticker.localeCompare(b.ticker))
-      .map(toDivStock);
-  }
-  return [];
-}
 
 // ── Dividend bar chart ───────────────────────────────────────────────────────
 function DivHistoryChart({ data }: { data: { year: number; div: number }[] }) {
@@ -256,43 +185,10 @@ function DividendDrawer({ stock, onClose }: { stock: DivStock; onClose: () => vo
   );
 }
 
-// ── Dividend logo chip ────────────────────────────────────────────────────────
-function DivChip({ d, selected, onSelect }: { d: DivStock; selected: boolean; onSelect: (s: DivStock) => void }) {
-  return (
-    <button className={`ec-chip${selected ? " on" : ""}`} onClick={() => onSelect(d)}
-      title={`${d.name} · ex-div ${d.exDate} · $${d.amount.toFixed(2)}/qtr · ${d.yld != null && d.yld > 0 ? d.yld.toFixed(2) + "% yield" : "yield n/a"}`}>
-      <span className="ec-logo" style={{ background: "#27314a", color: "#cdd6e6" }}>
-        {d.sym[0]}
-        <img
-          src={`https://assets.parqet.com/logos/symbol/${d.sym}?format=png`}
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-          alt=""
-        />
-      </span>
-      {d.sym}
-    </button>
-  );
-}
-
-// ── Month calendar helper ─────────────────────────────────────────────────────
-const MONTHS_LBL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const DOWS       = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
-function divMonthCal(year: number, month1: number, liveStocks: DivStock[]) {
-  const first = new Date(year, month1 - 1, 1).getDay();
-  const days  = new Date(year, month1, 0).getDate();
-  const map: Record<number, DivStock[]> = {};
-  for (let d = 1; d <= days; d++) {
-    map[d] = liveStocks.filter(s => s.exMonth === month1 && s.exDay === d);
-  }
-  return { first, days, map };
-}
-
 // ── Main screen ──────────────────────────────────────────────────────────────
 export function MacroScreen() {
   const { data: macroLive, loading: macroLoading } = useApiList<MacroEventDoc>("/market-data/macro-events");
 
-  const { data: liveDividends, loading: liveDividendsLoading } = useApiList<DividendDoc>("/market-data/dividends");
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: mktStatus } = useApiResource<MarketStatusPayload>("/live/market-status");
   // Polygon /v1/marketstatus/upcoming — dedupe the per-exchange rows (NYSE +
@@ -319,14 +215,10 @@ export function MacroScreen() {
 
   // One clock for the whole screen so tabs cannot disagree mid-render.
   const now = new Date();
-  const liveDividendsSorted = [...liveDividends].sort((a, b) => a.exDividendDate.localeCompare(b.exDividendDate));
 
   const [ecoTab,    setEcoTab]    = useState(2);
   const ecoRows = ecoRowsFor(ecoTab, macroLive, now);
-  const [divTab,    setDivTab]    = useState<DivTabKey>("week");
-  const [monthOff,  setMonthOff]  = useState(0);
   const [selStock,  setSelStock]  = useState<DivStock | null>(null);
-  const [calDay,    setCalDay]    = useState<number | null>(null);
   const [vixSel,    setVixSel]    = useState<DivStock | null>(null);
   const vixTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [vixPop, setVixPop] = useState<{ s: CompanyDoc & { beta: number }; x: number; y: number } | null>(null);
@@ -339,189 +231,6 @@ export function MacroScreen() {
   };
   const hideVixPop   = () => { vixTimerRef.current = setTimeout(() => setVixPop(null), 200); };
   const cancelVixPop = () => { if (vixTimerRef.current) clearTimeout(vixTimerRef.current); };
-
-  // ── Dividend calendar rendering ──────────────────────────────────────────
-  const isDivDay   = divTab === "today" || divTab === "yest" || divTab === "tom";
-  const isDivWeek  = divTab === "week"  || divTab === "prev" || divTab === "next";
-  const isDivLMon  = divTab === "lmonth";
-  const isDivMonth = divTab === "month";
-
-  const dayLabel: Record<string, string> = { today: "today · Jun 25", yest: "yesterday · Jun 24", tom: "tomorrow · Jun 26" };
-
-  let divCalNode: React.ReactNode = null;
-
-  if (isDivDay) {
-    const exStocks  = exDivFor(divTab, liveDividends, now);
-    const payStocks = payDivFor(divTab, liveDividends, now);
-    divCalNode = (
-      <div className="card">
-        <div className="card-h">
-          <h3>Dividend dates · {dayLabel[divTab]} · {exStocks.length + payStocks.length} events</h3>
-          <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>tap a logo for 10-yr history</span>
-        </div>
-        <div className="card-b" style={{ paddingTop: 10 }}>
-          <div className="ec-lbl">Ex-dividend date</div>
-          <div style={{ marginBottom: 14 }}>
-            {exStocks.length
-              ? exStocks.map(d => <DivChip key={d.sym} d={d} selected={selStock?.sym === d.sym} onSelect={setSelStock} />)
-              : <span className="ec-none">None</span>}
-          </div>
-          <div className="ec-lbl">Pay date</div>
-          <div>
-            {payStocks.length
-              ? payStocks.map(d => <DivChip key={d.sym} d={d} selected={selStock?.sym === d.sym} onSelect={setSelStock} />)
-              : <span className="ec-none">None</span>}
-          </div>
-        </div>
-      </div>
-    );
-  } else if (isDivWeek) {
-    const weekLabel: Record<string, string> = { week: "This Week · Jun 22–26", prev: "Last Week · Jun 15–19", next: "Next Week · Jun 29–Jul 3" };
-    const isCurrentWeek = divTab === "week";
-    const todayWeekDay  = 3; // Thursday Jun 25
-
-    divCalNode = (
-      <div className="card">
-        <div className="card-h">
-          <h3>Dividend ex-dates · {weekLabel[divTab]}</h3>
-          <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>tap a logo for 10-yr history</span>
-        </div>
-        <div className="card-b" style={{ paddingTop: 12 }}>
-          <div className="ec-grid">
-            {["Mon", "Tue", "Wed", "Thu", "Fri"].map((dn, di) => {
-              const dayStocks = exDivFor(divTab, liveDividends, now).filter(s => s.weekDay === di);
-              const isToday   = isCurrentWeek && di === todayWeekDay;
-              return (
-                <div key={dn} className={`ec-day${isToday ? " is-today" : ""}`}>
-                  <div className="ec-dh">{dn}{isToday ? " · Today" : ""}</div>
-                  <div className="ec-sess">
-                    <div className="ec-lbl">Ex-div</div>
-                    {dayStocks.length
-                      ? dayStocks.map(d => <DivChip key={d.sym} d={d} selected={selStock?.sym === d.sym} onSelect={setSelStock} />)
-                      : <span className="ec-none">—</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  } else if (isDivLMon) {
-    const stocks = exDivFor("lmonth", liveDividends, now);
-    // A null yield means "vendor did not supply it", which is NOT the same as a
-    // low yield — bucketing those as growth payers would invent a claim.
-    const high   = stocks.filter(s => s.yld != null && s.yld >= 2.5);
-    const growth = stocks.filter(s => s.yld != null && s.yld < 2.5);
-    divCalNode = (
-      <div className="card">
-        <div className="card-h">
-          <h3>Last Month · May 2026 · dividend recap</h3>
-          <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>tap a logo for 10-yr history</span>
-        </div>
-        <div className="card-b" style={{ paddingTop: 10 }}>
-          <div className="ec-lbl">High yield (&ge;2.5%)</div>
-          <div style={{ marginBottom: 12 }}>
-            {high.length
-              ? high.map(d => <DivChip key={d.sym} d={d} selected={selStock?.sym === d.sym} onSelect={setSelStock} />)
-              : <span className="ec-none">None</span>}
-          </div>
-          <div className="ec-lbl">Growth payers (&lt;2.5%)</div>
-          <div>
-            {growth.length
-              ? growth.map(d => <DivChip key={d.sym} d={d} selected={selStock?.sym === d.sym} onSelect={setSelStock} />)
-              : <span className="ec-none">None</span>}
-          </div>
-        </div>
-      </div>
-    );
-  } else if (isDivMonth) {
-    const base  = new Date(now.getFullYear(), now.getMonth() + monthOff, 1);
-    const year  = base.getFullYear();
-    const mon1  = base.getMonth() + 1;
-    const cal   = divMonthCal(year, mon1, liveDividendsSorted.map(toDivStock));
-    const todayMark = monthOff === 0 ? now.getDate() : -1;
-    const dayList = calDay ? (cal.map[calDay] ?? []) : [];
-
-    divCalNode = (
-      <>
-        <div className="ecm-wrap">
-          <div className="ecm-monthbar">
-            <button className="ecm-nav" onClick={() => { setMonthOff(o => o - 1); setCalDay(null); }}>←</button>
-            <div className="ecm-month">{MONTHS_LBL[mon1 - 1]} {year} · dividend ex-dates</div>
-            <button className="ecm-nav" onClick={() => { setMonthOff(o => o + 1); setCalDay(null); }}>→</button>
-          </div>
-          <div className="ecm-head">
-            {DOWS.map(d => <div key={d}>{d}</div>)}
-          </div>
-          <div className="ecm-grid">
-            {Array.from({ length: cal.first }, (_, i) => (
-              <div key={`e${i}`} className="ecm-cell ecm-empty" />
-            ))}
-            {Array.from({ length: cal.days }, (_, i) => {
-              const d    = i + 1;
-              const lst  = cal.map[d] ?? [];
-              const isT  = d === todayMark;
-              const isSel = d === calDay;
-              return (
-                <div key={d}
-                  className={`ecm-cell${lst.length > 0 ? " has" : ""}${isT ? " is-today" : ""}${isSel ? " sel" : ""}`}
-                  onClick={lst.length > 0 ? () => { setCalDay(d); if (lst[0]) setSelStock(lst[0]); } : undefined}>
-                  <div className="ecm-d">
-                    {d}
-                    {isT && <span className="ecm-t">Today</span>}
-                  </div>
-                  {lst.length > 0 && (
-                    <>
-                      <div className="ecm-logos">
-                        {lst.slice(0, 3).map(s => (
-                          <span key={s.sym} className="ecm-logo" style={{ background: "#27314a", color: "#cdd6e6" }}>
-                            {s.sym[0]}
-                            <img
-                              src={`https://assets.parqet.com/logos/symbol/${s.sym}?format=png`}
-                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                              alt=""
-                            />
-                          </span>
-                        ))}
-                        {lst.length > 3 && <span className="ecm-more">+{lst.length - 3}</span>}
-                      </div>
-                      <div className="ecm-n">{lst.length} ex-div</div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {calDay && dayList.length > 0 && (
-          <div className="card" style={{ marginTop: 14 }}>
-            <div className="card-h">
-              <h3>{MONTHS_LBL[mon1 - 1]} {calDay}, {year} · {dayList.length} ex-dividend</h3>
-              <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>tap a logo for 10-yr history</span>
-            </div>
-            <div className="card-b" style={{ paddingTop: 10, display: "flex", flexWrap: "wrap" }}>
-              {dayList.map(d => <DivChip key={d.sym} d={d} selected={selStock?.sym === d.sym} onSelect={setSelStock} />)}
-            </div>
-          </div>
-        )}
-
-        {calDay && dayList.length === 0 && (
-          <div className="card" style={{ marginTop: 14 }}>
-            <div className="card-b" style={{ color: "var(--text-dim-solid)" }}>No dividend ex-dates on this day.</div>
-          </div>
-        )}
-
-        {!calDay && (
-          <div className="card" style={{ marginTop: 14 }}>
-            <div className="card-b" style={{ color: "var(--text-dim-solid)" }}>Click a date with ex-dividends to see the companies.</div>
-          </div>
-        )}
-      </>
-    );
-  }
-
 
   return (
     <>

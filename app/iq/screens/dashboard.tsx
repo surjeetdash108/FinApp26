@@ -6,6 +6,7 @@ import { firebaseAuth } from "../../firebase";
 import { useIQActions, ExpandBtn } from "../shell";
 import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem, maPostureLabel } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable } from "../utils";
+import { isoDay } from "../calendar-range";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
@@ -287,6 +288,11 @@ export function DashboardScreen() {
   const pulse = pulseFromLive(liveIndices);
   const movers = mergeMoversData(liveMovers, companies);
   const earnings = mergeEarningsData(liveEarnings);
+  // "Earnings Today" is exactly today's reported companies — no fallback to the
+  // most recent prior day, so when nothing has reported today the widget is
+  // empty rather than showing stale rows. (`earnings` above stays the full list
+  // for popover name/EPS lookups.)
+  const earningsToday = mergeEarningsData(liveEarnings.filter(e => e.date === isoDay(new Date())));
   const mergedSectorList = buildSectorList(companies, sectorsLive);
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
 
@@ -483,7 +489,9 @@ export function DashboardScreen() {
               <Link className="link" href="/menu/earnings">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
-              {earnings.slice(0, 5).map(e => (
+              {earningsToday.length === 0
+                ? <DataState label="No earnings reported today." height={100} />
+                : earningsToday.slice(0, 5).map(e => (
                 <div key={e.ticker} className="minirow" style={{ cursor: "pointer" }}
                   onClick={() => openEarnings(e.ticker)}
                   {...mr(e.ticker, "earnings")}
@@ -818,6 +826,7 @@ export function DashboardScreen() {
           <div className="card vix" style={{ height: "100%" }}>
             <div className="card-h">
               <h3>VIX · Volatility</h3>
+              <Link className="link" href="/menu/macro">View all →</Link>
             </div>
             <div className="card-b">
               {(() => {

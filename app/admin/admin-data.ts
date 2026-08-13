@@ -40,17 +40,6 @@ const AVATAR_COLORS = [
 // `import { ADMIN_EMAIL } from "./admin-data"` keeps working.
 export { ADMIN_EMAIL };
 
-/**
- * Staff accounts are excluded from every metric. The BACKEND already filters
- * staff out of `/admin/users` (AdminAnalyticsService.isStaff), so this set is a
- * second belt-and-braces guard for any client-side derivation.
- */
-const STAFF_EMAILS = new Set<string>([ADMIN_EMAIL]);
-
-export function isStaffAccount(email: string | null | undefined): boolean {
-  return !!email && STAFF_EMAILS.has(email.trim().toLowerCase());
-}
-
 export interface ConsoleUserRow {
   id: string;
   name: string;

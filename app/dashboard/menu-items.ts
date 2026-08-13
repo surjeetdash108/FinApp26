@@ -27,7 +27,3 @@ export const menuItems = [
 ] as const;
 
 export type MenuItem = (typeof menuItems)[number];
-
-export function getMenuItemBySlug(slug: string) {
-  return menuItems.find((item) => item.slug === slug);
-}
