@@ -45,6 +45,14 @@
         "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
       },
       {
+        "source": "/admin/blogs",
+        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
+      },
+      {
+        "source": "/admin/blogs/**",
+        "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
+      },
+      {
         "source": "/plans",
         "run": { "serviceId": "market-catalyst-live", "region": "us-central1" }
       },
