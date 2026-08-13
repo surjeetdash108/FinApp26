@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { type Mover, maPostureLabel } from "../data";
-import { fmt, sign, arr, Spark, StockLogo } from "../utils";
+import { fmt, sign, arr, Spark, StockLogo, DataState } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { LiveMoverDoc, CompanyDoc } from "../types";
 
@@ -57,7 +57,7 @@ function mergeMovers(
 }
 
 export function MoversScreen() {
-  const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
+  const { data: liveMovers, loading: moversLoading } = useApiList<LiveMoverDoc>("/market-data/movers");
   const { data: rvolCompanies } = useApiList<CompanyDoc>("/market-data/companies");
   const companyByTicker = new Map(rvolCompanies.map(c => [c.ticker, c]));
   const movers = mergeMovers(liveMovers, companyByTicker);
@@ -167,7 +167,9 @@ export function MoversScreen() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No stocks match these filters.</td>
+                <td colSpan={6} style={{ padding: 16, color: "var(--text-dim-solid)" }}>
+                  {moversLoading ? <DataState loading label="" /> : "No stocks match these filters."}
+                </td>
               </tr>
             ) : filtered.map(m => {
               const v = val(m);
