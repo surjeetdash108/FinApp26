@@ -61,14 +61,16 @@
 }
 
 .iq-root[data-theme="light"] {
-  --bg: #EDF1F7;
-  --surface-0: #E4E9F2;
-  --surface-1: #FFFFFF;
-  --surface-2: #F7F9FC;
-  --surface-3: #EEF2F9;
-  --border: #C9D4E4;
-  --border-soft: #D8E0EE;
-  --border-strong: #B0BDD2;
+  /* Warm off-white palette matching the public blog (blog-board.css light),
+     replacing the old cool/pure-white light theme. */
+  --bg: #f4f0e8;
+  --surface-0: #ece7dd;
+  --surface-1: #fffdf9;
+  --surface-2: #f3eee6;
+  --surface-3: #ece7dd;
+  --border: #ded6c8;
+  --border-soft: #e6e0d5;
+  --border-strong: #c9bfae;
   --text-hi: #0D1525;
   --text: #3A4562;
   /* #8892A8 read ~3.3:1 against white/surface-1 — under the 4.5:1 AA floor
