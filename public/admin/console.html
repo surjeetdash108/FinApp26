@@ -1726,6 +1726,7 @@ function savePublish(){
   const existing=_editId?BLOGS.find(x=>x.id===_editId):null;
   d.status=existing?(existing.status||'Published'):'Published';
   if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to save'); closeBlogModal(); return; }
+  if(!confirm('Publish “'+d.title+'”? It will go live on the site immediately.')) return;   // Cancel: keep editing, nothing is saved
   const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status};
   if(_editId)msg.id=_editId;
   blogPost(msg);
@@ -1746,6 +1747,7 @@ function togglePublish(id){
   const p=BLOGS.find(x=>x.id===id);if(!p)return;
   const next=(p.status==='Draft')?'Published':'Draft';
   if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin'); return; }
+  if(!confirm((next==='Published'?'Publish “':'Unpublish “')+(p.title||'this article')+'”?')) return;   // Cancel: no change
   p.status=next;                                  // optimistic
   renderBoard();
   blogPost({type:'admin:blogPublish',id,status:next});
