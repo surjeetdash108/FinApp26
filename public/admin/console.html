@@ -665,7 +665,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
   <div class="mh"><h3 id="bmTitle">New article</h3><button class="x" onclick="closeBlogModal()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
   <div class="mb">
     <div class="bm-place" id="bmPlace"></div>
-    <label class="fl">Title</label><input id="bTitle" class="inp" maxlength="120" placeholder="Article headline">
+    <label class="fl">Title/file name</label><input id="bTitle" class="inp" maxlength="120" placeholder="Article headline or file name">
     <div class="brow2">
       <div><label class="fl">Kicker / category</label><input id="bKick" class="inp" placeholder="Analysis · $NVDA"></div>
       <div><label class="fl">Placement</label><select id="bZone" class="inp">
@@ -677,6 +677,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
       <div><label class="fl">Rank</label><input id="bRank" class="inp" type="number" min="1" step="1" placeholder="1"></div>
     </div>
     <label class="fl">Summary / dek</label><textarea id="bDek" class="inp" rows="2" placeholder="One or two sentences that tease the piece."></textarea>
+    <div id="bDekErr" style="display:none;color:var(--down);font-size:11.5px;margin-top:4px">Summary is required.</div>
     <label class="fl">Body <span class="cc" id="bWords"></span></label>
     <div id="bBody" class="blog-body-edit" contenteditable="true" data-ph="Drop a file to fill this, or type your article here…"></div>
   </div>
@@ -1711,6 +1712,7 @@ function openBlogModal(zone,editId,draft){
   bEl('bmTitle').textContent=editId?'Edit article':'New article';
   bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';bEl('bBody').innerHTML=p.html||'';
   bEl('bRank').value=p.rank||nextRank(z,editId);
+  bEl('bDek').style.borderColor='';bEl('bDekErr').style.display='none';
   updatePlaceChip();updateBlogWords();
   bEl('bPublish').textContent=editId?'Update':'Publish';
   bEl('blogModal').classList.add('on');bEl('blogScrim').classList.add('on');
@@ -1721,6 +1723,7 @@ function closeBlogModal(){bEl('blogModal').classList.remove('on');bEl('blogScrim
 function savePublish(){
   const d={zone:bEl('bZone').value||'lead',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value,author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
   if(!d.title){toast('Add a title first');return;}
+  if(!d.dek.trim()){ const dk=bEl('bDek'); dk.style.borderColor='var(--down)'; bEl('bDekErr').style.display='block'; dk.focus(); return; }
   const typed=parseInt(bEl('bRank').value,10);
   d.rank=(typed&&typed>0)?typed:nextRank(d.zone,_editId);
   // Preserve an existing article's published/draft state across edits; a brand
@@ -1777,6 +1780,7 @@ function initBlogs(){
   const file=bEl('blogFile');
   file.onchange=async e=>{const f=e.target.files[0];if(f){const d=await convertFile(f);if(d)openBlogModal(_targetZone||'lead',null,d);}};
   bEl('bBody').addEventListener('input',updateBlogWords);
+  bEl('bDek').addEventListener('input',()=>{ bEl('bDek').style.borderColor=''; bEl('bDekErr').style.display='none'; });
   bEl('bZone').addEventListener('change',updatePlaceChip);
   bEl('bPublish').onclick=savePublish;
   try{if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}catch(e){}
