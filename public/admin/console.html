@@ -1572,6 +1572,7 @@ function moveBlog(id,dir){
   const p=BLOGS.find(x=>x.id===id); if(!p) return;
   const posts=zoneposts(p.zone), i=posts.findIndex(x=>x.id===id), j=i+dir;
   if(j<0||j>=posts.length) return;
+  if(!confirm('Change the article order? The new order goes live on the site immediately.')) return;                    // Cancel: no change
   posts.splice(i,1); posts.splice(j,0,p);       // reorder the temp array…
   const orders=posts.map((x,k)=>{ x.rank=k+1; return {id:x.id,zone:p.zone,rank:k+1}; }); // …then renumber
   renderBoard();                                 // optimistic
@@ -1668,6 +1669,7 @@ function wireCardDrag(board){
 async function placeAt(id,zone,at){
   const p=BLOGS.find(x=>x.id===id); if(!p)return;
   const from=p.zone, moved=from!==zone;
+  if(!confirm('Change the article order? The new order goes live on the site immediately.')){ renderBoard(); return; }   // Cancel: restore board, no change
   const rest=zoneposts(zone).filter(x=>x.id!==id);
   const idx=Math.max(0,Math.min(at,rest.length));
   rest.splice(idx,0,p);
