@@ -10,6 +10,7 @@ import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiResource } from "../hooks/useApiResource";
 import { useApiList } from "../hooks/useApiList";
 import { useBackendBars } from "../hooks/useBackendBars";
+import { useLiveTick } from "../hooks/useLiveTick";
 import { EarningsPlaybook } from "./EarningsPlaybook";
 import type {
   CompanyDoc, AnalystConsensusDoc, InsiderTxDoc,
@@ -463,6 +464,7 @@ function StockChartExpanded({
   const [showRsi, setShowRsi] = useState(initialShowRsi);
   const [showEarnings, setShowEarnings] = useState(initialShowEarnings);
   const { bars: realBars } = useBackendBars(sym, tf);
+  const live = useLiveTick(sym);
   const isUp = px > 0;
   return (
     <div>
@@ -485,7 +487,8 @@ function StockChartExpanded({
         <button className={`rng indbtn${showRsi ? " on" : ""}`} onClick={() => setShowRsi(v => !v)}>RSI</button>
         <button className={`rng indbtn${showEarnings ? " on" : ""}`} onClick={() => setShowEarnings(v => !v)}>Earnings</button>
       </div>
-      <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars} />
+      <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars}
+        live={live.tick ? { price: live.tick.price, high: live.tick.high, low: live.tick.low } : null} />
       {showRsi && (
         <div style={{ marginTop: 4 }}>
           <div style={{ padding: "4px 0", fontSize: ".66rem", color: "var(--text-dim-solid)", display: "flex", justifyContent: "space-between" }}>
@@ -561,6 +564,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const { bars: yearBars, loading: yearBarsLoading } = useBackendBars(sym, "1Y");
   const [emaStep, setEmaStep] = useState(0);
   const { bars: realBars } = useBackendBars(sym, tfActive);
+  // Live (delayed) price stream for the header + chart overlay: SSE push with a
+  // /live/quotes poll fallback (Firebase Hosting doesn't proxy the SSE stream).
+  const live = useLiveTick(sym);
 
   // Per-ticker profile + dividend/split/financials history — cache-aside via
   // GET /live/company|/live/dividend-history|/live/splits|/live/financials
@@ -709,6 +715,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const stochKv = liveCompany?.stochK ?? null;
   const adx14 = liveCompany?.adx14 ?? null;
   const dollar = Math.abs(data.pctChange / 100 * p);
+
+  // Live overlay values for the header. Kept separate from `p`/`dollar` so the
+  // many derived stats below (EPS, 52w positioning, chart baseline) stay pinned
+  // to the company snapshot and don't churn on every tick.
+  const livePrice = live.tick?.price ?? null;
+  const dispPrice = livePrice ?? p;
+  const dispPct = live.pct ?? data.pctChange;
+  const dispDollar = live.change != null ? Math.abs(live.change) : dollar;
 
   const cap = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(2)}T` : v >= 10 ? `$${Math.round(v)}B` : `$${v.toFixed(1)}B`;
   const nf = (x: number) => Math.round(x).toLocaleString("en-US");
@@ -870,7 +884,20 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               {sym[0]}
             </div>
             <div className="sd-name">
-              <h1>{sym}</h1>
+              {/* Ticker + price + % on ONE line, side by side, so the quote sits
+                  right next to the symbol instead of far to the right. */}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+                <h1>{sym}</h1>
+                <div className="sd-px" style={{ margin: 0, display: "flex", alignItems: "baseline", gap: 10 }}>
+                  <span className="p">${fmt(dispPrice, 2)}</span>
+                  <span className={`c ${cls(dispPct)}`}>{arr(dispPct)} {dispPct >= 0 ? "+" : ""}${fmt(dispDollar, 2)} ({sign(dispPct)})</span>
+                  {livePrice != null && (
+                    <span style={{ fontSize: ".56rem", color: "var(--text-dim-solid)", letterSpacing: ".02em" }}>
+                      {live.connected ? "● live" : "○ delayed"} · {live.delayMinutes ?? 15}m delayed
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="sub">
                 {data.name} · {ex} · {group}
                 {inSectorRank != null && inSectorTotal != null && (
@@ -884,10 +911,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   </span>
                 )}
               </div>
-            </div>
-            <div className="sd-px">
-              <div className="p">${fmt(p, 2)}</div>
-              <div className={`c ${cls(data.pctChange)}`}>{arr(data.pctChange)} {data.pctChange >= 0 ? "+" : ""}${fmt(dollar, 2)} ({sign(data.pctChange)})</div>
             </div>
           </div>
 
@@ -972,7 +995,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               onContextMenu={handleChartRightClick}>
               <CandleChart sym={sym} tf={tfActive} px={p}
                 maStep={maStep} emaStep={emaStep}
-                showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars} />
+                showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars}
+                live={live.tick ? { price: live.tick.price, high: live.tick.high, low: live.tick.low } : null} />
             </div>
             {showRsi && (
               <div id="rsiHost">

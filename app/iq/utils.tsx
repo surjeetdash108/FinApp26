@@ -391,21 +391,33 @@ function genOHLC(sym: string, tf: string, px: number): OHLCBar[] {
 }
 
 export function CandleChart({
-  sym, tf, px, maStep = 0, emaStep = 0, showVol = true, chartType = "candles", realBars,
+  sym, tf, px, maStep = 0, emaStep = 0, showVol = true, chartType = "candles", realBars, live,
 }: {
   sym: string; tf: string; px: number;
   maStep?: number; emaStep?: number;
   showVol?: boolean; chartType?: string;
   /** Real OHLCV bars for this ticker/timeframe, oldest-first — falls back to the simulated generator when omitted or too short to plot. */
   realBars?: OHLCBar[];
+  /** Latest live (delayed) price, folded onto the most recent real bar so the chart updates in place. Ignored on the synthetic fallback. */
+  live?: { price: number; high: number | null; low: number | null } | null;
 }) {
   const [tip, setTip] = useState<{ html: string; left: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const data = useMemo(
-    () => (realBars && realBars.length > 1 ? realBars : genOHLC(sym, tf, px)),
-    [sym, tf, px, realBars],
-  );
+  const data = useMemo(() => {
+    const base = realBars && realBars.length > 1 ? realBars : genOHLC(sym, tf, px);
+    // Overlay the live price onto the current (last) real bar: its close tracks
+    // the tick and its high/low stretch to include it. Only on real bars — the
+    // synthetic generator has no notion of "now".
+    if (live && live.price > 0 && realBars && realBars.length > 1) {
+      const last = base[base.length - 1];
+      const c = live.price;
+      const h = Math.max(last.h, live.high ?? c, c);
+      const l = Math.min(last.l, live.low ?? c, c);
+      return [...base.slice(0, -1), { ...last, c, h, l }];
+    }
+    return base;
+  }, [sym, tf, px, realBars, live]);
   const n = data.length;
   const W = 720, PH = 224, VH = showVol ? 54 : 0, GAP = showVol ? 10 : 0, PADT = 12, PADB = 26, axisW = 46;
   const H = PADT + PH + GAP + VH + PADB;

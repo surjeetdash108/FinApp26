@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, backendUrl } from "../backend";
+import { apiGet, streamUrl } from "../backend";
 import type { TapeFrame } from "../types/tape";
 
 /** How stale the last SSE frame must be before the JSON poll steps in (ms). */
@@ -16,9 +16,12 @@ const POLL_MS = 20000;
  * service directly, but Firebase Hosting does not proxy the long-lived stream —
  * through the hosting origin the browser's EventSource never receives a frame,
  * which left the VIX/index cards (Macro, Dashboard, Recap, marquee) spinning
- * forever. So we also fetch the plain JSON `/live/tape` immediately and poll it
- * whenever SSE hasn't delivered recently. When SSE works (local dev / direct
- * origin) it drives live updates and the poll stays idle.
+ * forever. The EventSource is now built via `streamUrl()`, which targets the
+ * Cloud Run `live` origin directly when NEXT_PUBLIC_LIVE_STREAM_ORIGIN is set,
+ * so SSE drives live updates in production too. The poll stays as a safety net:
+ * we still fetch the plain JSON `/live/tape` immediately and poll it whenever
+ * SSE hasn't delivered recently, so the tape ALWAYS populates even if the
+ * direct origin is unset or unreachable.
  */
 export function useTapeStream() {
   const [frame, setFrame] = useState<TapeFrame | null>(null);
@@ -40,7 +43,7 @@ export function useTapeStream() {
     };
     void fetchOnce();
 
-    const es = new EventSource(backendUrl("/live/tape/stream"));
+    const es = new EventSource(streamUrl("/live/tape/stream"));
     const onTape = (ev: MessageEvent<string>) => {
       try {
         lastSse = Date.now();

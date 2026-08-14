@@ -32,6 +32,33 @@ function resolveBackendBaseUrl(): string {
 
 const BASE_URL = resolveBackendBaseUrl();
 
+/**
+ * Origin for long-lived SSE streams (/live/stream, /live/tape/stream) — kept
+ * SEPARATE from BASE_URL on purpose.
+ *
+ * REST goes same-origin so Firebase Hosting can CDN-cache it. But Hosting's CDN
+ * BUFFERS a long-lived streaming response: an EventSource opened at the
+ * same-origin rewrite never receives a frame (the whole reason useTapeStream /
+ * useLiveTick also carry a REST poll fallback). Cloud Run streams SSE fine when
+ * hit directly, and the `live` service's CORS allowlist already includes the
+ * hosting origin (main.ts corsOptions, credentials:false; the streams are
+ * public so EventSource's no-auth-header limitation is a non-issue). So point
+ * EventSource straight at that service via NEXT_PUBLIC_LIVE_STREAM_ORIGIN — the
+ * market-catalyst-live *.run.app URL, or a custom domain mapped to Cloud Run.
+ *
+ * Only a REMOTE value is honoured (same guard as the backend override): a
+ * localhost value baked into a production build is ignored. Unset -> BASE_URL,
+ * which in local dev is localhost:4400 and streams directly with no Hosting in
+ * the way, so streaming already works in dev with no env var.
+ */
+function resolveStreamOrigin(): string {
+  const direct = process.env.NEXT_PUBLIC_LIVE_STREAM_ORIGIN?.trim().replace(/\/$/, "");
+  const isRemote = !!direct && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(direct);
+  return isRemote ? (direct as string) : BASE_URL;
+}
+
+const STREAM_ORIGIN = resolveStreamOrigin();
+
 export class BackendApiError extends Error {
   constructor(
     public readonly status: number,
@@ -105,4 +132,13 @@ export function apiDelete<T>(path: string): Promise<T> {
 /** Absolute backend URL for a path — for EventSource/WebSocket construction, which can't go through fetch. */
 export function backendUrl(path: string): string {
   return `${BASE_URL}${path}`;
+}
+
+/**
+ * Absolute URL for an SSE endpoint. Resolves to the direct Cloud Run stream
+ * origin (NEXT_PUBLIC_LIVE_STREAM_ORIGIN) when set, bypassing Firebase Hosting's
+ * stream-buffering CDN; otherwise same as backendUrl(). See resolveStreamOrigin.
+ */
+export function streamUrl(path: string): string {
+  return `${STREAM_ORIGIN}${path}`;
 }

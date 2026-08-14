@@ -690,6 +690,34 @@ export function IQShell({ children }: { children: React.ReactNode }) {
         ];
       })()
     : quickAccessCompanies.filter(c => !!c.ticker).map(c => ({ sym: c.ticker, name: c.name, price: c.price, pctChange: c.pctChange }));
+  // On-demand quote enrichment: /live/search returns only ticker+name (its
+  // in-memory universe carries no quote), so searched tickers arrive with a
+  // null price. Fetch live quotes for the visible matches and overlay
+  // price/pctChange so the search row can show them next to the ticker.
+  const [quoteMap, setQuoteMap] = useState<Map<string, { price: number | null; pctChange: number | null }>>(new Map());
+  const enrichKey = searchMatches.slice(0, 12).map(m => m.sym).join(",");
+  useEffect(() => {
+    const syms = enrichKey.split(",").filter(Boolean).slice(0, 25);
+    if (syms.length === 0) return;
+    let cancelled = false;
+    apiGet<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(
+      `/live/quotes?tickers=${encodeURIComponent(syms.join(","))}`,
+    )
+      .then(rows => {
+        if (cancelled) return;
+        setQuoteMap(prev => {
+          const next = new Map(prev);
+          for (const r of rows) next.set(r.ticker.toUpperCase(), { price: r.price, pctChange: r.pctChange });
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [enrichKey]);
+  const displayMatches = searchMatches.map(m => {
+    const q = quoteMap.get(m.sym);
+    return q ? { ...m, price: q.price ?? m.price, pctChange: q.pctChange ?? m.pctChange } : m;
+  });
   const cmdRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLElement>(null);
   const [drawer, setDrawer] = useState<
@@ -862,7 +890,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                         // Use the top match, or fall back to the raw typed ticker
                         // (the stock page fetches any symbol on demand), so pressing
                         // Enter always opens the Search page.
-                        goToStock(searchMatches[0]?.sym ?? searchQ);
+                        goToStock(displayMatches[0]?.sym ?? searchQ);
                       }
                     }}
                   />
@@ -870,22 +898,24 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                 </div>
                 {searchOpen && (
                   <div className="cmd-dropdown">
-                    {searchMatches.map(m => (
+                    {displayMatches.map(m => (
                       <div key={m.sym} className="palette-item"
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => goToStock(m.sym)}
                       >
                         <div className="palette-item-icon" style={{ color: "var(--brand-2)", fontWeight: 700, fontFamily: "var(--f-mono)" }}>{m.sym[0]}</div>
-                        <div style={{ flex: 1 }}>
-                          <div className="palette-item-label">{m.sym}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                            <div className="palette-item-label">{m.sym}</div>
+                            {m.price != null && (
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                                <span className="mono" style={{ fontSize: ".78rem", color: "var(--text-hi)" }}>{fmt(m.price)}</span>
+                                {m.pctChange != null && <span className={`mono ${cls(m.pctChange)}`} style={{ fontSize: ".72rem" }}>{sign(m.pctChange)}</span>}
+                              </div>
+                            )}
+                          </div>
                           <div className="palette-item-sub">{m.name ?? "Stock"} · click to open</div>
                         </div>
-                        {m.price != null && (
-                          <div style={{ textAlign: "right", marginRight: 4 }}>
-                            <div className="mono" style={{ fontSize: ".78rem", color: "var(--text-hi)" }}>{fmt(m.price)}</div>
-                            {m.pctChange != null && <div className={`mono ${cls(m.pctChange)}`} style={{ fontSize: ".68rem" }}>{sign(m.pctChange)}</div>}
-                          </div>
-                        )}
                         <button
                           title={searchStarred.has(m.sym) ? "Edit watchlists" : "Add to a watchlist"}
                           onMouseDown={e => e.preventDefault()}
@@ -895,7 +925,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                         </button>
                       </div>
                     ))}
-                    {searchQ && searchMatches.length === 0 && (
+                    {searchQ && displayMatches.length === 0 && (
                       <div style={{ padding: "12px 15px", color: "var(--text-dim-solid)", fontSize: "0.8125rem" }}>No results for &ldquo;{searchQ}&rdquo;</div>
                     )}
                   </div>
