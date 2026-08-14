@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
+import { ChartCard } from "../stock-panel";
 import { backendUrl } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
@@ -231,11 +232,13 @@ function MiniCalendar({ value, onPick, onClose }: { value: string; onPick: (iso:
 // actually has (EPS estimate vs. actual) — no fabricated move line/dots.
 function EpsChart({ hist }: { hist: EarnQ[] }) {
   const d = [...hist].reverse();
-  const W = 580, H = 210, PADL = 30, PADR = 18, PADT = 14, PADB = 30;
+  const W = 580, H = 210, PADL = 40, PADR = 18, PADT = 14, PADB = 30;
   const iw = W - PADL - PADR, ih = H - PADT - PADB;
   const allVals = d.flatMap(x => [x.e, x.a]);
-  const maxE = Math.max(...allVals) * 1.15 || 1;
+  const dataMax = Math.max(...allVals) || 1;
+  const maxE = dataMax * 1.15 || 1;
   const n = d.length, gw = iw / n, bw = gw * 0.28;
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => dataMax * f);
 
   const bars: React.ReactElement[] = [];
   const labels: React.ReactElement[] = [];
@@ -263,8 +266,15 @@ function EpsChart({ hist }: { hist: EarnQ[] }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, display: "block" }}>
-      <line x1={PADL} y1={PADT + ih / 2} x2={W - PADR} y2={PADT + ih / 2}
-        style={{ stroke: "var(--border)" }} strokeDasharray="3 3" />
+      {yTicks.map((v, i) => {
+        const y = PADT + ih - (v / maxE) * ih;
+        return (
+          <g key={`yt${i}`}>
+            <line x1={PADL} y1={y} x2={W - PADR} y2={y} style={{ stroke: "var(--border)" }} strokeDasharray="3 3" opacity={0.45} />
+            <text x={PADL - 5} y={y + 3} textAnchor="end" style={{ fill: "var(--text-dim-solid)", fontSize: "0.5rem" }}>${v.toFixed(2)}</text>
+          </g>
+        );
+      })}
       {bars}
       {labels}
     </svg>
@@ -273,10 +283,13 @@ function EpsChart({ hist }: { hist: EarnQ[] }) {
 
 function IncChart({ inc }: { inc: IncRow[] }) {
   const d = [...inc].reverse();
-  const W = 580, H = 200, PADL = 8, PADR = 8, PADT = 14, PADB = 26;
+  const W = 580, H = 200, PADL = 46, PADR = 8, PADT = 14, PADB = 26;
   const iw = W - PADL - PADR, ih = H - PADT - PADB;
-  const max = Math.max(...d.map(x => x.rev)) * 1.12 || 1;
+  const dataMax = Math.max(...d.map(x => x.rev)) || 1;
+  const max = dataMax * 1.12 || 1;
   const n = d.length, gw = iw / n, bw = gw * 0.18;
+  const fmtAxis = (v: number) => v >= 100 ? `$${v.toFixed(0)}B` : v >= 1 ? `$${v.toFixed(1)}B` : `$${Math.round(v * 1000)}M`;
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => dataMax * f);
 
   type IncKey = "rev" | "gp" | "ni";
   const series: [IncKey, string][] = [
@@ -309,6 +322,15 @@ function IncChart({ inc }: { inc: IncRow[] }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, display: "block" }}>
+      {yTicks.map((v, i) => {
+        const y = PADT + ih - (v / max) * ih;
+        return (
+          <g key={`yt${i}`}>
+            <line x1={PADL} y1={y} x2={W - PADR} y2={y} style={{ stroke: "var(--border)" }} strokeDasharray="3 3" opacity={0.45} />
+            <text x={PADL - 5} y={y + 3} textAnchor="end" style={{ fill: "var(--text-dim-solid)", fontSize: "0.5rem" }}>{fmtAxis(v)}</text>
+          </g>
+        );
+      })}
       {bars}{labels}
     </svg>
   );
@@ -365,10 +387,17 @@ function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
 
 type CalView = "eps" | "sales";
 
+// Max ticker logos/rows shown before an overflow "+N" — shared by the day
+// tables, the week columns, and the month cells so all three views cap alike.
+const MAX_CAL_LOGOS = 24;
+
 function CalTable({
   title, rows, sel, onSelect, view,
 }: { title: string; rows: CalRow[]; sel: string; onSelect: (s: string) => void; view: CalView }) {
+  const [expanded, setExpanded] = useState(false);
   if (rows.length === 0) return null;
+  const shown = expanded ? rows : rows.slice(0, MAX_CAL_LOGOS);
+  const canExpand = rows.length > MAX_CAL_LOGOS;
   return (
     <div className="ecal-day" style={{ marginBottom: 12 }}>
       <div className="ecal-day-h">
@@ -386,7 +415,7 @@ function CalTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => (
+            {shown.map(r => (
               <tr key={r.s} className={sel === r.s ? "on" : ""} onClick={() => onSelect(r.s)}>
                 <td>
                   <div className="ecal-symcell">
@@ -415,6 +444,21 @@ function CalTable({
           </tbody>
         </table>
       </div>
+      {canExpand && (
+        <button
+          type="button"
+          className="ecal-more"
+          onClick={() => setExpanded(v => !v)}
+          style={{
+            display: "block", width: "100%", marginTop: 6, padding: "6px 10px",
+            background: "var(--surface-2)", border: "1px solid var(--border-soft)",
+            borderRadius: 6, color: "var(--text-dim-solid)", cursor: "pointer",
+            fontSize: ".75rem", fontWeight: 600,
+          }}
+        >
+          {expanded ? "Show less" : `+${rows.length - MAX_CAL_LOGOS} more`}
+        </button>
+      )}
     </div>
   );
 }
@@ -439,6 +483,9 @@ export function EarningsScreen() {
   const [histPeriod, setHistPeriod] = useState<"Q" | "A">("Q");
   const [incPeriod, setIncPeriod]   = useState<"Q" | "A">("Q");
   const [aiReadOpen, setAiReadOpen] = useState(true);
+  // Detail mode: clicking a stock opens a split view (weekly picker + details)
+  // that replaces the calendar; the ✕ in the weekly panel closes back to it.
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // No company is selected by default — the detail panels appear only after the
   // user clicks a reporting company in the calendar.
@@ -487,6 +534,14 @@ export function EarningsScreen() {
     const first = rowsForDate(iso, liveEarningsData)[0];
     if (first) setSel(first.s);
   }
+  /** Click a reporting stock → open the split detail view for it. Keeps the
+   *  anchor on the stock's day so the weekly picker shows the right week. */
+  function openStockDetail(sym: string, iso?: string) {
+    if (iso) setAnchor(iso);
+    setSel(sym);
+    setDetailOpen(true);
+  }
+  const closeDetail = () => { setDetailOpen(false); setSel(""); };
   const step = (dir: 1 | -1) => {
     if (mode === "month") {
       goToDate(isoDay(new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth() + dir, 1))));
@@ -505,9 +560,9 @@ export function EarningsScreen() {
       <>
         {visibleRows.length > 0 ? (
           <>
-            <CalTable title="Before open · Pre-market" rows={bmoRows} sel={sel} onSelect={setSel} view={view} />
-            <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={setSel} view={view} />
-            <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={setSel} view={view} />
+            <CalTable title="Before open · Pre-market" rows={bmoRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />
+            <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />
+            <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />
           </>
         ) : (
           <div className="ecal-empty">
@@ -530,7 +585,14 @@ export function EarningsScreen() {
                 {dn} {Number(iso.slice(8))}{isToday ? " · Today" : ""}
               </div>
               <div className="ec-sess">
-                {items.length ? items.map(r => <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={setSel} />) : <span className="ec-none">—</span>}
+                {items.length ? (
+                  <>
+                    {items.slice(0, MAX_CAL_LOGOS).map(r => <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={s => openStockDetail(s, iso)} />)}
+                    {items.length > MAX_CAL_LOGOS && (
+                      <button className="emc-more" title={`${items.length - MAX_CAL_LOGOS} more — open day view`} onClick={() => { goToDate(iso); setMode("day"); }}>+{items.length - MAX_CAL_LOGOS}</button>
+                    )}
+                  </>
+                ) : <span className="ec-none">—</span>}
               </div>
             </div>
           );
@@ -550,7 +612,7 @@ export function EarningsScreen() {
     const weeks = Math.ceil((leadOffset + mLast.getUTCDate()) / 7);
     const monthKey = isoDay(mFirst).slice(0, 7);
     const todayIso = isoDay(new Date());
-    const MAX_LOGOS = 24;
+    const MAX_LOGOS = MAX_CAL_LOGOS;
     const cells: string[] = [];
     for (let wk = 0; wk < weeks; wk++) for (let d = 0; d < 5; d++) cells.push(isoDay(addDays(gridStart, wk * 7 + d)));
     calNode = (
@@ -576,7 +638,7 @@ export function EarningsScreen() {
                 ) : (
                   <div className="emc-logos">
                     {shown.map(r => (
-                      <button key={r.s} className={`emc-logo${sel === r.s ? " on" : ""}`} title={r.s} onClick={() => setSel(r.s)}>
+                      <button key={r.s} className={`emc-logo${sel === r.s ? " on" : ""}`} title={r.s} onClick={() => openStockDetail(r.s, iso)}>
                         <StockLogo sym={r.s} size={20} />
                       </button>
                     ))}
@@ -641,7 +703,8 @@ export function EarningsScreen() {
 
   return (
     <>
-      {/* ── Calendar toolbar ───────────────────────────────────────────── */}
+      {/* ── Calendar toolbar (original view; hidden in detail mode) ─────── */}
+      {!detailOpen && (
       <div className="ecal" style={{ marginBottom: 16 }}>
         <div className="ecal-top">
           <div className="ecal-nav">
@@ -670,9 +733,131 @@ export function EarningsScreen() {
         {/* ── Calendar ─────────────────────────────────────────────────── */}
         {calNode}
       </div>
+      )}
 
-      {/* ── Selected company inline detail (below calendar, no drawer) ── */}
-      {sel && (
+      {/* ── Detail mode: weekly picker (left) + stock details (right) ────── */}
+      {detailOpen && sel && (
+        <div className="ew-split">
+          {/* Left: weekly picker with close button */}
+          <aside className="ew-week">
+            <div className="ew-week-h">
+              <span>Week of {MON3[weekMon.getUTCMonth()]} {weekMon.getUTCDate()}</span>
+              <button className="closebtn" title="Close details" onClick={closeDetail}>✕</button>
+            </div>
+            <div className="ew-week-body">
+              {weekDays5.map(iso => {
+                const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
+                const d = new Date(`${iso}T00:00:00Z`);
+                const isToday = iso === isoDay(new Date());
+                return (
+                  <div className="ew-week-day" key={iso}>
+                    <div className="ew-week-daylabel">{DOW3[d.getUTCDay()]} {d.getUTCDate()}{isToday ? " · Today" : ""}</div>
+                    {items.length ? (
+                      <div className="emc-logos">
+                        {items.map(r => (
+                          <button key={r.s} className={`emc-logo${sel === r.s ? " on" : ""}`} title={r.s} onClick={() => openStockDetail(r.s, iso)}>
+                            <StockLogo sym={r.s} size={20} />
+                          </button>
+                        ))}
+                      </div>
+                    ) : <div className="ew-week-none">No earnings</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </aside>
+
+          {/* Right: stock details */}
+          <div className="ew-main">
+            {/* header */}
+            <div className="card">
+              <div className="card-h">
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%" }}>
+                  <StockLogo sym={sel} size={34} />
+                  <div>
+                    <span style={{ fontWeight: 700, color: "var(--text-hi)", fontSize: ".95rem" }}>{sel}</span>
+                    <span style={{ color: "var(--text-dim-solid)", fontSize: ".78rem", marginLeft: 8 }}>{liveCompanySel?.name ?? sel} · {liveCompanySel?.sector ?? <NotAvailable />}</span>
+                  </div>
+                  {liveCompanySel?.price != null && (
+                    <span style={{ marginLeft: 4, fontFamily: "var(--f-mono)", fontWeight: 700, color: "var(--text-hi)" }}>
+                      ${liveCompanySel.price.toFixed(2)}{" "}
+                      {liveCompanySel.pctChange != null && <span className={cls(liveCompanySel.pctChange)}>{sign(liveCompanySel.pctChange)}</span>}
+                    </span>
+                  )}
+                  <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                    <button className="btn" style={{ padding: "5px 10px", fontSize: ".75rem" }} onClick={() => setSelectedCall(sel)}>Earnings call</button>
+                    <button className="btn" style={{ padding: "5px 10px", fontSize: ".75rem", color: "var(--ai)" }} onClick={() => setAiModalSym(sel)}>◆ AI analysis</button>
+                    <button className="btn" style={{ padding: "5px 10px", fontSize: ".75rem" }} onClick={() => openStockFull(sel)}>Open full page →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* top row: what company does + AI summary */}
+            <div className="ew-toprow">
+              <div className="card">
+                <div className="card-h"><h3>What this company does</h3></div>
+                <div className="card-b">
+                  {liveCompanySel?.description
+                    ? <p style={{ fontSize: ".82rem", lineHeight: 1.6, color: "var(--text)", margin: 0 }}>{liveCompanySel.description}</p>
+                    : <DataState loading={!liveCompanySel} label={`No company description synced for ${sel} yet.`} />}
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-h"><h3>AI summary</h3><span className="pill" style={{ background: "var(--surface-3)", color: "var(--ai)" }}>◆ AI</span></div>
+                <div className="card-b">
+                  <p style={{ fontSize: ".82rem", lineHeight: 1.6, color: "var(--text)", margin: "0 0 10px" }}>{aiRead}</p>
+                  <div className="ew-aisum">
+                    <div><span>Post-earnings reaction</span><b>{annMatch?.reactionPct != null ? <span className={cls(annMatch.reactionPct)}>{sign(annMatch.reactionPct)}</span> : <NotAvailable />}</b></div>
+                    <div><span>Historical EPS beats</span><b>{hasEstimates ? `${beats} / ${hist.length}` : <span style={{ color: "var(--text-dim-solid)", fontWeight: 500 }}>Pending — needs estimates</span>}</b></div>
+                    <div><span>What street expects</span><b style={{ color: "var(--text-dim-solid)", fontWeight: 500 }}>Pending — forward consensus not in feed yet</b></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* chart row: chart (left) + Sales / EPS (right) */}
+            <div className="ew-chartrow">
+              <ChartCard sym={sel} px={liveCompanySel?.price ?? 0} />
+              <div className="ew-side">
+                <div className="card">
+                  <div className="card-h">
+                    <h3>Sales</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div className="ecal-seg">
+                        <button className={`ecal-segbtn${incPeriod === "Q" ? " on" : ""}`} onClick={() => setIncPeriod("Q")}>Q</button>
+                        <button className={`ecal-segbtn${incPeriod === "A" ? " on" : ""}`} onClick={() => setIncPeriod("A")}>Y</button>
+                      </div>
+                      <ExpandBtn title={`${sel} · Sales`} node={<IncChart inc={inc} />} />
+                    </div>
+                  </div>
+                  <div className="card-b">
+                    {inc.length === 0 ? <DataState loading={financialsLoading} label={`No financials for ${sel} yet.`} /> : <IncChart inc={inc} />}
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-h">
+                    <h3>EPS</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div className="ecal-seg">
+                        <button className={`ecal-segbtn${histPeriod === "Q" ? " on" : ""}`} onClick={() => setHistPeriod("Q")}>Q</button>
+                        <button className={`ecal-segbtn${histPeriod === "A" ? " on" : ""}`} onClick={() => setHistPeriod("A")}>Y</button>
+                      </div>
+                      <ExpandBtn title={`${sel} · EPS`} node={<EpsChart hist={hist} />} />
+                    </div>
+                  </div>
+                  <div className="card-b">
+                    {hist.length === 0 ? <DataState loading={financialsLoading} label={`No EPS history for ${sel} yet.`} /> : <EpsChart hist={hist} />}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Legacy inline detail — superseded by detail mode; kept gated ── */}
+      {!detailOpen && sel && (
         <div className="card" style={{ marginTop: 14 }}>
           <div className="card-h">
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -751,8 +936,8 @@ export function EarningsScreen() {
         </div>
       )}
 
-      {/* ── Detail: EPS history + Income statement (only once a company is picked) ── */}
-      {sel && (
+      {/* ── Legacy detail (EPS history + Income statement) — gated off ── */}
+      {!detailOpen && sel && (
       <>
       <div className="dash" style={{ marginTop: 16 }}>
         {/* col-6: 10-quarter EPS history */}

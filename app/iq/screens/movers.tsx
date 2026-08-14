@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { type Mover, maPostureLabel } from "../data";
 import { fmt, sign, arr, Spark, StockLogo } from "../utils";
 import { useApiList } from "../hooks/useApiList";
+import { useApiResource } from "../hooks/useApiResource";
 import type { LiveMoverDoc, CompanyDoc } from "../types";
 
 const StockScreenEmbed = dynamic<{ initialSym?: string }>(
@@ -99,7 +100,19 @@ export function MoversScreen() {
   tabCapRows.forEach(m => { tally[m.sector] = (tally[m.sector] || 0) + 1; });
   const sectorTally = Object.entries(tally).sort((a, b) => b[1] - a[1]);
 
-  const val = (m: Mover) => tab === "week" ? m.weekPct : m.pctChange;
+  // Live price/%-overlay so the table matches the stock drawer (which reads the
+  // same universal-snapshot quote). The batch `market_movers` doc carries the
+  // session CLOSE, which diverges from the live "last price" on volatile names —
+  // the exact tickers that top this board. Ranking stays EOD-based (sort above);
+  // only the shown price/change go live. Falls back to the batch value per row
+  // when a quote is missing. Polls every 30s; refetches when the visible set
+  // changes (tab/sector/cap). Capped at the 20 shown rows (endpoint limit 25).
+  const shownTickers = filtered.map(m => m.ticker);
+  const quotesPath = shownTickers.length
+    ? `/live/quotes?tickers=${encodeURIComponent(shownTickers.join(","))}`
+    : null;
+  const { data: liveQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(quotesPath, 30000);
+  const quoteByTicker = new Map((liveQuotes ?? []).map(q => [q.ticker, q]));
 
   return (
     <>
@@ -111,7 +124,7 @@ export function MoversScreen() {
         </div>
         {liveCount > 0 && (
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {liveCount} names · top 20 gainers + 20 losers · live EOD
+            {liveCount} names · top 20 gainers + 20 losers · ranked by session move · live prices
           </span>
         )}
       </div>
@@ -170,7 +183,10 @@ export function MoversScreen() {
                 <td colSpan={6} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No stocks match these filters.</td>
               </tr>
             ) : filtered.map(m => {
-              const v = val(m);
+              const lq = quoteByTicker.get(m.ticker);
+              const price = lq?.price ?? m.price;
+              // Live %-change on the price tabs; the Week tab has no live weekly.
+              const v = tab === "week" ? m.weekPct : (lq?.pctChange ?? m.pctChange);
               return (
                 <tr
                   key={m.ticker}
@@ -190,7 +206,7 @@ export function MoversScreen() {
                       </div>
                     </div>
                   </td>
-                  <td className="num">${fmt(m.price)}</td>
+                  <td className="num">${fmt(price)}</td>
                   <td className="num" style={{ color: v == null ? undefined : v >= 0 ? "var(--up)" : "var(--down)", fontWeight: 600 }}>{v == null ? "—" : <>{arr(v)} {sign(v)}</>}</td>
                   <td className="num">
                     <b style={{ color: m.rvolRatio > 3 ? "var(--warn)" : "var(--text)" }}>{m.rvolRatio.toFixed(1)}×</b>

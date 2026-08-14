@@ -1601,11 +1601,12 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ec-day.is-today { border-color: var(--ai); box-shadow: 0 0 0 1px var(--ai) inset; }
 .ec-day.is-sel { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand) inset; }
 .ec-dh { font-size: .72rem; font-weight: 700; color: var(--text-hi); margin-bottom: 9px; text-transform: uppercase; letter-spacing: .04em; }
-/* Auto-fill grid (not inline-flex wrap): chips fill equal-width cells so the
-   columns line up vertically. Inline-flow wrapping left the 2nd column ragged
-   because each pill was only as wide as its ticker text. */
-.ec-sess { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 5px; align-content: start; margin-bottom: 9px; }
-.ec-sess .ec-chip { width: 100%; margin: 0; min-width: 0; }
+/* Fixed two-column grid (not inline-flex wrap): chips fill two equal cells so
+   both columns line up vertically. Inline-flow wrapping left the 2nd column
+   ragged because each pill was only as wide as its ticker text. Two fixed
+   columns (rather than auto-fill) because the narrow day cells fit exactly two. */
+.ec-sess { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; align-content: start; margin-bottom: 9px; }
+.ec-sess .ec-chip { width: 100%; margin: 0; min-width: 0; overflow: hidden; }
 .ec-lbl { font-size: .58rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim-solid); margin-bottom: 5px; font-weight: 700; }
 .ec-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--surface-3); border: 1px solid transparent; border-radius: 8px; padding: 3px 9px 3px 3px; margin: 0 5px 5px 0; font-size: .74rem; font-weight: 600; color: var(--text-hi); cursor: pointer; font-family: inherit; }
 .ec-chip:hover { border-color: var(--brand-2); }
@@ -1632,6 +1633,27 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .emc-more { font-size: .6rem; font-weight: 700; color: var(--text-dim-solid); background: var(--surface-3); border: none; border-radius: 7px; padding: 0 7px; height: 26px; display: inline-flex; align-items: center; cursor: pointer; }
 .emc-more:hover { color: var(--text-hi); }
 .emc-none { font-size: .66rem; color: var(--text-dim-solid); }
+
+/* Earnings detail mode — weekly picker (left) + stock details (right) */
+.ew-split { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .ew-split { grid-template-columns: 1fr; } }
+.ew-week { position: sticky; top: 12px; background: var(--surface-1); border: 1px solid var(--border-soft); border-radius: 12px; display: flex; flex-direction: column; max-height: calc(100vh - 96px); overflow: hidden; }
+.ew-week-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border-soft); font-size: .76rem; font-weight: 700; color: var(--text-hi); }
+.ew-week-body { overflow-y: auto; padding: 10px; }
+.ew-week-day { margin-bottom: 12px; }
+.ew-week-day:last-child { margin-bottom: 0; }
+.ew-week-daylabel { font-size: .64rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-dim-solid); margin-bottom: 6px; }
+.ew-week-none { font-size: .72rem; color: var(--text-dim-solid); }
+.ew-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ew-toprow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 760px) { .ew-toprow { grid-template-columns: 1fr; } }
+.ew-chartrow { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: stretch; }
+@media (max-width: 1000px) { .ew-chartrow { grid-template-columns: 1fr; } }
+.ew-side { display: flex; flex-direction: column; gap: 14px; }
+.ew-aisum { display: flex; flex-direction: column; gap: 7px; }
+.ew-aisum > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .78rem; color: var(--text-dim-solid); border-top: 1px solid var(--border-soft); padding-top: 7px; }
+.ew-aisum > div:first-child { border-top: none; padding-top: 0; }
+.ew-aisum b { color: var(--text-hi); font-weight: 700; }
 .call-row { display: flex; align-items: center; gap: 12px; background: var(--surface-1); border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; text-align: left; font-family: inherit; width: 100%; transition: border-color .13s; }
 .call-row:hover { border-color: var(--brand-2); }
 .call-row.on { border-color: var(--brand); background: rgba(124,108,245,.1); }
