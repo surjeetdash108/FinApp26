@@ -126,10 +126,10 @@ const chgCls = (s: string) => s.startsWith("+") ? " up" : s.startsWith("-") ? " 
 
 /**
  * Sales & EPS widget — dual bar charts (Quarterly/Annual toggle) plus the
- * Fiscal-year and Quarterly tables, matching the reference layout. Actuals are
- * real; the quarterly %surp columns stay "—" until an earnings-estimate feed is
- * wired (Polygon has none), and there are no forward-estimate rows for the same
- * reason.
+ * Fiscal-year and Quarterly tables, matching the reference layout. Actuals come
+ * from Polygon; the quarterly %surp columns and the forward `*YYYY` estimate
+ * rows are populated from the FMP estimate feed (financialsDoc.annualEstimates +
+ * per-quarter epsEstimate), and degrade to "—" for tickers not yet synced.
  */
 export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc | null }) {
   const [period, setPeriod] = useState<"Q" | "A">("Q");
@@ -137,12 +137,34 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
   const annualRows = annualEpsSalesRows(financialsDoc?.annual ?? []);
   const quarterlyRows = quarterlyEpsSalesRows(financialsDoc?.quarters ?? []);
 
+  // Forward analyst estimates (the `*YYYY` rows) — only present when an estimate
+  // vendor is wired. %chg is vs the immediately prior year (last reported year
+  // for the first estimate, then the prior estimate).
+  const reportedYears = new Set(annualRows.map(r => r.year));
+  const fwd = [...(financialsDoc?.annualEstimates ?? [])]
+    .filter(e => !reportedYears.has(e.fiscalYear))
+    .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear));
+  const startEps = annualRows.length ? annualRows[annualRows.length - 1].eps : null;
+  const startSales = annualRows.length ? annualRows[annualRows.length - 1].sales : null;
+  const salesM = (v: number | null | undefined) => (v != null ? v / 1e6 : null);
+  const forwardRows = fwd.map((e, i) => {
+    const prevEps = i === 0 ? startEps : fwd[i - 1].epsEstimate;
+    const prevSales = i === 0 ? startSales : salesM(fwd[i - 1].revenueEstimate);
+    return {
+      year: `*${e.fiscalYear}`,
+      eps: e.epsEstimate,
+      epsChg: pctChangeStr(e.epsEstimate, prevEps),
+      sales: salesM(e.revenueEstimate),
+      salesChg: pctChangeStr(salesM(e.revenueEstimate), prevSales),
+    };
+  });
+
   return (
     <div className="card">
       <div className="card-h">
-        <h3>Sales &amp; EPS</h3>
+        <h3>EPS and Sales</h3>
         <div className="ecal-seg">
-          <button className={`ecal-segbtn${period === "Q" ? " on" : ""}`} onClick={() => setPeriod("Q")}>Quarterly</button>
+          <button className={`ecal-segbtn${period === "Q" ? " on" : ""}`} onClick={() => setPeriod("Q")}>Quarter</button>
           <button className={`ecal-segbtn${period === "A" ? " on" : ""}`} onClick={() => setPeriod("A")}>Annual</button>
         </div>
       </div>
@@ -156,8 +178,8 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
           </div>
         )}
 
-        {/* Fiscal-year table */}
-        {annualRows.length > 0 && (
+        {/* Fiscal-year table (reported years, then forward `*YYYY` estimates) */}
+        {(annualRows.length > 0 || forwardRows.length > 0) && (
           <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid var(--border-soft)" }}>
             <div style={{ fontSize: ".78rem", fontWeight: 700, color: "var(--text-hi)", marginBottom: 8 }}>Fiscal year</div>
             <div style={{ overflowX: "auto" }}>
@@ -175,9 +197,24 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
                       <td className={`num${chgCls(r.salesChg)}`}>{r.salesChg}</td>
                     </tr>
                   ))}
+                  {/* Forward estimates — dimmed, `*` marks them as consensus. */}
+                  {forwardRows.map(r => (
+                    <tr key={r.year} style={{ opacity: 0.75, fontStyle: "italic" }}>
+                      <td style={{ fontWeight: 700, color: "var(--brand-2)" }}>{r.year}</td>
+                      <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
+                      <td className={`num${chgCls(r.epsChg)}`}>{r.epsChg}</td>
+                      <td className="num">{r.sales != null ? r.sales.toFixed(1) : <NotAvailable />}</td>
+                      <td className={`num${chgCls(r.salesChg)}`}>{r.salesChg}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
+            {forwardRows.length > 0 && (
+              <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 6 }}>
+                * forward analyst consensus (estimate).
+              </div>
+            )}
           </div>
         )}
 

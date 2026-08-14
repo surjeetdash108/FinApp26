@@ -9,7 +9,6 @@ import { EarningsPlaybook } from "./EarningsPlaybook";
 import { backendUrl } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import { useTickerSearch } from "../hooks/useTickerSearch";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
 
@@ -147,9 +146,16 @@ function toCalRow(item: EarnCalItem): CalRow {
 type SortKey = "symbol" | "surprise";
 type SessionKey = "both" | "BMO" | "AMC";
 
-function filterSortRows(rows: CalRow[], opts: { sort: SortKey; session: SessionKey }): CalRow[] {
+function filterSortRows(rows: CalRow[], opts: { sort: SortKey; session: SessionKey; mcap?: Map<string, number> }): CalRow[] {
   const out = rows.filter(r => opts.session === "both" || r.sess === opts.session);
   out.sort((a, b) => {
+    // Market-cap descending is the primary order (largest companies first);
+    // ties and unknowns (mcap 0) fall back to alphabetical.
+    if (opts.mcap) {
+      const d = (opts.mcap.get(b.s) ?? 0) - (opts.mcap.get(a.s) ?? 0);
+      if (d !== 0) return d;
+      return a.s.localeCompare(b.s);
+    }
     if (opts.sort === "surprise") return (b.epsSurp ?? -Infinity) - (a.epsSurp ?? -Infinity);
     return a.s.localeCompare(b.s);
   });
@@ -422,7 +428,7 @@ function CalTable({
               <tr key={r.s} className={sel === r.s ? "on" : ""} onClick={() => onSelect(r.s)}>
                 <td>
                   <div className="ecal-symcell">
-                    <StockLogo sym={r.s} size={22} />
+                    <StockLogo sym={r.s} size={33} />
                     <div>
                       <div className="ecal-sym">{r.s}</div>
                       {r.n !== r.s && <div className="ecal-name">{r.n}</div>}
@@ -472,6 +478,9 @@ export function EarningsScreen() {
   const { openStockFull } = useIQActions();
   const { data: liveEarnings } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   const { data: earningsAnnouncements } = useApiList<EarningsAnnouncementDoc>("/market-data/earnings-announcements");
+  // Market cap per ticker — used to order every earnings list largest-first.
+  const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
+  const mcapByTicker = new Map(companies.filter(c => c.ticker).map(c => [c.ticker as string, c.marketCap ?? 0]));
   const liveEarningsData = liveEarnings;
 
   const [mode, setMode]     = useState<"day" | "week" | "month">("day");
@@ -489,10 +498,10 @@ export function EarningsScreen() {
   const [incPeriod, setIncPeriod]   = useState<"Q" | "A">("Q");
   const [aiReadOpen, setAiReadOpen] = useState(true);
   const [tickerSearch, setTickerSearch] = useState("");
-  const tickerResults = useTickerSearch(tickerSearch);
   // Detail mode: clicking a stock opens a split view (weekly picker + details)
   // that replaces the calendar; the ✕ in the weekly panel closes back to it.
   const [detailOpen, setDetailOpen] = useState(false);
+  const [chartOpen, setChartOpen] = useState(true);
 
   // No company is selected by default — the detail panels appear only after the
   // user clicks a reporting company in the calendar.
@@ -506,7 +515,14 @@ export function EarningsScreen() {
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
 
   const dayRows = rowsForDate(anchor, liveEarningsData).map(toCalRow);
-  const visibleRows = filterSortRows(dayRows, { sort, session: "both" });
+  const visibleRows = filterSortRows(dayRows, { sort, session: "both", mcap: mcapByTicker });
+  // Detail-mode side tray: the SELECTED DAY's reporting tickers (not the week),
+  // narrowed live by the "Search earnings" box (symbol or company name).
+  const trayBaseItems = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker });
+  const trayQuery = tickerSearch.trim().toUpperCase();
+  const trayItems = trayQuery
+    ? trayBaseItems.filter(r => r.s.includes(trayQuery) || (r.n ?? "").toUpperCase().includes(trayQuery))
+    : trayBaseItems;
 
   // Pre-market (Before Open) / post-market (After Close) session comes from the
   // EDGAR 8-K `earnings_announcements` feed — Polygon's earnings_events carries
@@ -563,27 +579,25 @@ export function EarningsScreen() {
   let calNode: React.ReactNode;
 
   if (mode === "day") {
-    calNode = (
-      <>
-        {visibleRows.length > 0 ? (
-          <>
-            {session !== "AMC" && <CalTable title="Before open · Pre-market" rows={bmoRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />}
-            {session !== "BMO" && <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />}
-            {session === "both" && <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />}
-          </>
-        ) : (
-          <div className="ecal-empty">
-            <div className="ecal-empty-h">No companies reporting</div>
-            <div>Nothing scheduled for {dateLabel} in the synced calendar.</div>
-          </div>
-        )}
-      </>
+    // Icon grid (same chips as a week-view day column) — clicking opens detail;
+    // no full horizontal table.
+    calNode = visibleRows.length > 0 ? (
+      <div className="ec-sess" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+        {visibleRows.map(r => (
+          <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={s => openStockDetail(s, anchor)} />
+        ))}
+      </div>
+    ) : (
+      <div className="ecal-empty">
+        <div className="ecal-empty-h">No companies reporting</div>
+        <div>Nothing scheduled for {dateLabel} in the synced calendar.</div>
+      </div>
     );
   } else if (mode === "week") {
     calNode = (
       <div className="ec-grid">
         {weekDays5.map((iso, di) => {
-          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session });
+          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker });
           const dn = ["Mon", "Tue", "Wed", "Thu", "Fri"][di];
           const isToday = iso === isoDay(new Date());
           return (
@@ -630,7 +644,7 @@ export function EarningsScreen() {
         <div className="emc-grid">
           {cells.map(iso => {
             if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="emc-day is-out" />;
-            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session });
+            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker });
             const isToday = iso === todayIso;
             const isSel   = iso === anchor && !isToday;
             const shown   = items.slice(0, MAX_LOGOS);
@@ -646,7 +660,7 @@ export function EarningsScreen() {
                   <div className="emc-logos">
                     {shown.map(r => (
                       <button key={r.s} className={`emc-logo${sel === r.s ? " on" : ""}`} title={r.s} onClick={() => openStockDetail(r.s, iso)}>
-                        <StockLogo sym={r.s} size={20} />
+                        <StockLogo sym={r.s} size={30} />
                       </button>
                     ))}
                     {extra > 0 && (
@@ -694,6 +708,17 @@ export function EarningsScreen() {
     return { q: label, e: est ?? 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0 };
   });
   const beats = hist.filter(h => h.surp >= 0).length;
+  // "What street expects" — prefer the next (unreported) quarter's consensus EPS,
+  // else the nearest forward fiscal-year estimate. Both come from the FMP feed.
+  const upcomingRow = liveMatches.find(e => e.epsActual == null && e.epsEstimate != null);
+  const fwdAnnual = [...(financialsDoc?.annualEstimates ?? [])]
+    .filter(e => e.epsEstimate != null)
+    .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear))[0];
+  const streetExpects = upcomingRow?.epsEstimate != null
+    ? `$${upcomingRow.epsEstimate.toFixed(2)} · ${upcomingRow.date}`
+    : fwdAnnual?.epsEstimate != null
+      ? `$${fwdAnnual.epsEstimate.toFixed(2)} · FY${fwdAnnual.fiscalYear}`
+      : null;
 
   const inc = incRowsFromFinancials(financialsDoc, incPeriod);
 
@@ -754,57 +779,36 @@ export function EarningsScreen() {
           {/* Left: weekly picker with close button */}
           <aside className="ew-week">
             <div className="ew-week-h">
-              <span>Week of {MON3[weekMon.getUTCMonth()]} {weekMon.getUTCDate()}</span>
+              <span>{DOW3[anchorDate.getUTCDay()]} {MON3[anchorDate.getUTCMonth()]} {anchorDate.getUTCDate()}</span>
               <button className="closebtn" title="Close details" onClick={closeDetail}>✕</button>
             </div>
-            {/* Ticker search — type a symbol/company; click a match (or press
-                Enter) to open its detail. Backed by /live/search (~10k universe). */}
+            {/* Search this day's reporting tickers by symbol or company name. */}
             <div style={{ padding: "8px 0 10px" }}>
               <input
                 value={tickerSearch}
                 onChange={e => setTickerSearch(e.target.value.toUpperCase())}
                 onKeyDown={e => {
                   if (e.key === "Enter") {
-                    const pick = tickerResults[0]?.ticker ?? tickerSearch.trim().toUpperCase();
-                    if (pick) { openStockDetail(pick); setTickerSearch(""); }
+                    const pick = trayItems[0]?.s;
+                    if (pick) { openStockDetail(pick, anchor); setTickerSearch(""); }
                   }
                 }}
-                placeholder="Search ticker…"
+                placeholder="Search earnings…"
                 style={{ width: "100%", boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "7px 10px", fontSize: ".8rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)" }}
               />
-              {tickerSearch.trim().length > 0 && tickerResults.length > 0 && (
-                <div role="listbox" style={{ marginTop: 6, maxHeight: 220, overflowY: "auto", background: "var(--surface-2)", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
-                  {tickerResults.slice(0, 10).map(r => (
-                    <button key={r.ticker} type="button"
-                      onClick={() => { openStockDetail(r.ticker); setTickerSearch(""); }}
-                      style={{ display: "flex", alignItems: "baseline", gap: 8, width: "100%", textAlign: "left", padding: "7px 10px", background: "transparent", border: "none", borderBottom: "1px solid var(--border-soft)", color: "var(--text)", cursor: "pointer", fontSize: ".8rem" }}>
-                      <span style={{ fontWeight: 700, fontFamily: "var(--f-mono)", minWidth: 52, color: "var(--text-hi)" }}>{r.ticker}</span>
-                      <span style={{ color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name ?? ""}</span>
+            </div>
+            <div className="ew-week-body">
+              {trayItems.length ? (
+                <div className="ew-ticklist">
+                  {trayItems.map(r => (
+                    <button key={r.s} className={`ew-tickrow${sel === r.s ? " on" : ""}`} title={r.n ?? r.s} onClick={() => openStockDetail(r.s, anchor)}>
+                      <StockLogo sym={r.s} size={27} />
+                      <span className="ew-tickrow-sym">{r.s}</span>
+                      {r.n && r.n !== r.s && <span className="ew-tickrow-name">{r.n}</span>}
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
-            <div className="ew-week-body">
-              {weekDays5.map(iso => {
-                const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session });
-                const d = new Date(`${iso}T00:00:00Z`);
-                const isToday = iso === isoDay(new Date());
-                return (
-                  <div className="ew-week-day" key={iso}>
-                    <div className="ew-week-daylabel">{DOW3[d.getUTCDay()]} {d.getUTCDate()}{isToday ? " · Today" : ""}</div>
-                    {items.length ? (
-                      <div className="emc-logos">
-                        {items.map(r => (
-                          <button key={r.s} className={`emc-logo${sel === r.s ? " on" : ""}`} title={r.s} onClick={() => openStockDetail(r.s, iso)}>
-                            <StockLogo sym={r.s} size={20} />
-                          </button>
-                        ))}
-                      </div>
-                    ) : <div className="ew-week-none">No earnings</div>}
-                  </div>
-                );
-              })}
+              ) : <div className="ew-week-none">{trayQuery ? "No match on this day." : "No earnings on this day."}</div>}
             </div>
           </aside>
 
@@ -814,7 +818,7 @@ export function EarningsScreen() {
             <div className="ew-toprow">
               <div className="card">
                 <div className="card-h" style={{ gap: 10, flexWrap: "wrap" }}>
-                  <StockLogo sym={sel} size={30} />
+                  <StockLogo sym={sel} size={45} />
                   <span style={{ fontWeight: 700, fontFamily: "var(--f-mono)", color: "var(--text-hi)", fontSize: ".95rem" }}>{sel}</span>
                   {liveCompanySel?.price != null && (
                     <span style={{ fontFamily: "var(--f-mono)", fontWeight: 700, color: "var(--text-hi)", fontSize: ".9rem" }}>
@@ -822,7 +826,6 @@ export function EarningsScreen() {
                       {liveCompanySel.pctChange != null && <span className={cls(liveCompanySel.pctChange)} style={{ marginLeft: 6, fontSize: ".8rem" }}>{sign(liveCompanySel.pctChange)}</span>}
                     </span>
                   )}
-                  <h3 style={{ marginLeft: 6 }}>What this company does</h3>
                 </div>
                 <div className="card-b">
                   {liveCompanySel?.description
@@ -837,15 +840,21 @@ export function EarningsScreen() {
                   <div className="ew-aisum">
                     <div><span>Post-earnings reaction</span><b>{annMatch?.reactionPct != null ? <span className={cls(annMatch.reactionPct)}>{sign(annMatch.reactionPct)}</span> : <NotAvailable />}</b></div>
                     <div><span>Historical EPS beats</span><b>{hasEstimates ? `${beats} / ${hist.length}` : <span style={{ color: "var(--text-dim-solid)", fontWeight: 500 }}>Pending — needs estimates</span>}</b></div>
-                    <div><span>What street expects</span><b style={{ color: "var(--text-dim-solid)", fontWeight: 500 }}>Pending — forward consensus not in feed yet</b></div>
+                    <div><span>What street expects</span><b>{streetExpects ?? <span style={{ color: "var(--text-dim-solid)", fontWeight: 500 }}>Pending — no estimate yet</span>}</b></div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Price chart (full width) */}
+            {/* Price chart (full width) — collapsible (show/hide). */}
             <div style={{ marginBottom: 14 }}>
-              <ChartCard sym={sel} px={liveCompanySel?.price ?? 0} />
+              <button
+                onClick={() => setChartOpen(o => !o)}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "var(--surface-1)", border: "1px solid var(--border-soft)", borderRadius: 12, padding: "10px 14px", cursor: "pointer", color: "var(--text-hi)", fontWeight: 700, fontSize: ".85rem", marginBottom: chartOpen ? 8 : 0 }}>
+                <span>{sel} · Chart</span>
+                <span style={{ color: "var(--text-dim-solid)", fontSize: ".75rem", fontWeight: 600 }}>{chartOpen ? "▲ Hide" : "▼ Show"}</span>
+              </button>
+              {chartOpen && <ChartCard sym={sel} px={liveCompanySel?.price ?? 0} />}
             </div>
 
             {/* Sales & EPS — bar charts (Quarterly/Annual) + fiscal-year and
