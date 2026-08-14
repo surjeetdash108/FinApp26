@@ -38,10 +38,10 @@
   --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 30px -12px rgba(0,0,0,.7);
   --glow-brand: 0 0 0 1px var(--brand-dim), 0 0 24px -6px var(--brand);
   --glow-ai: 0 0 0 1px var(--ai-dim), 0 0 24px -6px var(--ai);
-  /* rem, not px, so the rail grows with the type scale — at 218px fixed, the
-     longest label ('Insider & Institutional') had only 4px of headroom and any
-     font increase wrapped it. */
-  --rail-w: 13.625rem;
+  /* rem, not px, so the rail grows with the type scale. Sized to the current
+     longest label ('Analyst Actions') plus icon + padding; .nav-label ellipsizes
+     so a longer label can never wrap or force the rail wider. */
+  --rail-w: 11.5rem;
 }
 
 .iq-root[data-theme="dark"] {
@@ -418,6 +418,7 @@
 }
 .navitem:hover { background: var(--surface-2); color: var(--text-hi); }
 .navitem.active { background: var(--brand-dim); color: var(--brand); }
+.navitem .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .navitem .nicon {
   width: 26px; height: 26px; border-radius: 6px;
   background: var(--surface-2); display: grid; place-items: center;
@@ -755,7 +756,11 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
   margin-top: 12px; padding: 12px 14px;
   background: var(--surface-1); border: 1px solid var(--border-soft);
   border-radius: var(--r-sm); width: 100%;
+  /* ~half the previous height; the full blurb stays reachable by scrolling. */
+  max-height: 96px; overflow-y: auto;
 }
+/* AI Technical Analysis body capped to ~half height, scroll for the rest. */
+.ai-block .card-b { max-height: 128px; overflow-y: auto; }
 .sd-about-lbl {
   font-size: .66rem; font-weight: 700; letter-spacing: .09em;
   text-transform: uppercase; color: var(--text-dim-solid);
@@ -1646,6 +1651,8 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ew-week-none { font-size: .72rem; color: var(--text-dim-solid); }
 .ew-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .ew-toprow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* "What this company does" + "AI summary" capped compact (scroll for the rest). */
+.ew-toprow .card-b { max-height: 100px; overflow-y: auto; }
 @media (max-width: 760px) { .ew-toprow { grid-template-columns: 1fr; } }
 .ew-chartrow { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: stretch; }
 @media (max-width: 1000px) { .ew-chartrow { grid-template-columns: 1fr; } }

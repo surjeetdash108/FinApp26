@@ -4,9 +4,12 @@ import { useState } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
 import { ChartCard } from "../stock-panel";
+import { EpsSalesWidget } from "../eps-sales-widget";
+import { EarningsPlaybook } from "./EarningsPlaybook";
 import { backendUrl } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
+import { useTickerSearch } from "../hooks/useTickerSearch";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
 
@@ -478,11 +481,15 @@ export function EarningsScreen() {
   // stay at fixed defaults.
   const sort: SortKey = "symbol";
   const view: CalView = "eps";
+  // Pre-market (Before open) / after-market (After close) filter for the calendar.
+  const [session, setSession] = useState<SessionKey>("both");
   const [pickerOpen, setPickerOpen]   = useState(false);
   // Quarterly vs Yearly toggles for the two detail tables (independent).
   const [histPeriod, setHistPeriod] = useState<"Q" | "A">("Q");
   const [incPeriod, setIncPeriod]   = useState<"Q" | "A">("Q");
   const [aiReadOpen, setAiReadOpen] = useState(true);
+  const [tickerSearch, setTickerSearch] = useState("");
+  const tickerResults = useTickerSearch(tickerSearch);
   // Detail mode: clicking a stock opens a split view (weekly picker + details)
   // that replaces the calendar; the ✕ in the weekly panel closes back to it.
   const [detailOpen, setDetailOpen] = useState(false);
@@ -560,9 +567,9 @@ export function EarningsScreen() {
       <>
         {visibleRows.length > 0 ? (
           <>
-            <CalTable title="Before open · Pre-market" rows={bmoRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />
-            <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />
-            <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />
+            {session !== "AMC" && <CalTable title="Before open · Pre-market" rows={bmoRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />}
+            {session !== "BMO" && <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />}
+            {session === "both" && <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={view} />}
           </>
         ) : (
           <div className="ecal-empty">
@@ -576,7 +583,7 @@ export function EarningsScreen() {
     calNode = (
       <div className="ec-grid">
         {weekDays5.map((iso, di) => {
-          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
+          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session });
           const dn = ["Mon", "Tue", "Wed", "Thu", "Fri"][di];
           const isToday = iso === isoDay(new Date());
           return (
@@ -623,7 +630,7 @@ export function EarningsScreen() {
         <div className="emc-grid">
           {cells.map(iso => {
             if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="emc-day is-out" />;
-            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
+            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session });
             const isToday = iso === todayIso;
             const isSel   = iso === anchor && !isToday;
             const shown   = items.slice(0, MAX_LOGOS);
@@ -728,6 +735,12 @@ export function EarningsScreen() {
             <button className={`ecal-segbtn${mode === "week" ? " on" : ""}`} onClick={() => setMode("week")}>Week</button>
             <button className={`ecal-segbtn${mode === "day" ? " on" : ""}`} onClick={() => setMode("day")}>Day</button>
           </div>
+          {/* Session filter — narrows the calendar to pre-market / after-market. */}
+          <div className="ecal-seg">
+            <button className={`ecal-segbtn${session === "both" ? " on" : ""}`} onClick={() => setSession("both")}>All</button>
+            <button className={`ecal-segbtn${session === "BMO" ? " on" : ""}`} onClick={() => setSession("BMO")}>Pre-market</button>
+            <button className={`ecal-segbtn${session === "AMC" ? " on" : ""}`} onClick={() => setSession("AMC")}>After-market</button>
+          </div>
         </div>
 
         {/* ── Calendar ─────────────────────────────────────────────────── */}
@@ -744,9 +757,37 @@ export function EarningsScreen() {
               <span>Week of {MON3[weekMon.getUTCMonth()]} {weekMon.getUTCDate()}</span>
               <button className="closebtn" title="Close details" onClick={closeDetail}>✕</button>
             </div>
+            {/* Ticker search — type a symbol/company; click a match (or press
+                Enter) to open its detail. Backed by /live/search (~10k universe). */}
+            <div style={{ padding: "8px 0 10px" }}>
+              <input
+                value={tickerSearch}
+                onChange={e => setTickerSearch(e.target.value.toUpperCase())}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    const pick = tickerResults[0]?.ticker ?? tickerSearch.trim().toUpperCase();
+                    if (pick) { openStockDetail(pick); setTickerSearch(""); }
+                  }
+                }}
+                placeholder="Search ticker…"
+                style={{ width: "100%", boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "7px 10px", fontSize: ".8rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)" }}
+              />
+              {tickerSearch.trim().length > 0 && tickerResults.length > 0 && (
+                <div role="listbox" style={{ marginTop: 6, maxHeight: 220, overflowY: "auto", background: "var(--surface-2)", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
+                  {tickerResults.slice(0, 10).map(r => (
+                    <button key={r.ticker} type="button"
+                      onClick={() => { openStockDetail(r.ticker); setTickerSearch(""); }}
+                      style={{ display: "flex", alignItems: "baseline", gap: 8, width: "100%", textAlign: "left", padding: "7px 10px", background: "transparent", border: "none", borderBottom: "1px solid var(--border-soft)", color: "var(--text)", cursor: "pointer", fontSize: ".8rem" }}>
+                      <span style={{ fontWeight: 700, fontFamily: "var(--f-mono)", minWidth: 52, color: "var(--text-hi)" }}>{r.ticker}</span>
+                      <span style={{ color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name ?? ""}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="ew-week-body">
               {weekDays5.map(iso => {
-                const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
+                const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session });
                 const d = new Date(`${iso}T00:00:00Z`);
                 const isToday = iso === isoDay(new Date());
                 return (
@@ -769,34 +810,20 @@ export function EarningsScreen() {
 
           {/* Right: stock details */}
           <div className="ew-main">
-            {/* header */}
-            <div className="card">
-              <div className="card-h">
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%" }}>
-                  <StockLogo sym={sel} size={34} />
-                  <div>
-                    <span style={{ fontWeight: 700, color: "var(--text-hi)", fontSize: ".95rem" }}>{sel}</span>
-                    <span style={{ color: "var(--text-dim-solid)", fontSize: ".78rem", marginLeft: 8 }}>{liveCompanySel?.name ?? sel} · {liveCompanySel?.sector ?? <NotAvailable />}</span>
-                  </div>
-                  {liveCompanySel?.price != null && (
-                    <span style={{ marginLeft: 4, fontFamily: "var(--f-mono)", fontWeight: 700, color: "var(--text-hi)" }}>
-                      ${liveCompanySel.price.toFixed(2)}{" "}
-                      {liveCompanySel.pctChange != null && <span className={cls(liveCompanySel.pctChange)}>{sign(liveCompanySel.pctChange)}</span>}
-                    </span>
-                  )}
-                  <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
-                    <button className="btn" style={{ padding: "5px 10px", fontSize: ".75rem" }} onClick={() => setSelectedCall(sel)}>Earnings call</button>
-                    <button className="btn" style={{ padding: "5px 10px", fontSize: ".75rem", color: "var(--ai)" }} onClick={() => setAiModalSym(sel)}>◆ AI analysis</button>
-                    <button className="btn" style={{ padding: "5px 10px", fontSize: ".75rem" }} onClick={() => openStockFull(sel)}>Open full page →</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* top row: what company does + AI summary */}
             <div className="ew-toprow">
               <div className="card">
-                <div className="card-h"><h3>What this company does</h3></div>
+                <div className="card-h" style={{ gap: 10, flexWrap: "wrap" }}>
+                  <StockLogo sym={sel} size={30} />
+                  <span style={{ fontWeight: 700, fontFamily: "var(--f-mono)", color: "var(--text-hi)", fontSize: ".95rem" }}>{sel}</span>
+                  {liveCompanySel?.price != null && (
+                    <span style={{ fontFamily: "var(--f-mono)", fontWeight: 700, color: "var(--text-hi)", fontSize: ".9rem" }}>
+                      ${liveCompanySel.price.toFixed(2)}
+                      {liveCompanySel.pctChange != null && <span className={cls(liveCompanySel.pctChange)} style={{ marginLeft: 6, fontSize: ".8rem" }}>{sign(liveCompanySel.pctChange)}</span>}
+                    </span>
+                  )}
+                  <h3 style={{ marginLeft: 6 }}>What this company does</h3>
+                </div>
                 <div className="card-b">
                   {liveCompanySel?.description
                     ? <p style={{ fontSize: ".82rem", lineHeight: 1.6, color: "var(--text)", margin: 0 }}>{liveCompanySel.description}</p>
@@ -816,40 +843,30 @@ export function EarningsScreen() {
               </div>
             </div>
 
-            {/* chart row: chart (left) + Sales / EPS (right) */}
-            <div className="ew-chartrow">
+            {/* Price chart (full width) */}
+            <div style={{ marginBottom: 14 }}>
               <ChartCard sym={sel} px={liveCompanySel?.price ?? 0} />
-              <div className="ew-side">
-                <div className="card">
-                  <div className="card-h">
-                    <h3>Sales</h3>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div className="ecal-seg">
-                        <button className={`ecal-segbtn${incPeriod === "Q" ? " on" : ""}`} onClick={() => setIncPeriod("Q")}>Q</button>
-                        <button className={`ecal-segbtn${incPeriod === "A" ? " on" : ""}`} onClick={() => setIncPeriod("A")}>Y</button>
-                      </div>
-                      <ExpandBtn title={`${sel} · Sales`} node={<IncChart inc={inc} />} />
-                    </div>
-                  </div>
-                  <div className="card-b">
-                    {inc.length === 0 ? <DataState loading={financialsLoading} label={`No financials for ${sel} yet.`} /> : <IncChart inc={inc} />}
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-h">
-                    <h3>EPS</h3>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div className="ecal-seg">
-                        <button className={`ecal-segbtn${histPeriod === "Q" ? " on" : ""}`} onClick={() => setHistPeriod("Q")}>Q</button>
-                        <button className={`ecal-segbtn${histPeriod === "A" ? " on" : ""}`} onClick={() => setHistPeriod("A")}>Y</button>
-                      </div>
-                      <ExpandBtn title={`${sel} · EPS`} node={<EpsChart hist={hist} />} />
-                    </div>
-                  </div>
-                  <div className="card-b">
-                    {hist.length === 0 ? <DataState loading={financialsLoading} label={`No EPS history for ${sel} yet.`} /> : <EpsChart hist={hist} />}
-                  </div>
-                </div>
+            </div>
+
+            {/* Sales & EPS — bar charts (Quarterly/Annual) + fiscal-year and
+                quarterly tables, per the reference layout. */}
+            <div style={{ marginBottom: 14 }}>
+              <EpsSalesWidget financialsDoc={financialsDoc} />
+            </div>
+
+            {/* Reports — how the stock trades when it reports (bottom). */}
+            <div className="card">
+              <div className="card-h">
+                <h3>Earnings Playbook</h3>
+                <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>how {sel} trades when it reports</span>
+              </div>
+              <div className="card-b" style={{ paddingTop: 6 }}>
+                <EarningsPlaybook
+                  sym={sel}
+                  reports={(financialsDoc?.quarters ?? [])
+                    .filter(q => q.filingDate)
+                    .map(q => ({ date: q.filingDate as string, epsActual: q.epsActual, epsEstimate: q.epsEstimate }))}
+                />
               </div>
             </div>
           </div>
