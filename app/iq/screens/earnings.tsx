@@ -428,11 +428,6 @@ export function EarningsScreen() {
   const liveEarningsData = liveEarnings;
 
   const [mode, setMode]     = useState<"day" | "week" | "month">("day");
-  // Before/After-market filter, applied on top of the Month/Week/Day view.
-  // "both" = no session filter. Session (BMO/AMC) is joined from the EDGAR 8-K
-  // feed below, so a Before/After filter only surfaces companies that have a
-  // recent 8-K with a stated session.
-  const [session, setSession] = useState<SessionKey>("both");
   const [anchor, setAnchor] = useState<string>(() => isoDay(new Date()));
   // The filter bar (session / cap / sort / min-move / view / news / auto-refresh)
   // was removed — the live earnings feed has no data to drive those — so these
@@ -506,29 +501,18 @@ export function EarningsScreen() {
   let calNode: React.ReactNode;
 
   if (mode === "day") {
-    const showBmo = session === "both" || session === "BMO";
-    const showAmc = session === "both" || session === "AMC";
-    const showTbd = session === "both"; // "Time not specified" only in the unfiltered view
-    const anyVisible =
-      (showBmo && bmoRows.length > 0) ||
-      (showAmc && amcRows.length > 0) ||
-      (showTbd && tbdRows.length > 0);
     calNode = (
       <>
-        {anyVisible ? (
+        {visibleRows.length > 0 ? (
           <>
-            {showBmo && <CalTable title="Before open · Pre-market" rows={bmoRows} sel={sel} onSelect={setSel} view={view} />}
-            {showAmc && <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={setSel} view={view} />}
-            {showTbd && <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={setSel} view={view} />}
+            <CalTable title="Before open · Pre-market" rows={bmoRows} sel={sel} onSelect={setSel} view={view} />
+            <CalTable title="After close · Post-market" rows={amcRows} sel={sel} onSelect={setSel} view={view} />
+            <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={setSel} view={view} />
           </>
         ) : (
           <div className="ecal-empty">
             <div className="ecal-empty-h">No companies reporting</div>
-            <div>
-              {session === "both"
-                ? `Nothing scheduled for ${dateLabel} in the synced calendar.`
-                : `No ${session === "BMO" ? "before-market" : "after-market"} earnings for ${dateLabel}.`}
-            </div>
+            <div>Nothing scheduled for {dateLabel} in the synced calendar.</div>
           </div>
         )}
       </>
@@ -537,7 +521,7 @@ export function EarningsScreen() {
     calNode = (
       <div className="ec-grid">
         {weekDays5.map((iso, di) => {
-          const items = filterSortRows(withSess(rowsForDate(iso, liveEarningsData).map(toCalRow), iso), { sort, session });
+          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
           const dn = ["Mon", "Tue", "Wed", "Thu", "Fri"][di];
           const isToday = iso === isoDay(new Date());
           return (
@@ -556,9 +540,9 @@ export function EarningsScreen() {
   } else {
     // ── Month grid ────────────────────────────────────────────────────────────
     // Full weekday calendar (Mon–Fri), every reporting company shown as a logo,
-    // matching the reference Earnings-Hub layout. When a Before/After-market
-    // filter is active, cells show only companies whose EDGAR 8-K states that
-    // session (others fall away, same as Week/Day).
+    // matching the reference Earnings-Hub layout. Session (BMO/AMC) isn't in the
+    // vendor feed, so month cells show all companies for the day regardless of
+    // the Before/After chip.
     const mFirst = new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), 1));
     const mLast  = new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth() + 1, 0));
     const leadOffset = (mFirst.getUTCDay() + 6) % 7; // 0 = Monday
@@ -577,7 +561,7 @@ export function EarningsScreen() {
         <div className="emc-grid">
           {cells.map(iso => {
             if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="emc-day is-out" />;
-            const items = filterSortRows(withSess(rowsForDate(iso, liveEarningsData).map(toCalRow), iso), { sort, session });
+            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session: "both" });
             const isToday = iso === todayIso;
             const isSel   = iso === anchor && !isToday;
             const shown   = items.slice(0, MAX_LOGOS);
@@ -676,30 +660,10 @@ export function EarningsScreen() {
             </div>
             <button className="ecal-arrow" onClick={() => step(1)} aria-label="Next">›</button>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <div className="ecal-seg">
-              <button className={`ecal-segbtn${mode === "month" ? " on" : ""}`} onClick={() => setMode("month")}>Month</button>
-              <button className={`ecal-segbtn${mode === "week" ? " on" : ""}`} onClick={() => setMode("week")}>Week</button>
-              <button className={`ecal-segbtn${mode === "day" ? " on" : ""}`} onClick={() => setMode("day")}>Day</button>
-            </div>
-            {/* Before/After-market filter — combines with the view above. Click an
-                active option again to clear back to all sessions. */}
-            <div className="ecal-seg">
-              <button
-                className={`ecal-segbtn${session === "BMO" ? " on" : ""}`}
-                onClick={() => setSession(s => (s === "BMO" ? "both" : "BMO"))}
-                title="Companies reporting before the market opens"
-              >
-                Before market
-              </button>
-              <button
-                className={`ecal-segbtn${session === "AMC" ? " on" : ""}`}
-                onClick={() => setSession(s => (s === "AMC" ? "both" : "AMC"))}
-                title="Companies reporting after the market closes"
-              >
-                After market
-              </button>
-            </div>
+          <div className="ecal-seg">
+            <button className={`ecal-segbtn${mode === "month" ? " on" : ""}`} onClick={() => setMode("month")}>Month</button>
+            <button className={`ecal-segbtn${mode === "week" ? " on" : ""}`} onClick={() => setMode("week")}>Week</button>
+            <button className={`ecal-segbtn${mode === "day" ? " on" : ""}`} onClick={() => setMode("day")}>Day</button>
           </div>
         </div>
 
