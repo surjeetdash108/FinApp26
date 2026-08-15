@@ -103,9 +103,11 @@ export function HeatmapScreen() {
   return (
     <>
       <div className="page-head">
-        <div className="tabs">
+        {/* Single line at all widths: never wrap; scroll horizontally if the five
+            index tabs don't fit rather than clipping "Russell 2000". */}
+        <div className="tabs" style={{ maxWidth: "100%", overflowX: "auto", flexWrap: "nowrap" }}>
           {TABS.map((t, i) => (
-            <button key={t} className={`tab${i === tab ? " on" : ""}`} onClick={() => setTab(i)}>{t}</button>
+            <button key={t} className={`tab${i === tab ? " on" : ""}`} onClick={() => setTab(i)} style={{ flexShrink: 0, whiteSpace: "nowrap" }}>{t}</button>
           ))}
         </div>
       </div>
