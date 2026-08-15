@@ -29,10 +29,35 @@ export interface RecapWeekly {
   sectorLaggards: RecapWeeklySector[];
 }
 
+/** Daily index snapshot carried on the recap doc. */
+export interface RecapIndex {
+  id?: string;
+  label: string;
+  value?: number | null;
+  pctChange: number | null;
+  change?: number | null;
+}
+
+/** Daily top mover carried on the recap doc. */
+export interface RecapMover {
+  ticker: string;
+  name?: string | null;
+  price?: number | null;
+  pctChange: number | null;
+  sector?: string | null;
+  cap?: string | null;
+}
+
 export interface RecapDoc {
   id?: string;
   date: string;
   internals: RecapInternals | null;
+  /** Daily index snapshots + top movers + sector leaders/laggards. */
+  indices?: RecapIndex[] | null;
+  topGainers?: RecapMover[] | null;
+  topLosers?: RecapMover[] | null;
+  sectorLeaders?: RecapWeeklySector[] | null;
+  sectorLaggards?: RecapWeeklySector[] | null;
   /** Weekly rollup from *_history collections (index % + sector leaders/laggards). */
   weekly: RecapWeekly | null;
   /** narrative is written null by the job — prose isn't produced yet. */

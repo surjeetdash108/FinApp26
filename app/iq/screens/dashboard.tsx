@@ -14,7 +14,7 @@ import { pulseFromLive, buildSectorList, tapeItemsToIndexDocs } from "../live-ma
 import type {
   LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
   InsiderTxDoc, AnalystConsensusDoc, MarketSentimentDoc, MarketSentimentHistoryDoc, EarningsAnnouncementDoc,
-  WatchlistDoc, HoldingDoc, NewsArticleDoc,
+  WatchlistDoc, HoldingDoc, NewsArticleDoc, RecapDoc,
 } from "../types";
 
 // Insider mini-list, market internals and F&G history all had hardcoded mock
@@ -111,6 +111,19 @@ function mergeEarningsData(live: LiveEarningsDoc[]): Earning[] {
       guidanceStatus: null, priceReaction: null, impliedMove: null,
       tags: [], owned: false,
     }));
+}
+
+/** Diverging red→neutral→green border tint for a %change, saturating at ±3%
+ *  (matches the reference scale). Small moves stay near the neutral border. */
+function pctBorderColor(pct: number | null | undefined): string {
+  if (pct == null) return "var(--border)";
+  const neutral: [number, number, number] = [0x2C, 0x38, 0x49];
+  const green: [number, number, number] = [0x2F, 0xE6, 0xA6];
+  const red: [number, number, number] = [0xFF, 0x54, 0x70];
+  const target = pct >= 0 ? green : red;
+  const t = Math.min(1, Math.abs(pct) / 3);
+  const ch = (i: number) => Math.round(neutral[i] + (target[i] - neutral[i]) * t);
+  return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
 }
 
 function DashPopContent({
@@ -271,6 +284,8 @@ export function DashboardScreen() {
   // EDGAR 8-K earnings announcements (session + price reaction).
   const { data: earningsAnnouncements } = useApiList<EarningsAnnouncementDoc>("/market-data/earnings-announcements");
   const { data: consensusLive, loading: consensusLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
+  const { data: recaps, loading: recapsLoading } = useApiList<RecapDoc>("/market-data/recaps");
+  const latestRecap = [...recaps].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0] ?? null;
   const { data: mostSearched, loading: mostSearchedLoading } = useApiResource<{ results: Array<{ ticker: string; count: number }> }>("/live/most-searched-tickers?limit=10");
   // Dedupe: merge any repeated ticker and collapse Google's dual class
   // (GOOG → GOOGL) so the same company never appears twice.
@@ -457,8 +472,11 @@ export function DashboardScreen() {
                         style={{
                           display: "flex", alignItems: "center", gap: 8,
                           flex: "1 1 190px", minWidth: 190, maxWidth: 240,
-                          background: "var(--surface-1)", border: "1px solid var(--border)",
-                          borderRadius: 8, padding: "8px 10px", cursor: "pointer", transition: "border-color .13s",
+                          border: "1.5px solid transparent", borderRadius: 10,
+                          // Gradient border: the direction colour glows across the
+                          // TOP edge and fades to the neutral border down the sides.
+                          background: `linear-gradient(var(--surface-1), var(--surface-1)) padding-box, linear-gradient(180deg, ${pctBorderColor(c?.pctChange)} 0%, var(--border) 55%) border-box`,
+                          padding: "9px 11px", cursor: "pointer", transition: "background .13s",
                         }}
                       >
                         <StockLogo sym={ticker} size={28} />
@@ -816,7 +834,52 @@ export function DashboardScreen() {
               <Link className="link" href="/menu/recap">All →</Link>
             </div>
             <div className="card-b">
-              <DataState label="Report generation isn't built yet — see the Recaps screen for live data." height={80} />
+              {latestRecap == null ? (
+                <DataState loading={recapsLoading} label="No market recap synced yet." height={80} />
+              ) : (() => {
+                const r = latestRecap;
+                const intr = r.internals;
+                const wanted = ["Dow", "S&P 500", "Nasdaq"];
+                const picked = (r.indices ?? []).filter(i => wanted.includes(i.label));
+                const idx = (picked.length ? picked : (r.indices ?? []).slice(0, 3));
+                const lead = (r.sectorLeaders ?? [])[0] ?? null;
+                const lag = (r.sectorLaggards ?? [])[0] ?? null;
+                const gain = (r.topGainers ?? [])[0] ?? null;
+                const dateLabel = new Date(`${r.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                    <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Market recap · {dateLabel}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {idx.map(i => (
+                        <div key={i.label} className="minirow" style={{ padding: "2px 0" }}>
+                          <span className="tkr" style={{ width: 130 }}>{i.label}</span>
+                          <span className="mid" />
+                          <span className={`r ${cls(i.pctChange ?? 0)}`}>{sign(i.pctChange ?? 0)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {intr && (
+                      <div style={{ fontSize: ".74rem", color: "var(--text-dim-solid)", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        <span><b className="up">{intr.advancers ?? "—"}</b> adv</span>
+                        <span><b className="down">{intr.decliners ?? "—"}</b> dec</span>
+                        {intr.trin != null && <span>TRIN <b style={{ color: "var(--text-hi)" }}>{intr.trin.toFixed(2)}</b></span>}
+                        {intr.breadthPct != null && <span>Breadth <b style={{ color: "var(--text-hi)" }}>{Math.round(intr.breadthPct * 100)}%</b></span>}
+                      </div>
+                    )}
+                    {(lead || lag) && (
+                      <div style={{ fontSize: ".74rem", display: "flex", gap: 14, flexWrap: "wrap" }}>
+                        {lead && <span style={{ color: "var(--text-dim-solid)" }}>Leader <b className="up">{lead.sector} {sign(lead.pctChange)}</b></span>}
+                        {lag && <span style={{ color: "var(--text-dim-solid)" }}>Laggard <b className="down">{lag.sector} {sign(lag.pctChange)}</b></span>}
+                      </div>
+                    )}
+                    {gain && (
+                      <div style={{ fontSize: ".74rem", color: "var(--text-dim-solid)" }}>
+                        Top gainer <b style={{ color: "var(--text-hi)", cursor: "pointer" }} onClick={() => openStock(gain.ticker)}>{gain.ticker}</b> <span className="up">{sign(gain.pctChange ?? 0)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
