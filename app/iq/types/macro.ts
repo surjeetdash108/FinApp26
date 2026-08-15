@@ -8,5 +8,9 @@ export interface MacroEventDoc {
   eventDate: string;
   actual: number | null;
   previous: number | null;
+  /** Consensus estimate — present on FMP economic-calendar events, null on FRED. */
+  estimate?: number | null;
+  /** Country code — "US" on FMP economic events. */
+  country?: string;
   source: string;
 }

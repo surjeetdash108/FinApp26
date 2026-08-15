@@ -35,11 +35,11 @@ function toMacroEvent(d: MacroEventDoc): MacroEvent {
     day: DOW_ABBR[dt.getUTCDay()] ?? "",
     tier: d.importance === "high" ? "High" : d.importance === "medium" ? "Med" : "Low",
     prev: val(d.previous),
-    // FRED publishes observations, not consensus forecasts — there is no
-    // estimate to show, and no beat/miss to derive from one. Leaving `surprise`
-    // blank is honest; colouring it from actual-vs-previous would present a
-    // direction-of-change as a surprise against expectations.
-    est: "—",
+    // FMP carries the consensus estimate; FRED does not (leaves it null). We show
+    // the estimate when present but keep `surprise` blank: for macro data a print
+    // above/below consensus isn't inherently good/bad, so colouring it green/red
+    // would be misleading.
+    est: d.estimate == null ? "—" : val(d.estimate),
     actual: val(d.actual),
     surprise: "",
     note: `${d.seriesId} · ${d.source}`,
