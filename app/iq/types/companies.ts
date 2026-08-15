@@ -7,6 +7,17 @@
  * sectorRank fields, source) — one shared type instead of each screen
  * redefining an overlapping subset locally.
  */
+/** Classic pivot support/resistance levels (technical-indicators.job). */
+export interface PivotLevels {
+  pivot: number | null;
+  r1: number | null;
+  r2: number | null;
+  r3: number | null;
+  s1: number | null;
+  s2: number | null;
+  s3: number | null;
+}
+
 export interface CompanyDoc {
   id: string;
   ticker: string;
@@ -44,6 +55,12 @@ export interface CompanyDoc {
   // count new highs/lows without a dedicated breadth job.
   high52?: number | null;
   low52?: number | null;
+  // Support/resistance — classic pivot points computed from prior daily and
+  // prior-complete-weekly bars (technical-indicators.job).
+  keyLevels?: {
+    daily?: PivotLevels | null;
+    weekly?: PivotLevels | null;
+  } | null;
   // More technicals from technical-indicators.job: true 5-session change,
   // Stochastic %K, Wilder ADX(14). beta (above) is now computed there too.
   week5ChangePct?: number | null;

@@ -34,6 +34,30 @@ function sma(bars: { c: number }[], n: number): number | null {
   if (bars.length < n) return null;
   return bars.slice(-n).reduce((s, b) => s + b.c, 0) / n;
 }
+// Classic (floor-trader) pivot support/resistance from a prior period's H/L/C.
+// Computed client-side from the OHLC bars the chart already loads, so every
+// opened ticker shows levels regardless of the backend technicals sweep.
+type Pivots = { pivot: number; r1: number; r2: number; r3: number; s1: number; s2: number; s3: number };
+function pivotsFrom(h: number, l: number, c: number): Pivots {
+  const p = (h + l + c) / 3, range = h - l;
+  return { pivot: p, r1: 2 * p - l, s1: 2 * p - h, r2: p + range, s2: p - range, r3: h + 2 * (p - l), s3: l - 2 * (h - p) };
+}
+// H/L/C of the last COMPLETE week (excludes the current, partial week).
+function priorWeekHLC(bars: { t: number; h: number; l: number; c: number }[]): { h: number; l: number; c: number } | null {
+  const weeks = new Map<string, { h: number; l: number; c: number; t: number }>();
+  for (const b of bars) {
+    const d = new Date(b.t);
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); // back to Monday
+    const key = d.toISOString().slice(0, 10);
+    const cur = weeks.get(key);
+    if (!cur) weeks.set(key, { h: b.h, l: b.l, c: b.c, t: b.t });
+    else { cur.h = Math.max(cur.h, b.h); cur.l = Math.min(cur.l, b.l); if (b.t >= cur.t) { cur.c = b.c; cur.t = b.t; } }
+  }
+  const keys = [...weeks.keys()].sort();
+  if (keys.length < 2) return null;
+  const w = weeks.get(keys[keys.length - 2])!;
+  return { h: w.h, l: w.l, c: w.c };
+}
 function ema(bars: { c: number }[], n: number): number | null {
   if (bars.length < n) return null;
   const k = 2 / (n + 1);
@@ -643,6 +667,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
   // Real 52-week high/low and average volume from a year of daily bars.
   const yr = yearBars ?? [];
+  // Support/resistance pivots — client-side from the loaded bars (instant for any
+  // ticker), falling back to the backend technicals sweep when bars aren't loaded.
+  const lastBar = yr.length ? yr[yr.length - 1] : null;
+  const priorWk = priorWeekHLC(yr);
+  const klDaily: Pivots | { pivot: number | null; r1: number | null; r2: number | null; r3: number | null; s1: number | null; s2: number | null; s3: number | null } | null =
+    lastBar ? pivotsFrom(lastBar.h, lastBar.l, lastBar.c) : (liveCompany?.keyLevels?.daily ?? null);
+  const klWeekly =
+    priorWk ? pivotsFrom(priorWk.h, priorWk.l, priorWk.c) : (liveCompany?.keyLevels?.weekly ?? null);
   const week52 = yr.length > 1
     ? { high: Math.max(...yr.map(b => b.h)), low: Math.min(...yr.map(b => b.l)) }
     : null;
@@ -1389,6 +1421,37 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     <span style={{ color: "var(--text-dim-solid)" }}>Hold<b>{consensusDoc.hold}</b></span>
                     <span style={{ color: "var(--up)" }}>Buy<b>{consensusDoc.strongBuy + consensusDoc.buy}</b></span>
                   </div>
+                  {consensusDoc.priceTargetConsensus != null && (
+                    <div className="counts" style={{ marginTop: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
+                      <span style={{ color: "var(--text-dim-solid)" }}>Target<b style={{ color: "var(--text-hi)" }}>${consensusDoc.priceTargetConsensus.toFixed(0)}</b></span>
+                      {dispPrice > 0 && (
+                        <span style={{ color: consensusDoc.priceTargetConsensus >= dispPrice ? "var(--up)" : "var(--down)" }}>
+                          Upside<b>{consensusDoc.priceTargetConsensus >= dispPrice ? "+" : ""}{(((consensusDoc.priceTargetConsensus - dispPrice) / dispPrice) * 100).toFixed(1)}%</b>
+                        </span>
+                      )}
+                      {consensusDoc.priceTargetLow != null && consensusDoc.priceTargetHigh != null && (
+                        <span style={{ color: "var(--text-dim-solid)" }}>Range<b>${consensusDoc.priceTargetLow.toFixed(0)}–${consensusDoc.priceTargetHigh.toFixed(0)}</b></span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {consensusDoc?.recentGrades && consensusDoc.recentGrades.length > 0 && (
+                <div className="trgroup" style={{ marginBottom: 12 }}>
+                  <div className="gl">Recent analyst actions</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>
+                    {consensusDoc.recentGrades.slice(0, 6).map((g, i) => {
+                      const a = (g.action ?? "").toLowerCase();
+                      const col = a.includes("upgrade") ? "var(--up)" : a.includes("downgrade") ? "var(--down)" : "var(--text-dim-solid)";
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".72rem" }}>
+                          <span style={{ color: col, fontWeight: 700, minWidth: 62, textTransform: "capitalize" }}>{g.action ?? "—"}</span>
+                          <span style={{ color: "var(--text-hi)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.firm ?? "—"}</span>
+                          {(g.previousGrade || g.newGrade) && <span style={{ color: "var(--text-dim-solid)", whiteSpace: "nowrap" }}>{g.previousGrade ?? "—"} → {g.newGrade ?? "—"}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
               <table className="ind-tbl" style={{ marginTop: 12 }}>
@@ -1504,13 +1567,18 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
                 Weekly pivots
               </div>
-              {(["R2", "R1", "Pivot", "S1", "S2"] as const).map(label => (
-                <div key={label} className="minirow">
-                  <span className="tkr" style={{ width: 50 }}>{label}</span>
-                  <span className="mid" />
-                  <span className="r mono"><NotAvailable /></span>
-                </div>
-              ))}
+              {(["R2", "R1", "Pivot", "S1", "S2"] as const).map(label => {
+                const wk = klWeekly;
+                const v = wk ? ({ R2: wk.r2, R1: wk.r1, Pivot: wk.pivot, S1: wk.s1, S2: wk.s2 } as Record<string, number | null>)[label] : null;
+                const tone = label.startsWith("R") ? "var(--down)" : label.startsWith("S") ? "var(--up)" : "var(--text-hi)";
+                return (
+                  <div key={label} className="minirow">
+                    <span className="tkr" style={{ width: 50, color: tone }}>{label}</span>
+                    <span className="mid" />
+                    <span className="r mono">{v != null ? `$${v.toFixed(2)}` : <NotAvailable />}</span>
+                  </div>
+                );
+              })}
               <div style={{ height: 1, background: "var(--border-soft)", margin: "12px 0 8px" }} />
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
                 Moving averages &amp; range
@@ -1782,19 +1850,28 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
-                <div className="ai-sec"><div className="h">Classic pivot (daily)</div></div>
-                {(["R3", "R2", "R1", "Pivot", "S1", "S2", "S3"] as const).map(label => (
-                  <div key={label} className="minirow">
-                    <span className="tkr" style={{ width: 50 }}>{label}</span>
-                    <span className="mid" style={{ fontSize: ".76rem", color: "var(--text-dim-solid)" }}>
-                      {label === "Pivot" ? "Pivot point" : label.startsWith("R") ? `Resistance ${label[1]}` : `Support ${label[1]}`}
-                    </span>
-                    <span className="r mono"><NotAvailable /></span>
+                {([["Classic pivot (daily)", klDaily], ["Weekly pivot", klWeekly]] as const).map(([title, lv]) => (
+                  <div key={title} style={{ marginBottom: 14 }}>
+                    <div className="ai-sec"><div className="h">{title}</div></div>
+                    {lv ? (["R3", "R2", "R1", "Pivot", "S1", "S2", "S3"] as const).map(label => {
+                      const v = ({ R3: lv.r3, R2: lv.r2, R1: lv.r1, Pivot: lv.pivot, S1: lv.s1, S2: lv.s2, S3: lv.s3 } as Record<string, number | null>)[label];
+                      const tone = label === "Pivot" ? "var(--text-hi)" : label.startsWith("R") ? "var(--down)" : "var(--up)";
+                      return (
+                        <div key={label} className="minirow">
+                          <span className="tkr" style={{ width: 50, color: tone }}>{label}</span>
+                          <span className="mid" style={{ fontSize: ".76rem", color: "var(--text-dim-solid)" }}>
+                            {label === "Pivot" ? "Pivot point" : label.startsWith("R") ? `Resistance ${label[1]}` : `Support ${label[1]}`}
+                          </span>
+                          <span className="r mono">{v != null ? `$${v.toFixed(2)}` : <NotAvailable />}</span>
+                        </div>
+                      );
+                    }) : (
+                      <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", margin: "6px 0" }}>
+                        No pivot levels synced for this ticker yet.
+                      </div>
+                    )}
                   </div>
                 ))}
-                <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", margin: "6px 0 14px" }}>
-                  Classic pivot points need a real prior-day OHLC feed, which isn&apos;t wired up here yet.
-                </div>
 
                 {hi == null && lo == null ? (
                   <DataState loading={liveCompanyLoading || yearBarsLoading} label="No historical price data synced for this ticker yet." />
