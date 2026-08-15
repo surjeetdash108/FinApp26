@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiList } from "../hooks/useApiList";
+import { useApiResource } from "../hooks/useApiResource";
 import type { CompanyDoc, HoldingDoc } from "../types";
 import { cls, arr, sign, DataState } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
@@ -47,14 +48,22 @@ export function PortfolioScreen() {
 
   useEffect(() => { void refreshHoldings(); }, [refreshHoldings]);
 
+  // Live quotes for the holdings (polls /live/quotes every 30s), overlaid on the
+  // synced company price so position values/P&L track the live market.
+  const quoteTickers = holdings.map(h => h.ticker).slice(0, 25);
+  const quotesPath = quoteTickers.length ? `/live/quotes?tickers=${encodeURIComponent(quoteTickers.join(","))}` : null;
+  const { data: liveQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(quotesPath, 30000);
+  const quoteByTicker = new Map((liveQuotes ?? []).map(q => [q.ticker, q]));
+
   // Every field beyond ticker/shares/positionSize/conviction comes from the
-  // live companies collection — a holding with no live match still lists
-  // (it's the user's data), but its price/change render as "not available"
-  // and it's excluded from value/P&L totals rather than counted as $0.
+  // live quote (falling back to the synced companies collection) — a holding
+  // with no match still lists (it's the user's data), but its price/change
+  // render as "not available" and it's excluded from value/P&L totals.
   const merged = holdings.map(h => {
     const live = byTicker.get(h.ticker);
-    const hasLive = !!live && live.price != null;
-    const price = hasLive ? live!.price! : null;
+    const q = quoteByTicker.get(h.ticker);
+    const price = q?.price ?? live?.price ?? null;
+    const hasLive = price != null;
     // Unrealized = (live price − cost basis) × shares; null without a basis.
     const unrealized = price != null && h.costBasis != null && h.costBasis > 0
       ? (price - h.costBasis) * h.shares : null;

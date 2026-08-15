@@ -44,8 +44,18 @@ export interface AnnualFinancials {
   netIncome: number | null;
 }
 
+/** Forward analyst estimate for a future fiscal year (the `*YYYY` rows). Only
+ *  present when an estimates vendor (FMP) is wired; empty/absent otherwise. */
+export interface AnnualEstimate {
+  fiscalYear: string;
+  epsEstimate: number | null;
+  /** Raw dollars — divide by 1e6 for the "Sales (M)" column, like reported. */
+  revenueEstimate: number | null;
+}
+
 export interface FinancialsDoc {
   ticker: string;
   quarters: QuarterFinancials[];
   annual: AnnualFinancials[];
+  annualEstimates?: AnnualEstimate[];
 }

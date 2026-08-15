@@ -94,7 +94,7 @@ export function MoversScreen() {
       if (tab === "vol")  return b.rvolRatio - a.rvolRatio;
       return Math.abs(b.weekPct ?? 0) - Math.abs(a.weekPct ?? 0);
     })
-    .slice(0, 20);
+    .slice(0, 50);
 
   const tally: Record<string, number> = {};
   tabCapRows.forEach(m => { tally[m.sector] = (tally[m.sector] || 0) + 1; });
@@ -106,13 +106,17 @@ export function MoversScreen() {
   // the exact tickers that top this board. Ranking stays EOD-based (sort above);
   // only the shown price/change go live. Falls back to the batch value per row
   // when a quote is missing. Polls every 30s; refetches when the visible set
-  // changes (tab/sector/cap). Capped at the 20 shown rows (endpoint limit 25).
+  // changes (tab/sector/cap). /live/quotes caps at 25 tickers, so the 50 shown
+  // rows are fetched in two batches and merged.
   const shownTickers = filtered.map(m => m.ticker);
-  const quotesPath = shownTickers.length
-    ? `/live/quotes?tickers=${encodeURIComponent(shownTickers.join(","))}`
-    : null;
-  const { data: liveQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(quotesPath, 30000);
-  const quoteByTicker = new Map((liveQuotes ?? []).map(q => [q.ticker, q]));
+  const batch1 = shownTickers.slice(0, 25);
+  const batch2 = shownTickers.slice(25, 50);
+  const path1 = batch1.length ? `/live/quotes?tickers=${encodeURIComponent(batch1.join(","))}` : null;
+  const path2 = batch2.length ? `/live/quotes?tickers=${encodeURIComponent(batch2.join(","))}` : null;
+  type QuoteRow = { ticker: string; price: number | null; pctChange: number | null };
+  const { data: liveQuotes1 } = useApiResource<QuoteRow[]>(path1, 30000);
+  const { data: liveQuotes2 } = useApiResource<QuoteRow[]>(path2, 30000);
+  const quoteByTicker = new Map([...(liveQuotes1 ?? []), ...(liveQuotes2 ?? [])].map(q => [q.ticker, q]));
 
   return (
     <>
@@ -124,7 +128,7 @@ export function MoversScreen() {
         </div>
         {liveCount > 0 && (
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {liveCount} names · top 20 gainers + 20 losers · ranked by session move · live prices
+            {liveCount} names · top 50 gainers + 50 losers · ranked by session move · live prices
           </span>
         )}
       </div>

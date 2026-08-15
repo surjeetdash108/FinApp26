@@ -24,6 +24,7 @@ import { useTickerSearch } from "./hooks/useTickerSearch";
 import { useTapeStream } from "./hooks/useTapeStream";
 import { useBackendMarketStatus } from "./hooks/useBackendMarketStatus";
 import { useApiList } from "./hooks/useApiList";
+import { useApiResource } from "./hooks/useApiResource";
 import { useWatchlists, WatchlistsContext } from "./hooks/useWatchlists";
 import { WatchlistPicker } from "./watchlist-picker";
 import { pulseFromLive, tapeItemsToIndexDocs } from "./live-market-indices";
@@ -694,26 +695,13 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   // in-memory universe carries no quote), so searched tickers arrive with a
   // null price. Fetch live quotes for the visible matches and overlay
   // price/pctChange so the search row can show them next to the ticker.
-  const [quoteMap, setQuoteMap] = useState<Map<string, { price: number | null; pctChange: number | null }>>(new Map());
-  const enrichKey = searchMatches.slice(0, 12).map(m => m.sym).join(",");
-  useEffect(() => {
-    const syms = enrichKey.split(",").filter(Boolean).slice(0, 25);
-    if (syms.length === 0) return;
-    let cancelled = false;
-    apiGet<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(
-      `/live/quotes?tickers=${encodeURIComponent(syms.join(","))}`,
-    )
-      .then(rows => {
-        if (cancelled) return;
-        setQuoteMap(prev => {
-          const next = new Map(prev);
-          for (const r of rows) next.set(r.ticker.toUpperCase(), { price: r.price, pctChange: r.pctChange });
-          return next;
-        });
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [enrichKey]);
+  // Live quotes for the visible search matches — polled every 30s while the
+  // dropdown is open, so searched tickers show a LIVE price (the /live/search
+  // universe carries no quote), matching watchlist/portfolio.
+  const enrichSyms = searchMatches.slice(0, 12).map(m => m.sym).slice(0, 25).join(",");
+  const searchQuotesPath = searchOpen && enrichSyms ? `/live/quotes?tickers=${encodeURIComponent(enrichSyms)}` : null;
+  const { data: liveSearchQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(searchQuotesPath, 30000);
+  const quoteMap = new Map((liveSearchQuotes ?? []).map(q => [q.ticker.toUpperCase(), { price: q.price, pctChange: q.pctChange }]));
   const displayMatches = searchMatches.map(m => {
     const q = quoteMap.get(m.sym);
     return q ? { ...m, price: q.price ?? m.price, pctChange: q.pctChange ?? m.pctChange } : m;

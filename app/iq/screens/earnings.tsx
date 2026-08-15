@@ -9,7 +9,7 @@ import { EarningsPlaybook } from "./EarningsPlaybook";
 import { backendUrl } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc } from "../types";
+import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
 
 // Live source (Polygon SEC financials) has ticker/date/epsEstimate/epsActual —
@@ -481,6 +481,8 @@ export function EarningsScreen() {
   // Market cap per ticker — used to order every earnings list largest-first.
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const mcapByTicker = new Map(companies.filter(c => c.ticker).map(c => [c.ticker as string, c.marketCap ?? 0]));
+  // FMP analyst consensus + price target, keyed by ticker (for the AI summary).
+  const { data: analystActions } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   const liveEarningsData = liveEarnings;
 
   const [mode, setMode]     = useState<"day" | "week" | "month">("day");
@@ -680,6 +682,7 @@ export function EarningsScreen() {
 
   const liveMatches = liveEarnings.filter(e => e.ticker === sel).sort((a, b) => b.date.localeCompare(a.date));
   const liveMatch = liveMatches[0];
+  const consensusForSel = analystActions.find(c => c.ticker === sel);
   // Session (BMO/AMC) + post-announcement reaction from the EDGAR 8-K job.
   const annMatch = earningsAnnouncements
     .filter(a => a.ticker === sel)
@@ -841,6 +844,9 @@ export function EarningsScreen() {
                     <div><span>Post-earnings reaction</span><b>{annMatch?.reactionPct != null ? <span className={cls(annMatch.reactionPct)}>{sign(annMatch.reactionPct)}</span> : <NotAvailable />}</b></div>
                     <div><span>Historical EPS beats</span><b>{hasEstimates ? `${beats} / ${hist.length}` : <span style={{ color: "var(--text-dim-solid)", fontWeight: 500 }}>Pending — needs estimates</span>}</b></div>
                     <div><span>What street expects</span><b>{streetExpects ?? <span style={{ color: "var(--text-dim-solid)", fontWeight: 500 }}>Pending — no estimate yet</span>}</b></div>
+                    {consensusForSel?.priceTargetConsensus != null && (
+                      <div><span>Analyst target</span><b>${consensusForSel.priceTargetConsensus.toFixed(0)}{consensusForSel.consensus ? ` · ${consensusForSel.consensus}` : ""}</b></div>
+                    )}
                   </div>
                 </div>
               </div>

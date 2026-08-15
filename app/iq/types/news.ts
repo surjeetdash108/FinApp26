@@ -9,7 +9,10 @@ export interface NewsArticleDoc {
   ticker: string;
   headline: string;
   summary: string | null;
+  /** Publisher / outlet (e.g. "Reuters"). */
   source: string;
+  /** Data vendor that delivered it — "polygon" | "fmp" (older docs omit it). */
+  vendor?: string;
   url: string;
   category: string | null;
   sentiment: "positive" | "negative" | "neutral" | null;

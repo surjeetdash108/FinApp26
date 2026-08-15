@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useBackendBars } from "../hooks/useBackendBars";
 import type { OHLCBar } from "../utils";
 import { DataState } from "../utils";
@@ -179,7 +179,6 @@ function Stat({ k, children }: { k: string; children: React.ReactNode }) {
 export function EarningsPlaybook({ sym, reports }: { sym: string; reports: PlaybookReport[] }) {
   const { bars, loading } = useBackendBars(sym, "5Y");
   const model = useMemo(() => buildModel(reports, bars), [reports, bars]);
-  const [open, setOpen] = useState(false);
 
   if (loading && !bars) return <DataState loading label={`Loading ${sym} earnings-reaction history…`} />;
   if (!model) return <DataState label={`No earnings-reaction history for ${sym} yet.`} />;
@@ -232,15 +231,7 @@ export function EarningsPlaybook({ sym, reports }: { sym: string; reports: Playb
         <span style={{ fontSize: ".68rem", color: "var(--text-dim-solid)" }}>Day-1 move · oldest → newest</span>
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <span className="link" style={{ fontSize: ".78rem", color: "var(--brand-2)", cursor: "pointer", fontWeight: 600 }}
-          onClick={() => setOpen((o) => !o)}>
-          {open ? "Hide reports ▲" : "Show reports ▼"}
-        </span>
-      </div>
-
-      {open && (
-        <div style={{ overflowX: "auto", marginTop: 10 }}>
+      <div style={{ overflowX: "auto", marginTop: 14 }}>
           <table className="tbl">
             <thead>
               <tr>
@@ -275,7 +266,6 @@ export function EarningsPlaybook({ sym, reports }: { sym: string; reports: Playb
             Gap is the open vs the prior close. Day 1, Day 3 and Day 5 are closing prices vs the close before the report.
           </div>
         </div>
-      )}
     </div>
   );
 }

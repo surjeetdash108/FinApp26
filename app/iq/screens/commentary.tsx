@@ -91,8 +91,20 @@ function FeedItem({ item, i, total, onTicker }: {
             {item.summary}
           </div>
         )}
-        <div style={{ marginTop: 6, fontSize: ".68rem", color: "var(--brand-2)", fontWeight: 600 }}>
-          {item.source ? `Read at ${item.source}` : "Read source"} →
+        <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+          <span style={{ fontSize: ".68rem", color: "var(--brand-2)", fontWeight: 600 }}>
+            {item.source ? `Read at ${item.source}` : "Read source"} →
+          </span>
+          {item.vendor && (
+            <span className="pill" style={{ fontSize: ".56rem", background: "var(--surface-3)", color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".03em" }}>
+              via {item.vendor}
+            </span>
+          )}
+          {item.sentiment && (
+            <span className="pill" style={{ fontSize: ".56rem", textTransform: "capitalize", background: "var(--surface-3)", color: item.sentiment === "positive" ? "var(--up)" : item.sentiment === "negative" ? "var(--down)" : "var(--text-dim-solid)" }}>
+              {item.sentiment}
+            </span>
+          )}
         </div>
       </a>
     </div>

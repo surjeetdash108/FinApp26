@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import { WatchlistPicker } from "../watchlist-picker";
-import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable } from "../utils";
+import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo } from "../utils";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiResource } from "../hooks/useApiResource";
@@ -779,19 +779,24 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     ["SMA 200", sma200 != null ? nf(sma200) : null, sma200 != null ? (p > sma200 ? "Buy" : "Sell") : ""],
   ];
 
-  // Real 10-quarter EPS-estimate-vs-actual history from the live earnings
-  // feed. No live source exists for post-earnings price reaction, so unlike
-  // the old mock version there is no "stock move %" column.
-  const hist10: EarnQ[] = symEvents
-    .filter(e => e.epsEstimate != null && e.epsActual != null)
-    .slice(-10)
-    .reverse()
-    .map(e => {
-      const est = e.epsEstimate as number, act = e.epsActual as number;
-      const surp = est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
+  // Real 10-quarter EPS history from the per-ticker financials feed
+  // (/live/financials) — reported EPS is always present; the estimate/%surp
+  // fill in where the FMP estimate feed has it. (The market-wide earnings
+  // calendar carries estimates for only a few names, so it left this empty.)
+  const hist10: EarnQ[] = (financialsDoc?.quarters ?? [])
+    .filter(q => q.epsActual != null)
+    .slice()
+    .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""))
+    .slice(0, 10)
+    .map(q => {
+      const act = q.epsActual as number;
+      const est = q.epsEstimate ?? null;
+      const surp = est != null && est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
       return {
-        q: new Date(e.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        e: est, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
+        q: q.endDate
+          ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+          : `${q.fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim(),
+        e: est ?? 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
       };
     });
   const beatStreak = (() => {
@@ -912,9 +917,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
       {!hideHeader && (
         <div style={{ padding: "14px 18px 0" }}>
           <div className="sd-head">
-            <div className="sd-logo" style={{ background: `linear-gradient(135deg,${logoBg(sym)},${logoBg(sym)}88)`, color: logoFg(sym) }}>
-              {sym[0]}
-            </div>
+            <StockLogo sym={sym} size={46} />
             <div className="sd-name">
               {/* Ticker + price + % on ONE line, side by side, so the quote sits
                   right next to the symbol instead of far to the right. */}
@@ -1483,6 +1486,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 return (
                   <div key={peer.t} className="minirow"
                     style={{ cursor: "pointer" }} onClick={() => openStock(peer.t)}>
+                    <StockLogo sym={peer.t} size={22} />
                     <span className="tkr">{peer.t}</span>
                     <span className="mid">
                       {tag && <span className={`pill ${tag === "Leader" ? "up" : "dn"}`}>{tag}</span>}
@@ -1623,8 +1627,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   className="minirow" style={{ alignItems: "flex-start", gap: 10, textDecoration: "none", cursor: "pointer" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: ".8rem", color: "var(--text)" }}>{n.headline}</div>
-                    <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 3 }}>
-                      {n.source} · {new Date(n.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span>{n.source} · {new Date(n.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                      {n.vendor && <span className="pill" style={{ fontSize: ".54rem", background: "var(--surface-3)", textTransform: "uppercase", letterSpacing: ".03em" }}>{n.vendor}</span>}
+                      {n.sentiment && <span className="pill" style={{ fontSize: ".54rem", textTransform: "capitalize", background: "var(--surface-3)", color: n.sentiment === "positive" ? "var(--up)" : n.sentiment === "negative" ? "var(--down)" : "var(--text-dim-solid)" }}>{n.sentiment}</span>}
                     </div>
                   </div>
                 </a>
@@ -1670,6 +1676,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {innerDrawer === "techrating" && (
             <div className="side-drawer" style={{ zIndex: 52 }}>
               <div className="drawer-h">
+                <StockLogo sym={sym} size={34} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Technical Rating · {sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>11 oscillators · 15 moving averages</div>
@@ -1742,6 +1749,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {innerDrawer === "peers" && (
             <div className="side-drawer" style={{ zIndex: 52 }}>
               <div className="drawer-h">
+                <StockLogo sym={sym} size={34} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Peers · {sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
@@ -1758,6 +1766,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   return (
                       <div key={peer.t} className="minirow" style={{ cursor: "pointer" }}
                         onClick={() => { setInnerDrawer(null); openStock(peer.t); }}>
+                        <StockLogo sym={peer.t} size={22} />
                         <span className="mono" style={{
                           fontWeight: 700, minWidth: 52,
                           color: peer.t === sym ? "var(--brand-2)" : "var(--text-hi)",
@@ -1776,6 +1785,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {innerDrawer === "industry" && (
             <div className="side-drawer" style={{ zIndex: 52 }}>
               <div className="drawer-h">
+                <StockLogo sym={sym} size={34} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Industry Group Rank</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>All sectors by today&apos;s performance</div>
@@ -1803,6 +1813,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {innerDrawer === "insider" && (
             <div className="side-drawer" style={{ zIndex: 52 }}>
               <div className="drawer-h">
+                <StockLogo sym={sym} size={34} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Insider &amp; Institutional · {sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Form 4 filings · 13F institutional data</div>
@@ -1843,6 +1854,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {innerDrawer === "keylevels" && (
             <div className="side-drawer" style={{ zIndex: 52 }}>
               <div className="drawer-h">
+                <StockLogo sym={sym} size={34} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Key Levels · {sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Pivot points · support &amp; resistance</div>
@@ -1902,9 +1914,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {innerDrawer === "earnings" && (
             <div className="side-drawer" style={{ zIndex: 52 }}>
               <div className="drawer-h">
-                <div className="sd-logo" style={{ background: "linear-gradient(135deg,#3a2f6b,#241c44)", color: "var(--brand-2)", flexShrink: 0 }}>
-                  {sym[0]}
-                </div>
+                <StockLogo sym={sym} size={34} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>{sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Earnings history · last 10 quarters</div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useApiList } from "../hooks/useApiList";
+import { useApiResource } from "../hooks/useApiResource";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import type { CompanyDoc } from "../types";
 import { arr, sign, DataState } from "../utils";
@@ -31,14 +32,24 @@ export function WatchlistScreen() {
   const active = watchlists.find(w => w.id === activeId) ?? null;
   const items = active?.tickers ?? [];
 
+  // Live quotes for the active list (polls /live/quotes every 30s), overlaid on
+  // top of the synced company price so watchlist rows track the live market.
+  const quoteTickers = items.slice(0, 25);
+  const quotesPath = quoteTickers.length ? `/live/quotes?tickers=${encodeURIComponent(quoteTickers.join(","))}` : null;
+  const { data: liveQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(quotesPath, 30000);
+  const quoteByTicker = useMemo(() => new Map((liveQuotes ?? []).map(q => [q.ticker, q])), [liveQuotes]);
+
   const list = items.map(sym => {
     const c = byTicker.get(sym);
-    const hasLive = c?.price != null;
+    const q = quoteByTicker.get(sym);
+    const price = q?.price ?? c?.price ?? null;
+    const pctChange = q?.pctChange ?? c?.pctChange ?? null;
+    const hasLive = price != null;
     return {
       ticker: sym,
       name: c?.name ?? sym,
-      price: hasLive ? c!.price! : null,
-      pctChange: hasLive ? (c!.pctChange ?? 0) : null,
+      price: hasLive ? price : null,
+      pctChange: hasLive ? (pctChange ?? 0) : null,
       live: hasLive,
     };
   });
