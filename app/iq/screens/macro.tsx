@@ -193,7 +193,7 @@ export function MacroScreen() {
   const { data: mktStatus } = useApiResource<MarketStatusPayload>("/live/market-status");
   // Polygon /v1/marketstatus/upcoming — dedupe the per-exchange rows (NYSE +
   // NASDAQ list the same holiday) by date+name; show the next handful.
-  const upcomingHolidays = (() => {
+  const dedupedHolidays = (() => {
     const seen = new Set<string>();
     const out: MarketStatusPayload["upcoming"] = [];
     for (const h of mktStatus?.upcoming ?? []) {
@@ -202,8 +202,9 @@ export function MacroScreen() {
       seen.add(key);
       out.push(h);
     }
-    return out.slice(0, 6);
+    return out;
   })();
+  const upcomingHolidays = dedupedHolidays.slice(0, 6);
   const { frame: tapeFrame } = useTapeStream();
   const liveVix = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items).find(i => i.label === "VIX") : null;
   // Real high-beta names (proxy for "VIX sensitive") — no live implied-vol
@@ -217,7 +218,16 @@ export function MacroScreen() {
   const now = new Date();
 
   const [ecoTab,    setEcoTab]    = useState(2);
+  const [holidaysAllOpen, setHolidaysAllOpen] = useState(false);
   const ecoRows = ecoRowsFor(ecoTab, macroLive, now);
+  // Group by day so the calendar reads like the Earnings Hub — a dated section
+  // per day rather than one flat table.
+  const ecoByDay: { date: string; day: string; rows: MacroEvent[] }[] = [];
+  for (const e of ecoRows) {
+    const last = ecoByDay[ecoByDay.length - 1];
+    if (last && last.date === e.date) last.rows.push(e);
+    else ecoByDay.push({ date: e.date, day: e.day, rows: [e] });
+  }
   const [selStock,  setSelStock]  = useState<DivStock | null>(null);
   const [vixSel,    setVixSel]    = useState<DivStock | null>(null);
   const vixTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -249,7 +259,7 @@ export function MacroScreen() {
           <div className="card">
             <div className="card-h">
               <h3>Market holidays</h3>
-              <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>
+              <button className="link" onClick={() => setHolidaysAllOpen(true)}>Show all →</button>
             </div>
             <div className="card-b" style={{ padding: "6px 13px 10px" }}>
               {upcomingHolidays.length === 0 ? (
@@ -303,41 +313,52 @@ export function MacroScreen() {
                 {ecoRows.length} events
               </span>
             </div>
-            <div className="tbl-wrap" style={{ flex: 1 }}>
+            <div className="tbl-wrap" style={{ flex: 1, overflowY: "auto" }}>
               {ecoRows.length === 0 ? (
                 <div style={{ padding: 16 }}><DataState loading={macroLoading} label="No live macro events for this window yet." /></div>
               ) : (
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>Event</th><th>Date</th><th>Impact</th>
-                      <th className="num">Prior</th><th className="num">Actual</th><th>Note</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ecoRows.map(e => (
-                      <tr key={e.ev + e.date}>
-                        <td>
-                          <b style={{ color: "var(--text-hi)" }}>{e.ev}</b>
-                          {e.tier === "High" && <span style={{ color: "var(--warn)", fontSize: ".6rem", marginLeft: 5 }}>●</span>}
-                        </td>
-                        <td>
-                          <div>{e.date}</div>
-                          <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)" }}>{e.day}</div>
-                        </td>
-                        <td>
-                          <span className={`pill ${e.tier === "High" ? "dn" : e.tier === "Med" ? "amc" : ""}`}
-                            style={e.tier === "Low" ? { background: "var(--surface-3)", color: "var(--text-dim-solid)" } : undefined}>
-                            {e.tier}
-                          </span>
-                        </td>
-                        <td className="num">{e.prev}</td>
-                        <td className="num"><b>{e.actual}</b></td>
-                        <td style={{ fontSize: ".76rem", color: "var(--text-dim-solid)", maxWidth: 140 }}>{e.note || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div style={{ padding: "6px 4px 4px" }}>
+                  {ecoByDay.map(g => (
+                    <div key={g.date} className="ecal-day" style={{ marginBottom: 12 }}>
+                      <div className="ecal-day-h">
+                        <span className="ecal-day-t">{g.day}, {g.date}</span>
+                        <span className="ecal-day-n">{g.rows.length}</span>
+                      </div>
+                      <div className="ecal-tablewrap">
+                        <table className="ecal-table">
+                          <thead>
+                            <tr>
+                              <th>Event</th><th>Impact</th>
+                              <th className="r">Prior</th><th className="r">Est</th><th className="r">Actual</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.rows.map(e => (
+                              <tr key={e.ev}>
+                                <td>
+                                  <div className="ecal-sym" style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                    {e.ev}
+                                    {e.tier === "High" && <span style={{ color: "var(--warn)", fontSize: ".6rem" }}>●</span>}
+                                  </div>
+                                  {e.note && <div className="ecal-name">{e.note}</div>}
+                                </td>
+                                <td>
+                                  <span className={`pill ${e.tier === "High" ? "dn" : e.tier === "Med" ? "amc" : ""}`}
+                                    style={e.tier === "Low" ? { background: "var(--surface-3)", color: "var(--text-dim-solid)" } : undefined}>
+                                    {e.tier}
+                                  </span>
+                                </td>
+                                <td className="r ecal-num">{e.prev}</td>
+                                <td className="r ecal-num">{e.est}</td>
+                                <td className="r ecal-num"><b>{e.actual}</b></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -435,6 +456,40 @@ export function MacroScreen() {
           </div>
         </div>
       )}
+
+      {/* All market holidays for the running year — modal */}
+      {holidaysAllOpen && (() => {
+        const yr = new Date().getFullYear();
+        const yearHolidays = dedupedHolidays.filter(h => Number(h.date.slice(0, 4)) === yr);
+        return (
+          <>
+            <div className="scrim" style={{ zIndex: 60 }} onClick={() => setHolidaysAllOpen(false)} />
+            <div style={{
+              position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+              background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)",
+              zIndex: 61, width: "min(460px, 92vw)", maxHeight: "80vh", display: "flex", flexDirection: "column",
+              boxShadow: "0 20px 60px rgba(0,0,0,.5)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: "1px solid var(--border-soft)" }}>
+                <span style={{ fontWeight: 700, fontSize: ".95rem", color: "var(--text-hi)", flex: 1 }}>Market holidays · {yr}</span>
+                <button className="closebtn" onClick={() => setHolidaysAllOpen(false)}>✕</button>
+              </div>
+              <div style={{ padding: "6px 16px 16px", overflowY: "auto" }}>
+                {yearHolidays.length === 0 ? (
+                  <DataState label={`No market holidays listed for ${yr}.`} />
+                ) : yearHolidays.map(h => (
+                  <div key={h.date + h.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                    <div style={{ fontSize: ".84rem", color: "var(--text-hi)", fontWeight: 600 }}>{h.name}</div>
+                    <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontFamily: "var(--f-mono)" }}>
+                      {new Date(h.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        );
+      })()}
     </>
   );
 }
