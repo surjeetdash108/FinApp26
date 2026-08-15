@@ -164,6 +164,7 @@ export function InsiderScreen() {
   const [view,       setView]       = useState<"insider" | "13f">("insider");
   const [insFilter,  setInsFilter]  = useState<InsFilter>("All");
   const [insSort,    setInsSort]    = useState<InsSort>("value");
+  const [insPage,    setInsPage]    = useState(0);
   const [instFilter, setInstFilter] = useState<InstFilter>("All");
   const [instSort,   setInstSort]   = useState<InstSort>("owners");
   const [drawer,     setDrawer]     = useState<DrawerState>(null);
@@ -210,6 +211,13 @@ export function InsiderScreen() {
   const list = [...filtered].sort((a, b) =>
     insSort === "date" ? b.date.localeCompare(a.date) : (b.valUsd ?? 0) - (a.valUsd ?? 0)
   );
+  // Paginate the feed — 2000+ filings should not all render at once.
+  const INS_PAGE_SIZE = 50;
+  const insPageCount = Math.max(1, Math.ceil(list.length / INS_PAGE_SIZE));
+  const insPageClamped = Math.min(insPage, insPageCount - 1);
+  const pageRows = list.slice(insPageClamped * INS_PAGE_SIZE, insPageClamped * INS_PAGE_SIZE + INS_PAGE_SIZE);
+  // Reset to the first page whenever the filter or sort changes.
+  useEffect(() => { setInsPage(0); }, [insFilter, insSort]);
 
   // most active by real $ volume
   const agg: Record<string, { n: number; buy: number; sell: number }> = {};
@@ -283,8 +291,8 @@ export function InsiderScreen() {
                     </tr>
                   </thead>
                   <tbody>
-                    {list.map((x, i) => (
-                      <tr key={i} data-sym={x.s} onClick={() => openIns(x.s)} style={{ cursor: "pointer" }}>
+                    {pageRows.map((x, i) => (
+                      <tr key={`${insPageClamped}-${i}`} data-sym={x.s} onClick={() => openIns(x.s)} style={{ cursor: "pointer" }}>
                         <td>
                           <div className="co">
                             <span className="s"><StockLogo sym={x.s} size={20} />{x.s}</span>
@@ -307,6 +315,18 @@ export function InsiderScreen() {
                     ))}
                   </tbody>
                 </table>
+              )}
+              {list.length > INS_PAGE_SIZE && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, paddingTop: 12, marginTop: 4, borderTop: "1px solid var(--border-soft)" }}>
+                  <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+                    {insPageClamped * INS_PAGE_SIZE + 1}–{Math.min((insPageClamped + 1) * INS_PAGE_SIZE, list.length)} of {list.length}
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <button className="chip" disabled={insPageClamped === 0} onClick={() => setInsPage(p => Math.max(0, p - 1))} style={{ opacity: insPageClamped === 0 ? 0.4 : 1, cursor: insPageClamped === 0 ? "default" : "pointer" }}>← Prev</button>
+                    <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", minWidth: 74, textAlign: "center" }}>Page {insPageClamped + 1} / {insPageCount}</span>
+                    <button className="chip" disabled={insPageClamped >= insPageCount - 1} onClick={() => setInsPage(p => Math.min(insPageCount - 1, p + 1))} style={{ opacity: insPageClamped >= insPageCount - 1 ? 0.4 : 1, cursor: insPageClamped >= insPageCount - 1 ? "default" : "pointer" }}>Next →</button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
