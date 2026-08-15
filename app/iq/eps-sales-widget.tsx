@@ -62,7 +62,11 @@ function quarterlyEpsSalesRows(quarters: QuarterFinancials[]): QuarterRow[] {
   return asc.map((r, i) => {
     const yoy = i >= 4 ? asc[i - 4] : null;
     return {
-      label: new Date(r.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      // Always show fiscal quarter + year (e.g. "Q3 2026"); fall back to the
+      // period-end month/year only when the fiscal labels are missing.
+      label: r.fiscalPeriod && r.fiscalYear
+        ? `${r.fiscalPeriod} ${r.fiscalYear}`
+        : new Date(r.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
       eps: r.epsActual,
       epsChg: pctChangeStr(r.epsActual, yoy?.epsActual),
       epsSurp: pctChangeStr(r.epsActual, r.epsEstimate),
@@ -159,6 +163,15 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
     };
   });
 
+  // A pre-revenue / blank-check (SPAC) company has filing periods but every EPS
+  // and revenue value is null — detect that so we show a clear message rather
+  // than empty labelled bars and "—" tables.
+  const hasData =
+    series.some(d => d.eps != null || d.sales != null) ||
+    annualRows.some(r => r.eps != null || r.sales != null) ||
+    quarterlyRows.some(r => r.eps != null || r.sales != null) ||
+    forwardRows.length > 0;
+
   return (
     <div className="card">
       <div className="card-h">
@@ -169,8 +182,10 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
         </div>
       </div>
       <div className="card-b" style={{ paddingTop: 8 }}>
-        {series.length === 0 ? (
-          <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "6px 0" }}>No financials synced yet.</div>
+        {!hasData ? (
+          <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)", padding: "10px 0", lineHeight: 1.55 }}>
+            No reported financials — this looks like a pre-revenue or blank-check (SPAC) company, so there&apos;s no revenue, EPS, or earnings history to chart yet.
+          </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid var(--border-soft)" }}>
             <MetricBars title="EPS" data={series.map(d => ({ label: d.label, v: d.eps }))} fmt={v => v.toFixed(2)} />
@@ -179,7 +194,7 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
         )}
 
         {/* Fiscal-year table (reported years, then forward `*YYYY` estimates) */}
-        {(annualRows.length > 0 || forwardRows.length > 0) && (
+        {hasData && (annualRows.length > 0 || forwardRows.length > 0) && (
           <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid var(--border-soft)" }}>
             <div style={{ fontSize: ".78rem", fontWeight: 700, color: "var(--text-hi)", marginBottom: 8 }}>Fiscal year</div>
             <div style={{ overflowX: "auto" }}>
@@ -188,19 +203,20 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
                   <tr><th>Fiscal year</th><th className="num">EPS</th><th className="num">%chg</th><th className="num">Sales (M)</th><th className="num">%chg</th></tr>
                 </thead>
                 <tbody>
-                  {annualRows.map(r => (
-                    <tr key={r.year}>
-                      <td style={{ fontWeight: 700, color: "var(--text-hi)" }}>{r.year}</td>
+                  {/* Newest first: forward `*YYYY` estimates (future) on top — dimmed,
+                      `*` marks them consensus — then reported years newest → oldest. */}
+                  {[...forwardRows].reverse().map(r => (
+                    <tr key={r.year} style={{ opacity: 0.75, fontStyle: "italic" }}>
+                      <td style={{ fontWeight: 700, color: "var(--brand-2)" }}>{r.year}</td>
                       <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
                       <td className={`num${chgCls(r.epsChg)}`}>{r.epsChg}</td>
                       <td className="num">{r.sales != null ? r.sales.toFixed(1) : <NotAvailable />}</td>
                       <td className={`num${chgCls(r.salesChg)}`}>{r.salesChg}</td>
                     </tr>
                   ))}
-                  {/* Forward estimates — dimmed, `*` marks them as consensus. */}
-                  {forwardRows.map(r => (
-                    <tr key={r.year} style={{ opacity: 0.75, fontStyle: "italic" }}>
-                      <td style={{ fontWeight: 700, color: "var(--brand-2)" }}>{r.year}</td>
+                  {[...annualRows].reverse().map(r => (
+                    <tr key={r.year}>
+                      <td style={{ fontWeight: 700, color: "var(--text-hi)" }}>{r.year}</td>
                       <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
                       <td className={`num${chgCls(r.epsChg)}`}>{r.epsChg}</td>
                       <td className="num">{r.sales != null ? r.sales.toFixed(1) : <NotAvailable />}</td>
@@ -219,7 +235,7 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
         )}
 
         {/* Quarterly table */}
-        {quarterlyRows.length > 0 && (
+        {hasData && quarterlyRows.length > 0 && (
           <div>
             <div style={{ fontSize: ".78rem", fontWeight: 700, color: "var(--text-hi)", marginBottom: 8 }}>Quarter</div>
             <div style={{ overflowX: "auto" }}>
@@ -228,7 +244,8 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
                   <tr><th>Quarter</th><th className="num">EPS</th><th className="num">%chg</th><th className="num">%surp</th><th className="num">Sales (M)</th><th className="num">%chg</th><th className="num">%surp</th></tr>
                 </thead>
                 <tbody>
-                  {quarterlyRows.map((r, i) => (
+                  {/* Newest quarter first. */}
+                  {[...quarterlyRows].reverse().map((r, i) => (
                     <tr key={`${r.label}-${i}`}>
                       <td style={{ fontWeight: 700, color: "var(--text-hi)" }}>{r.label}</td>
                       <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
