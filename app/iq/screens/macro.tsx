@@ -44,6 +44,57 @@ function toMacroEvent(d: MacroEventDoc): MacroEvent {
 /** Importance rank for in-day sort (High first). */
 const TIER_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
+// ── Full-year NYSE holiday calendar (fixed rules) ────────────────────────────
+// Polygon's /marketstatus/upcoming only lists FUTURE holidays, so the "show all"
+// modal computes the standard NYSE closures for the whole year instead.
+function nthWeekday(year: number, month: number, weekday: number, n: number): Date {
+  const first = new Date(Date.UTC(year, month, 1));
+  const shift = (weekday - first.getUTCDay() + 7) % 7;
+  return new Date(Date.UTC(year, month, 1 + shift + (n - 1) * 7));
+}
+function lastWeekday(year: number, month: number, weekday: number): Date {
+  const last = new Date(Date.UTC(year, month + 1, 0));
+  const shift = (last.getUTCDay() - weekday + 7) % 7;
+  return new Date(Date.UTC(year, month, last.getUTCDate() - shift));
+}
+/** Anonymous Gregorian Computus — Easter Sunday, for Good Friday. */
+function easterSunday(year: number): Date {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+/** Federal observance: Saturday → Friday, Sunday → Monday. */
+function observed(date: Date): Date {
+  const dow = date.getUTCDay();
+  if (dow === 6) return new Date(date.getTime() - 86_400_000);
+  if (dow === 0) return new Date(date.getTime() + 86_400_000);
+  return date;
+}
+function usMarketHolidays(year: number): { date: string; name: string }[] {
+  const easter = easterSunday(year);
+  const rows: { d: Date; name: string }[] = [
+    { d: observed(new Date(Date.UTC(year, 0, 1))), name: "New Year's Day" },
+    { d: nthWeekday(year, 0, 1, 3), name: "Martin Luther King Jr. Day" },
+    { d: nthWeekday(year, 1, 1, 3), name: "Washington's Birthday" },
+    { d: new Date(easter.getTime() - 2 * 86_400_000), name: "Good Friday" },
+    { d: lastWeekday(year, 4, 1), name: "Memorial Day" },
+    { d: observed(new Date(Date.UTC(year, 5, 19))), name: "Juneteenth" },
+    { d: observed(new Date(Date.UTC(year, 6, 4))), name: "Independence Day" },
+    { d: nthWeekday(year, 8, 1, 1), name: "Labor Day" },
+    { d: nthWeekday(year, 10, 4, 4), name: "Thanksgiving Day" },
+    { d: observed(new Date(Date.UTC(year, 11, 25))), name: "Christmas Day" },
+  ];
+  return rows
+    .map(r => ({ date: r.d.toISOString().slice(0, 10), name: r.name }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ── Dividend data ────────────────────────────────────────────────────────────
 interface DivStock {
   sym: string; name: string; sector: string;
@@ -207,21 +258,22 @@ export function MacroScreen() {
 
   // ── Economic calendar: Earnings-Hub-style week grid (Mon–Fri) ──
   const [ecoAnchor, setEcoAnchor] = useState(() => isoDay(now));
+  const [ecoSel, setEcoSel] = useState<MacroEventDoc | null>(null);
   const ecoAnchorDate = new Date(`${ecoAnchor}T00:00:00Z`);
   const ecoWeekMon = mondayOf(ecoAnchorDate);
   const ecoWeekDays = [0, 1, 2, 3, 4].map(i => isoDay(addDays(ecoWeekMon, i)));
-  // macro_events keyed by day, each mapped to the display row shape and sorted
-  // High-impact first.
-  const ecoByDate = new Map<string, MacroEvent[]>();
+  // macro_events keyed by day (raw docs so the detail popup has every field),
+  // sorted High-impact first.
+  const ecoByDate = new Map<string, MacroEventDoc[]>();
   for (const d of macroLive) {
     if (!d.eventDate) continue;
     const day = d.eventDate.slice(0, 10);
     const arr = ecoByDate.get(day);
-    if (arr) arr.push(toMacroEvent(d));
-    else ecoByDate.set(day, [toMacroEvent(d)]);
+    if (arr) arr.push(d);
+    else ecoByDate.set(day, [d]);
   }
   for (const arr of ecoByDate.values()) {
-    arr.sort((a, b) => (TIER_RANK[a.tier.toLowerCase()] ?? 3) - (TIER_RANK[b.tier.toLowerCase()] ?? 3) || a.ev.localeCompare(b.ev));
+    arr.sort((a, b) => (TIER_RANK[a.importance] ?? 3) - (TIER_RANK[b.importance] ?? 3) || a.name.localeCompare(b.name));
   }
   const ecoWeekLabel = `${fmtMonthDay(ecoWeekDays[0])} – ${fmtMonthDay(ecoWeekDays[4])}, ${ecoWeekDays[4].slice(0, 4)}`;
   const ecoWeekCount = ecoWeekDays.reduce((n, iso) => n + (ecoByDate.get(iso)?.length ?? 0), 0);
@@ -320,11 +372,14 @@ export function MacroScreen() {
                       style={{ cursor: "pointer" }} onClick={() => setEcoAnchor(iso)}>
                       <div className="ec-dh">{dn} {Number(iso.slice(8))}{isToday ? " · Today" : ""}</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                        {evs.length ? evs.map((e, i) => {
+                        {evs.length ? evs.map((d, i) => {
+                          const e = toMacroEvent(d);
                           const color = e.tier === "High" ? "var(--down)" : e.tier === "Med" ? "var(--warn)" : "var(--text-dim-solid)";
                           const valBits = [e.est !== "—" ? `est ${e.est}` : "", e.actual !== "—" ? `act ${e.actual}` : ""].filter(Boolean).join(" · ");
                           return (
-                            <div key={e.ev + i} title={e.ev} style={{ display: "flex", gap: 6, alignItems: "flex-start", background: "var(--surface-3)", borderRadius: 8, padding: "5px 8px" }}>
+                            <div key={(d.id ?? e.ev) + i} title={`${e.ev} — click for details`}
+                              onClick={ev => { ev.stopPropagation(); setEcoSel(d); }}
+                              style={{ display: "flex", gap: 6, alignItems: "flex-start", background: "var(--surface-3)", borderRadius: 8, padding: "5px 8px", cursor: "pointer" }}>
                               <span style={{ width: 6, height: 6, borderRadius: 3, background: color, marginTop: 5, flexShrink: 0 }} />
                               <div style={{ minWidth: 0 }}>
                                 <div style={{ fontSize: ".72rem", fontWeight: 600, color: "var(--text-hi)", lineHeight: 1.25 }}>{e.ev}</div>
@@ -438,7 +493,7 @@ export function MacroScreen() {
       {/* All market holidays for the running year — modal */}
       {holidaysAllOpen && (() => {
         const yr = new Date().getFullYear();
-        const yearHolidays = dedupedHolidays.filter(h => Number(h.date.slice(0, 4)) === yr);
+        const yearHolidays = usMarketHolidays(yr);
         return (
           <>
             <div className="scrim" style={{ zIndex: 60 }} onClick={() => setHolidaysAllOpen(false)} />
@@ -466,6 +521,51 @@ export function MacroScreen() {
               </div>
             </div>
           </>
+        );
+      })()}
+
+      {/* ── Economic event detail popup ── */}
+      {ecoSel && (() => {
+        const d = ecoSel;
+        const unit = d.unit === "%" ? "%" : "";
+        const fv = (v: number | null | undefined) => (v == null ? "—" : `${v}${unit}`);
+        const change = d.actual != null && d.previous != null ? d.actual - d.previous : null;
+        const dateFull = new Date(`${d.eventDate}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+        const tier = d.importance === "high" ? "High" : d.importance === "medium" ? "Medium" : "Low";
+        const tierColor = d.importance === "high" ? "var(--down)" : d.importance === "medium" ? "var(--warn)" : "var(--text-dim-solid)";
+        return (
+          <div onClick={() => setEcoSel(null)} style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(4,7,14,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, width: "min(460px, 100%)", boxShadow: "0 20px 60px rgba(0,0,0,.5)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "16px 18px", borderBottom: "1px solid var(--border-soft)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)", lineHeight: 1.3 }}>{d.name}</div>
+                  <div style={{ fontSize: ".74rem", color: "var(--text-dim-solid)", marginTop: 3 }}>{dateFull}{d.country ? ` · ${d.country}` : ""}</div>
+                </div>
+                <span className="pill" style={{ background: "var(--surface-3)", color: tierColor, flexShrink: 0 }}>{tier} impact</span>
+                <button className="closebtn" onClick={() => setEcoSel(null)}>✕</button>
+              </div>
+              <div style={{ padding: 18 }}>
+                <div className="metric-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                  <div className="m"><div className="k">Previous</div><div className="v">{fv(d.previous)}</div></div>
+                  <div className="m"><div className="k">Estimate</div><div className="v">{fv(d.estimate)}</div></div>
+                  <div className="m"><div className="k">Actual</div><div className="v" style={{ color: d.actual != null ? "var(--text-hi)" : "var(--text-dim-solid)" }}>{fv(d.actual)}</div></div>
+                </div>
+                {change != null && (
+                  <div style={{ marginTop: 12, fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
+                    Change vs previous: <b className={change >= 0 ? "up" : "down"}>{change >= 0 ? "+" : ""}{change.toFixed(2)}{unit}</b>
+                  </div>
+                )}
+                {d.actual == null && (
+                  <div style={{ marginTop: 12, fontSize: ".74rem", color: "var(--text-dim-solid)" }}>
+                    Not yet released — showing the consensus estimate and prior reading.
+                  </div>
+                )}
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border-soft)", fontSize: ".68rem", color: "var(--text-dim-solid)", fontFamily: "var(--f-mono)" }}>
+                  {d.seriesId} · source: {d.source}
+                </div>
+              </div>
+            </div>
+          </div>
         );
       })()}
     </>
