@@ -8,19 +8,14 @@ import { useTapeStream } from "../hooks/useTapeStream";
 import { tapeItemsToIndexDocs } from "../live-market-indices";
 import type { MacroEventDoc, DividendHistoryDoc, CompanyDoc } from "../types";
 import type { MarketStatusPayload } from "../types/market-status";
-import { rangeFor, inRange, fmtMonthDay, type RangeTabKey } from "../calendar-range";
+import { fmtMonthDay, isoDay, addDays, mondayOf } from "../calendar-range";
 
 // ── Economic calendar ────────────────────────────────────────────────────────
-const ECO_TABS = ["Last month", "Last week", "This week", "Next week", "This month"];
-
 interface MacroEvent {
   ev: string; date: string; day: string; tier: "High" | "Med" | "Low";
   prev: string; est: string; actual: string; surprise: "up" | "down" | "";
   note: string;
 }
-
-/** ECO_TABS index -> shared calendar range key. */
-const ECO_TAB_RANGE: RangeTabKey[] = ["lmonth", "prev", "week", "next", "month"];
 
 const DOW_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -46,17 +41,8 @@ function toMacroEvent(d: MacroEventDoc): MacroEvent {
   };
 }
 
-/**
- * Economic-calendar rows for a tab, from live macro_events only. An empty
- * result yields an empty state upstream — there is no hardcoded fallback.
- */
-function ecoRowsFor(tabIdx: number, live: MacroEventDoc[], now: Date): MacroEvent[] {
-  const r = rangeFor(ECO_TAB_RANGE[tabIdx] ?? "month", now);
-  return live
-    .filter(d => d.eventDate && inRange(d.eventDate, r))
-    .sort((a, b) => a.eventDate.localeCompare(b.eventDate) || a.name.localeCompare(b.name))
-    .map(toMacroEvent);
-}
+/** Importance rank for in-day sort (High first). */
+const TIER_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 // ── Dividend data ────────────────────────────────────────────────────────────
 interface DivStock {
@@ -217,17 +203,28 @@ export function MacroScreen() {
   // One clock for the whole screen so tabs cannot disagree mid-render.
   const now = new Date();
 
-  const [ecoTab,    setEcoTab]    = useState(2);
   const [holidaysAllOpen, setHolidaysAllOpen] = useState(false);
-  const ecoRows = ecoRowsFor(ecoTab, macroLive, now);
-  // Group by day so the calendar reads like the Earnings Hub — a dated section
-  // per day rather than one flat table.
-  const ecoByDay: { date: string; day: string; rows: MacroEvent[] }[] = [];
-  for (const e of ecoRows) {
-    const last = ecoByDay[ecoByDay.length - 1];
-    if (last && last.date === e.date) last.rows.push(e);
-    else ecoByDay.push({ date: e.date, day: e.day, rows: [e] });
+
+  // ── Economic calendar: Earnings-Hub-style week grid (Mon–Fri) ──
+  const [ecoAnchor, setEcoAnchor] = useState(() => isoDay(now));
+  const ecoAnchorDate = new Date(`${ecoAnchor}T00:00:00Z`);
+  const ecoWeekMon = mondayOf(ecoAnchorDate);
+  const ecoWeekDays = [0, 1, 2, 3, 4].map(i => isoDay(addDays(ecoWeekMon, i)));
+  // macro_events keyed by day, each mapped to the display row shape and sorted
+  // High-impact first.
+  const ecoByDate = new Map<string, MacroEvent[]>();
+  for (const d of macroLive) {
+    if (!d.eventDate) continue;
+    const day = d.eventDate.slice(0, 10);
+    const arr = ecoByDate.get(day);
+    if (arr) arr.push(toMacroEvent(d));
+    else ecoByDate.set(day, [toMacroEvent(d)]);
   }
+  for (const arr of ecoByDate.values()) {
+    arr.sort((a, b) => (TIER_RANK[a.tier.toLowerCase()] ?? 3) - (TIER_RANK[b.tier.toLowerCase()] ?? 3) || a.ev.localeCompare(b.ev));
+  }
+  const ecoWeekLabel = `${fmtMonthDay(ecoWeekDays[0])} – ${fmtMonthDay(ecoWeekDays[4])}, ${ecoWeekDays[4].slice(0, 4)}`;
+  const ecoWeekCount = ecoWeekDays.reduce((n, iso) => n + (ecoByDate.get(iso)?.length ?? 0), 0);
   const [selStock,  setSelStock]  = useState<DivStock | null>(null);
   const [vixSel,    setVixSel]    = useState<DivStock | null>(null);
   const vixTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -244,13 +241,11 @@ export function MacroScreen() {
 
   return (
     <>
-      <div className="page-head">
-      
-        <div className="tabs">
-          {ECO_TABS.map((t, i) => (
-            <button key={t} className={`tab${i === ecoTab ? " on" : ""}`} onClick={() => setEcoTab(i)}>{t}</button>
-          ))}
-        </div>
+      <div className="page-head" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <button className="ecal-arrow" onClick={() => setEcoAnchor(isoDay(addDays(ecoAnchorDate, -7)))} aria-label="Previous week">‹</button>
+        <span style={{ fontSize: "1.02rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)", minWidth: 220, textAlign: "center" }}>{ecoWeekLabel}</span>
+        <button className="ecal-arrow" onClick={() => setEcoAnchor(isoDay(addDays(ecoAnchorDate, 7)))} aria-label="Next week">›</button>
+        <button className="chip" onClick={() => setEcoAnchor(isoDay(new Date()))} style={{ marginLeft: 4 }}>Today</button>
       </div>
 
       {/* ── Market regime + VIX + Economic calendar ── */}
@@ -310,56 +305,39 @@ export function MacroScreen() {
             <div className="card-h">
               <h3>Economic calendar</h3>
               <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>
-                {ecoRows.length} events
+                {ecoWeekCount} this week
               </span>
             </div>
-            <div className="tbl-wrap" style={{ flex: 1, overflowY: "auto" }}>
-              {ecoRows.length === 0 ? (
-                <div style={{ padding: 16 }}><DataState loading={macroLoading} label="No live macro events for this window yet." /></div>
-              ) : (
-                <div style={{ padding: "6px 4px 4px" }}>
-                  {ecoByDay.map(g => (
-                    <div key={g.date} className="ecal-day" style={{ marginBottom: 12 }}>
-                      <div className="ecal-day-h">
-                        <span className="ecal-day-t">{g.day}, {g.date}</span>
-                        <span className="ecal-day-n">{g.rows.length}</span>
-                      </div>
-                      <div className="ecal-tablewrap">
-                        <table className="ecal-table">
-                          <thead>
-                            <tr>
-                              <th>Event</th><th>Impact</th>
-                              <th className="r">Prior</th><th className="r">Est</th><th className="r">Actual</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {g.rows.map(e => (
-                              <tr key={e.ev}>
-                                <td>
-                                  <div className="ecal-sym" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                    {e.ev}
-                                    {e.tier === "High" && <span style={{ color: "var(--warn)", fontSize: ".6rem" }}>●</span>}
-                                  </div>
-                                  {e.note && <div className="ecal-name">{e.note}</div>}
-                                </td>
-                                <td>
-                                  <span className={`pill ${e.tier === "High" ? "dn" : e.tier === "Med" ? "amc" : ""}`}
-                                    style={e.tier === "Low" ? { background: "var(--surface-3)", color: "var(--text-dim-solid)" } : undefined}>
-                                    {e.tier}
-                                  </span>
-                                </td>
-                                <td className="r ecal-num">{e.prev}</td>
-                                <td className="r ecal-num">{e.est}</td>
-                                <td className="r ecal-num"><b>{e.actual}</b></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+            <div className="tbl-wrap" style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+              <div className="ec-grid">
+                {ecoWeekDays.map((iso, di) => {
+                  const evs = ecoByDate.get(iso) ?? [];
+                  const dn = ["MON", "TUE", "WED", "THU", "FRI"][di];
+                  const isToday = iso === isoDay(new Date());
+                  const isSel = iso === ecoAnchor;
+                  return (
+                    <div key={iso} className={`ec-day${isToday ? " is-today" : ""}${isSel && !isToday ? " is-sel" : ""}`}
+                      style={{ cursor: "pointer" }} onClick={() => setEcoAnchor(iso)}>
+                      <div className="ec-dh">{dn} {Number(iso.slice(8))}{isToday ? " · Today" : ""}</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        {evs.length ? evs.map((e, i) => {
+                          const color = e.tier === "High" ? "var(--down)" : e.tier === "Med" ? "var(--warn)" : "var(--text-dim-solid)";
+                          const valBits = [e.est !== "—" ? `est ${e.est}` : "", e.actual !== "—" ? `act ${e.actual}` : ""].filter(Boolean).join(" · ");
+                          return (
+                            <div key={e.ev + i} title={e.ev} style={{ display: "flex", gap: 6, alignItems: "flex-start", background: "var(--surface-3)", borderRadius: 8, padding: "5px 8px" }}>
+                              <span style={{ width: 6, height: 6, borderRadius: 3, background: color, marginTop: 5, flexShrink: 0 }} />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: ".72rem", fontWeight: 600, color: "var(--text-hi)", lineHeight: 1.25 }}>{e.ev}</div>
+                                {valBits && <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 1 }}>{valBits}</div>}
+                              </div>
+                            </div>
+                          );
+                        }) : <span className="ec-none">—</span>}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
