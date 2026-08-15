@@ -44,6 +44,8 @@ export function AnalystScreen() {
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const [tab, setTab] = useState<Tab>("All");
   const [clustersOnly, setClustersOnly] = useState(false);
+  const [shown, setShown] = useState(40); // paginate the feed 40 rows at a time
+  const [showAllClusters, setShowAllClusters] = useState(false);
 
   const priceByTicker = useMemo(
     () => new Map(companies.filter(c => c.ticker).map(c => [c.ticker as string, c.price ?? null])),
@@ -99,10 +101,10 @@ export function AnalystScreen() {
     return { up, down, init, total: allActions.length };
   }, [allActions]);
 
-  const feedRows = allActions
+  const filteredActions = allActions
     .filter(a => actionMatches(a.action, tab))
-    .filter(a => !clustersOnly || clusterSet.has(a.ticker))
-    .slice(0, 40);
+    .filter(a => !clustersOnly || clusterSet.has(a.ticker));
+  const feedRows = filteredActions.slice(0, shown);
 
   const consensusRows = [...liveConsensus]
     .sort((a, b) => (b.strongBuy + b.buy) - (a.strongBuy + a.buy))
@@ -114,13 +116,21 @@ export function AnalystScreen() {
       <div className="dash" style={{ marginBottom: 14 }}>
         <div className="col-6">
           <div className="card">
-            <div className="card-h"><h3>Cluster alerts</h3>{clusters.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{clusters.length}</span>}</div>
+            <div className="card-h">
+              <h3>Cluster alerts</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {clusters.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{clusters.length}</span>}
+                {clusters.length > 0 && <span className="link" onClick={() => setShowAllClusters(true)}>View all →</span>}
+              </div>
+            </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
               {clusters.length === 0 ? (
                 <DataState loading={consensusLoading} label="No multi-firm clusters in the recent rating-change feed." />
               ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {clusters.slice(0, 12).map(c => (
+                // Clip to two rows so the card height matches "Recent rating
+                // activity"; the rest live behind View all.
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 68, overflow: "hidden" }}>
+                  {clusters.slice(0, 24).map(c => (
                     <button key={c.ticker} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => openStock(c.ticker)}>
                       <StockLogo sym={c.ticker} size={16} /> {c.ticker}
                       <b style={{ color: "var(--brand-2)" }}>{c.firms}</b>
@@ -191,17 +201,17 @@ export function AnalystScreen() {
       {/* ── Filter bar ── */}
       <div className="fbar" style={{ marginBottom: 12 }}>
         {TABS.map(t => (
-          <button key={t} className={`chip${tab === t ? " on" : ""}`} onClick={() => setTab(t)}>{t}</button>
+          <button key={t} className={`chip${tab === t ? " on" : ""}`} onClick={() => { setTab(t); setShown(40); }}>{t}</button>
         ))}
         <div style={{ flex: 1 }} />
-        <button className={`chip${clustersOnly ? " on" : ""}`} onClick={() => setClustersOnly(v => !v)}>Clusters only</button>
+        <button className={`chip${clustersOnly ? " on" : ""}`} onClick={() => { setClustersOnly(v => !v); setShown(40); }}>Clusters only</button>
       </div>
 
       {/* ── Per-firm analyst actions ── */}
       <div className="card">
         <div className="card-h">
           <h3>Per-firm analyst actions</h3>
-          {feedRows.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{feedRows.length}</span>}
+          {filteredActions.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{feedRows.length} / {filteredActions.length}</span>}
         </div>
         <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
           <table className="tbl">
@@ -234,8 +244,40 @@ export function AnalystScreen() {
               })}
             </tbody>
           </table>
+          {feedRows.length < filteredActions.length && (
+            <div style={{ textAlign: "center", padding: "10px 0 4px" }}>
+              <button className="btn" style={{ padding: "6px 16px", fontSize: ".78rem" }} onClick={() => setShown(s => s + 40)}>
+                Show more · {filteredActions.length - feedRows.length} more
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ── All clusters modal ── */}
+      {showAllClusters && (
+        <div className="chart-modal-overlay" onClick={() => setShowAllClusters(false)}>
+          <div className="chart-modal" onClick={e => e.stopPropagation()}>
+            <div className="chart-modal-head">
+              <h3>Cluster alerts · {clusters.length} tickers</h3>
+              <button className="chart-modal-close" onClick={() => setShowAllClusters(false)}>✕</button>
+            </div>
+            <div className="chart-modal-body">
+              <div style={{ fontSize: ".76rem", color: "var(--text-dim-solid)", marginBottom: 14 }}>
+                Tickers with rating changes from 2+ firms in the recent feed. The number is how many distinct firms acted.
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {clusters.map(c => (
+                  <button key={c.ticker} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => { openStock(c.ticker); setShowAllClusters(false); }}>
+                    <StockLogo sym={c.ticker} size={16} /> {c.ticker}
+                    <b style={{ color: "var(--brand-2)" }}>{c.firms}</b>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
