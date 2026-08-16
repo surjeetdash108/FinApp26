@@ -13,6 +13,14 @@ import type { AnalystConsensusDoc, CompanyDoc } from "../types";
 const TABS = ["All", "Upgrades", "Downgrades", "Initiations"] as const;
 type Tab = typeof TABS[number];
 
+// Top-level views (the 3 tabs at the top of the screen).
+const VIEWS = [
+  { key: "consensus", label: "Consensus & price targets" },
+  { key: "perfirm", label: "Per-firm analyst actions" },
+  { key: "analysts", label: "Analysts" },
+] as const;
+type View = typeof VIEWS[number]["key"];
+
 function actionMatches(action: string | null | undefined, tab: Tab): boolean {
   const a = (action ?? "").toLowerCase();
   if (tab === "Upgrades") return a.includes("upgrade");
@@ -42,10 +50,12 @@ export function AnalystScreen() {
   const { openStock } = useIQActions();
   const { data: liveConsensus, loading: consensusLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
-  const [tab, setTab] = useState<Tab>("All");
+  const [view, setView] = useState<View>("consensus"); // top-level tab
+  const [tab, setTab] = useState<Tab>("All"); // action-type filter (per-firm + analysts)
   const [clustersOnly, setClustersOnly] = useState(false);
   const [consQuery, setConsQuery] = useState(""); // search within Consensus & price targets
   const [actQuery, setActQuery] = useState(""); // search within Per-firm analyst actions
+  const [analystQuery, setAnalystQuery] = useState(""); // search within Analysts
   const [shown, setShown] = useState(40); // paginate the feed 40 rows at a time
   const [showAllClusters, setShowAllClusters] = useState(false);
 
@@ -116,8 +126,53 @@ export function AnalystScreen() {
     .sort((a, b) => (b.strongBuy + b.buy) - (a.strongBuy + a.buy))
     .slice(0, consQ ? 50 : 8); // top 8 by default; up to 50 matches when searching
 
+  // ── Analysts view: the same actions grouped BY analyst firm, honoring the
+  // action-type filter (tab). Each row is one firm with its activity mix. ──
+  const analystQ = analystQuery.trim().toLowerCase();
+  const analystRows = useMemo(() => {
+    const m = new Map<string, { firm: string; total: number; up: number; down: number; init: number; tickers: Set<string>; latest: string }>();
+    for (const a of allActions) {
+      if (!a.firm) continue;
+      if (!actionMatches(a.action, tab)) continue; // action filter applies here too
+      let e = m.get(a.firm);
+      if (!e) { e = { firm: a.firm, total: 0, up: 0, down: 0, init: 0, tickers: new Set(), latest: "" }; m.set(a.firm, e); }
+      e.total++;
+      const s = (a.action ?? "").toLowerCase();
+      if (s.includes("upgrade")) e.up++;
+      else if (s.includes("downgrade")) e.down++;
+      else if (s.includes("init")) e.init++;
+      e.tickers.add(a.ticker);
+      if ((a.date ?? "") > e.latest) e.latest = a.date ?? "";
+    }
+    return [...m.values()].sort((x, y) => y.total - x.total);
+  }, [allActions, tab]);
+  const analystFiltered = analystRows.filter(a => !analystQ || a.firm.toLowerCase().includes(analystQ));
+
+  // Reusable action-type filter chips (used by Per-firm + Analysts views).
+  const actionFilterBar = (withClusters: boolean) => (
+    <div className="fbar" style={{ marginBottom: 12 }}>
+      {TABS.map(t => (
+        <button key={t} className={`chip${tab === t ? " on" : ""}`} onClick={() => { setTab(t); setShown(40); }}>{t}</button>
+      ))}
+      {withClusters && <>
+        <div style={{ flex: 1 }} />
+        <button className={`chip${clustersOnly ? " on" : ""}`} onClick={() => { setClustersOnly(v => !v); setShown(40); }}>Clusters only</button>
+      </>}
+    </div>
+  );
+
   return (
     <>
+      {/* ── Top-level tabs ── */}
+      <div className="page-head">
+        <div className="tabs" style={{ maxWidth: "100%", overflowX: "auto", flexWrap: "nowrap" }}>
+          {VIEWS.map(v => (
+            <button key={v.key} className={`tab${view === v.key ? " on" : ""}`} onClick={() => setView(v.key)} style={{ flexShrink: 0, whiteSpace: "nowrap" }}>{v.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {view === "consensus" && (<>
       {/* ── Signal cards ── */}
       <div className="dash" style={{ marginBottom: 14 }}>
         <div className="col-6">
@@ -213,15 +268,10 @@ export function AnalystScreen() {
           })}
         </div>
       </div>
+      </>)}
 
-      {/* ── Filter bar ── */}
-      <div className="fbar" style={{ marginBottom: 12 }}>
-        {TABS.map(t => (
-          <button key={t} className={`chip${tab === t ? " on" : ""}`} onClick={() => { setTab(t); setShown(40); }}>{t}</button>
-        ))}
-        <div style={{ flex: 1 }} />
-        <button className={`chip${clustersOnly ? " on" : ""}`} onClick={() => { setClustersOnly(v => !v); setShown(40); }}>Clusters only</button>
-      </div>
+      {view === "perfirm" && (<>
+      {actionFilterBar(true)}
 
       {/* ── Per-firm analyst actions ── */}
       <div className="card">
@@ -278,6 +328,55 @@ export function AnalystScreen() {
           )}
         </div>
       </div>
+      </>)}
+
+      {view === "analysts" && (<>
+        {/* Search analyst + the same action-type filter, so the table is per-analyst. */}
+        <div className="fbar" style={{ marginBottom: 12 }}>
+          <input
+            value={analystQuery}
+            onChange={e => setAnalystQuery(e.target.value)}
+            placeholder="Search analyst…"
+            style={{ width: 200, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", fontSize: ".78rem", color: "var(--text-hi)", outline: "none" }}
+          />
+        </div>
+        {actionFilterBar(false)}
+        <div className="card">
+          <div className="card-h">
+            <h3>Analysts <VendorTag v={["fmp", "polygon"]} /></h3>
+            {analystFiltered.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{analystFiltered.length} firms</span>}
+          </div>
+          <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Analyst / firm</th><th className="num">Actions</th><th className="num">Upgrades</th>
+                  <th className="num">Downgrades</th><th className="num">Initiations</th><th className="num">Tickers</th><th className="num">Latest</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analystFiltered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: 0 }}>
+                      <DataState loading={consensusLoading} label={analystQ ? `No analysts match “${analystQuery}”.` : "No analyst activity in the recent feed."} />
+                    </td>
+                  </tr>
+                ) : analystFiltered.map(a => (
+                  <tr key={a.firm}>
+                    <td><b style={{ color: "var(--text-hi)" }}>{a.firm}</b></td>
+                    <td className="num" style={{ fontWeight: 700 }}>{a.total}</td>
+                    <td className="num" style={{ color: a.up ? "var(--up)" : "var(--text-dim-solid)", fontWeight: a.up ? 600 : 400 }}>{a.up}</td>
+                    <td className="num" style={{ color: a.down ? "var(--down)" : "var(--text-dim-solid)", fontWeight: a.down ? 600 : 400 }}>{a.down}</td>
+                    <td className="num" style={{ color: a.init ? "var(--brand-2)" : "var(--text-dim-solid)", fontWeight: a.init ? 600 : 400 }}>{a.init}</td>
+                    <td className="num">{a.tickers.size}</td>
+                    <td className="num" style={{ color: "var(--text-dim-solid)" }}>{shortDate(a.latest)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </>)}
 
       {/* ── All clusters modal ── */}
       {showAllClusters && (
