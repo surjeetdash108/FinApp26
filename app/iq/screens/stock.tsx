@@ -568,7 +568,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   }, []);
   const [search, setSearch] = useState("");
   const [tfActive, setTfActive] = useState("3M");
-  const [toneActive, setToneActive] = useState("Swing");
   const [showVol, setShowVol] = useState(true);
   const [showRsi, setShowRsi] = useState(false);
   const [showEarnings, setShowEarnings] = useState(false);
@@ -1121,11 +1120,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           <div className="ai-block">
             <div className="card-h">
               <h3 className="ai-c">◆ AI Technical Analysis</h3>
-              <div className="toneseg" style={{ width: 280 }}>
-                {["Summary","Swing","Position","Long-term"].map(t => (
-                  <button key={t} className={toneActive === t ? "on" : ""} onClick={() => setToneActive(t)}>{t}</button>
-                ))}
-              </div>
             </div>
             <div className="card-b">
               {rs == null ? (
