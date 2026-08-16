@@ -89,7 +89,7 @@ export function tapeItemsToIndexDocs(items: TapeItem[]): IndexDoc[] {
  * dropped rather than rendered with a fabricated number. Open/prevClose fall
  * back to the current value ("flat"), never to any static number.
  */
-const PULSE_INDEX_IDS = ["SPX", "NDX", "DJI", "RUT", "VIX", "US10Y", "WTI", "GOLD", "DXY"];
+const PULSE_INDEX_IDS = ["SPX", "NDX", "DJI", "RUT", "VIX", "US10Y", "WTI", "GOLD", "BTC", "DXY"];
 
 export function pulseFromLive(live: IndexDoc[]): PulseItem[] {
   const byId = new Map(live.map(l => [l.id, l]));
