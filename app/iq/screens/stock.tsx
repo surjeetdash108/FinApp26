@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import { WatchlistPicker } from "../watchlist-picker";
-import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo } from "../utils";
+import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo, VendorTag } from "../utils";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiResource } from "../hooks/useApiResource";
@@ -952,13 +952,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 )}
               </div>
             </div>
+            <span style={{ marginLeft: "auto", alignSelf: "flex-start" }}><VendorTag v="polygon" /></span>
           </div>
 
           {/* About the company — Polygon /v3/reference/tickers description, wired
               via /live/company. Shown in full (no clamp / no toggle). */}
           {data.description && (
             <div className="sd-about">
-              <div className="sd-about-lbl">About {data.name}</div>
+              <div className="sd-about-lbl" style={{ display: "flex", alignItems: "center", gap: 8 }}>About {data.name} <VendorTag v="polygon" /></div>
               <p style={{ margin: "4px 0 0", fontSize: ".82rem", lineHeight: 1.6, color: "var(--text-dim-solid)" }}>
                 {data.description}
               </p>
@@ -1011,6 +1012,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               <button className={`rng indbtn${showRsi ? " on" : ""}`} onClick={() => setShowRsi(v => !v)}>RSI</button>
               <button className={`rng indbtn${showEarnings ? " on" : ""}`} onClick={() => setShowEarnings(v => !v)}>Earnings</button>
               <div style={{ flex: 1 }} />
+              <span style={{ marginRight: 6 }}><VendorTag v="polygon" /></span>
               {realBars && (
                 <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem", marginRight: 6 }}>
                   live · Polygon
@@ -1103,6 +1105,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
           {/* Keystats */}
           <div className="card">
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 12px 0" }}><VendorTag v="polygon" /></div>
             <div className="keystats">
               {([
                 ["Mkt Cap",        mc != null ? cap(mc) : null],
@@ -1126,6 +1129,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           <div className="ai-block">
             <div className="card-h">
               <h3 className="ai-c">◆ AI Technical Analysis</h3>
+              <VendorTag v="polygon" />
             </div>
             <div className="card-b">
               {rs == null ? (
@@ -1163,6 +1167,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <div className="card-h">
                   <h3>Financials</h3>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <VendorTag v="polygon" />
                     {financialsDoc && (
                       <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>
                     )}
@@ -1291,6 +1296,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <div className="card-h">
                   <h3>Dividend &amp; split history</h3>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <VendorTag v="polygon" />
                     {dh && (yieldPct != null
                       ? <span className="pill up">{yieldPct.toFixed(2)}% yield</span>
                       : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>No dividend</span>)}
@@ -1349,7 +1355,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           <div className="card">
             <div className="card-h">
               <h3>Insider &amp; institutional</h3>
-              <span className="link" onClick={() => setInnerDrawer("insider")}>View all →</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <VendorTag v="sec" />
+                <span className="link" onClick={() => setInnerDrawer("insider")}>View all →</span>
+              </div>
             </div>
             <div className="card-b" style={{ paddingTop: 6 }}>
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
@@ -1402,11 +1411,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             <div className="card-h">
               <h3>Technical Rating</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div className="tf-pills">
-                  {["1D","1W","1M"].map((t, i) => (
-                    <button key={t} className={`rng${i === 2 ? " on" : ""}`}>{t}</button>
-                  ))}
-                </div>
+                <VendorTag v={["polygon", "fmp"]} />
                 <span className="link" onClick={() => setInnerDrawer("techrating")}>View all →</span>
               </div>
             </div>
@@ -1478,7 +1483,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <h3>Peers · who&apos;s leading{peersTotal > 0 ? ` · ${Math.min(peers.length, peersTotal)} of ${peersTotal}` : ""}</h3>
-              {peersTotal > peers.length && <span className="link" onClick={() => setInnerDrawer("peers")}>View all →</span>}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <VendorTag v="polygon" />
+                {peersTotal > peers.length && <span className="link" onClick={() => setInnerDrawer("peers")}>View all →</span>}
+              </div>
             </div>
             <div className="card-b" style={{ paddingTop: 6, flex: 1, overflowY: "auto", minHeight: 0 }}>
               {peers.length ? peers.map(peer => {
@@ -1505,7 +1513,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           <div className="card">
             <div className="card-h">
               <h3>Industry Group rank</h3>
-              <span className="link" onClick={() => setInnerDrawer("industry")}>View all →</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <VendorTag v="polygon" />
+                <span className="link" onClick={() => setInnerDrawer("industry")}>View all →</span>
+              </div>
             </div>
             <div className="card-b">
               {topSectors.length === 0 ? (
@@ -1537,6 +1548,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             <div className="card-h">
               <h3>Earnings history</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <VendorTag v={["polygon", "fmp"]} />
                 {hist10.length > 0 && (
                   <span className={`pill ${beatStreak >= 0 ? "up" : "dn"}`}>{Math.abs(beatStreak)}-qtr {beatStreak >= 0 ? "beat" : "miss"} streak</span>
                 )}
@@ -1565,7 +1577,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           <div className="card">
             <div className="card-h">
               <h3>Key levels (pivots)</h3>
-              <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <VendorTag v="polygon" />
+                <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
+              </div>
             </div>
             <div className="card-b">
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
@@ -1616,9 +1631,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
         <div className="card" style={{ gridColumn: "1 / -1" }}>
           <div className="card-h">
             <h3>News</h3>
-            {tickerNews && tickerNews.length > 0 && (
-              <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live</span>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <VendorTag v={["polygon", "fmp"]} />
+              {tickerNews && tickerNews.length > 0 && (
+                <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live</span>
+              )}
+            </div>
           </div>
           <div className="card-b" style={{ paddingTop: 6 }}>
             {tickerNews && tickerNews.length > 0 ? (
@@ -1681,6 +1699,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Technical Rating · {sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>11 oscillators · 15 moving averages</div>
                 </div>
+                <VendorTag v="polygon" />
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
@@ -1757,6 +1776,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     {rawPeerTickers.length > peersTotal ? ` · ${rawPeerTickers.length} returned by Polygon` : ""}
                   </div>
                 </div>
+                <VendorTag v="polygon" />
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
@@ -1790,6 +1810,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Industry Group Rank</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>All sectors by today&apos;s performance</div>
                 </div>
+                <VendorTag v="polygon" />
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
@@ -1818,6 +1839,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Insider &amp; Institutional · {sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Form 4 filings · 13F institutional data</div>
                 </div>
+                <VendorTag v="sec" />
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
@@ -1859,6 +1881,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>Key Levels · {sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Pivot points · support &amp; resistance</div>
                 </div>
+                <VendorTag v="polygon" />
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
@@ -1919,6 +1942,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>{sym}</div>
                   <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Earnings history · last 10 quarters</div>
                 </div>
+                <VendorTag v={["polygon", "fmp"]} />
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
@@ -1983,6 +2007,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>{sym}</div>
                     <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Financials · income statement</div>
                   </div>
+                  <VendorTag v={["polygon", "fmp"]} />
                   <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
                 </div>
                 <div className="drawer-b">
@@ -2187,6 +2212,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       {yieldPct != null ? `${yieldPct.toFixed(2)}% yield · $${annualDiv.toFixed(2)}/yr` : dh ? "No dividend paid" : "Not synced yet"}
                     </div>
                   </div>
+                  <VendorTag v="polygon" />
                   <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
                 </div>
                 <div className="drawer-b">

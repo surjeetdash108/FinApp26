@@ -299,7 +299,9 @@ export function EarningsGrowthChart({ hist }: { hist: EarnQ[] }) {
     if (i >= 4) yoyMap[q.q] = ((q.a - d[i - 4].a) / Math.abs(d[i - 4].a || 1)) * 100;
   });
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, display: "block" }}>
+    // No maxWidth: let the chart scale to the full width of its box (it was
+    // capped at 560px, leaving the right of a wider container empty).
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }}>
       {minV < 0 && (
         <line x1={PADL} y1={cy(0).toFixed(1)} x2={W - PADR} y2={cy(0).toFixed(1)}
           stroke="var(--border)" strokeDasharray="3 3" />
