@@ -89,8 +89,7 @@ export function ScreenerScreen() {
   const [rsiBand,    setRsiBand]    = useState(false);
   const [priceGt5,   setPriceGt5]   = useState(false);
 
-  /* ── Save / restore the current screen (filter set) to localStorage ── */
-  const [saved, setSaved] = useState(false);
+  /* ── Restore the last-used filter set (saved by earlier versions) ── */
   useEffect(() => {
     try {
       const raw = localStorage.getItem("iq-screener-filters");
@@ -103,54 +102,57 @@ export function ScreenerScreen() {
       setDmaAbove(!!s.dmaAbove); setRsiBand(!!s.rsiBand); setPriceGt5(!!s.priceGt5);
     } catch { /* ignore malformed saved filters */ }
   }, []);
-  function saveScreen() {
-    const state = { activePresets: [...activePresets], rs90, rs7090, rsLt40, salesGt20, epsGt25, marginPos, ratingBuy, mcGt10, rvolGt15, dmaAbove, rsiBand, priceGt5 };
-    try { localStorage.setItem("iq-screener-filters", JSON.stringify(state)); } catch { /* storage full/blocked */ }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
-  }
 
-  /* ── Export the current matches as a PDF (via the browser's print → Save as PDF) ── */
+  /* ── Export the SELECTED stock's data as a PDF (browser print → Save as PDF) ── */
   function exportPdf() {
-    const esc = (s: string) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
-    const active: string[] = [];
-    if (sector !== "All") active.push(`Sector: ${sector}`);
-    if (rs90) active.push("RS ≥ 90"); if (rs7090) active.push("RS 70–90"); if (rsLt40) active.push("RS < 40");
-    if (salesGt20) active.push("Sales growth > 20%"); if (epsGt25) active.push("EPS growth > 25%"); if (marginPos) active.push("Positive gross margin");
-    if (ratingBuy) active.push("Tech rating Buy"); if (mcGt10) active.push("Market cap > $10B"); if (rvolGt15) active.push("RVOL > 1.5×");
-    if (dmaAbove) active.push("Above key MAs"); if (rsiBand) active.push("RSI 40–70"); if (priceGt5) active.push("Price > $5");
-    [...activePresets].forEach(p => active.push(`Preset: ${p}`));
-    const num = (v: number, suffix = "", d = 1) => (v ? `${v.toFixed(d)}${suffix}` : "—");
-    const rows = filtered.map(s => `<tr>
-      <td class="tk">${esc(s.ticker)}</td><td>${esc(s.name)}</td><td>${esc(s.sector)}</td>
-      <td class="n">${s.marketCap ? "$" + s.marketCap.toFixed(1) + "B" : "—"}</td>
-      <td class="n">${num(s.peRatio)}</td><td class="n">${s.relativeStrength || "—"}</td>
-      <td class="n">${num(s.salesGrowth, "%")}</td><td class="n">${num(s.epsGrowth, "%")}</td>
-      <td class="n">${num(s.grossMargin, "%")}</td><td class="n">${num(s.rvolRatio, "×")}</td>
-      <td>${esc(s.techRating)}</td></tr>`).join("");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>MarketCatalyst Screener</title>
+    if (!selStock) { alert("Select a stock in the results first."); return; }
+    const s = selStock;
+    const c = selLive; // richer live company doc (price + technicals)
+    const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch] as string));
+    const money = (v: number | null | undefined) => (v == null ? "—" : `$${v.toFixed(2)}`);
+    const pct = (v: number | null | undefined, d = 1) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(d)}%`);
+    const nOr = (v: number | null | undefined, suffix = "", d = 1) => (v == null || v === 0 ? "—" : `${v.toFixed(d)}${suffix}`);
+    const price = c?.price ?? byTicker.get(s.ticker)?.price ?? null;
+    const rows: [string, string][] = [
+      ["Price", money(price)],
+      ["Day change", pct(c?.pctChange)],
+      ["Market cap", s.marketCap ? `$${s.marketCap.toFixed(1)}B` : "—"],
+      ["P/E ratio", nOr(s.peRatio, "", 1)],
+      ["RS rating", s.relativeStrength ? `${s.relativeStrength}/99` : "—"],
+      ["Tech rating", s.techRating || "—"],
+      ["Sales growth (YoY)", nOr(s.salesGrowth, "%")],
+      ["EPS growth (YoY)", nOr(s.epsGrowth, "%")],
+      ["Gross margin", nOr(s.grossMargin, "%")],
+      ["Rel. volume", nOr(s.rvolRatio, "×")],
+      ["Beta", nOr(c?.beta ?? null, "", 2)],
+      ["Dividend yield", c?.dividendYield != null ? `${c.dividendYield.toFixed(2)}%` : "—"],
+      ["52-week high", money(c?.high52 ?? null)],
+      ["52-week low", money(c?.low52 ?? null)],
+      ["SMA 50", money(c?.sma50 ?? null)],
+      ["SMA 200", money(c?.sma200 ?? null)],
+      ["RSI (14)", nOr(c?.rsi14 ?? null, "", 1)],
+    ];
+    const metricsHtml = rows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td class="v">${esc(v)}</td></tr>`).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(s.ticker)} — MarketCatalyst</title>
       <style>
-        *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111;margin:24px;font-size:11px}
-        h1{font-size:17px;margin:0 0 2px} .sub{color:#666;font-size:11px;margin-bottom:10px}
-        .filters{margin:0 0 12px;font-size:10.5px;color:#333}
-        .chip{display:inline-block;background:#eef1f6;border:1px solid #d7dce6;border-radius:10px;padding:2px 8px;margin:0 4px 4px 0}
-        table{width:100%;border-collapse:collapse} th,td{padding:4px 6px;border-bottom:1px solid #e5e8ef;text-align:left}
-        th{font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:#666;border-bottom:1.5px solid #c8ccd6}
-        td.n,th.n{text-align:right;font-variant-numeric:tabular-nums} td.tk{font-weight:700}
-        tr:nth-child(even) td{background:#fafbfd}
-        @page{margin:14mm} @media print{body{margin:0}}
+        *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111;margin:26px;font-size:12px}
+        h1{font-size:20px;margin:0} .name{color:#333;font-size:13px;margin:1px 0 2px} .sub{color:#666;font-size:11px;margin-bottom:16px}
+        table{border-collapse:collapse;width:100%;max-width:520px} td{padding:6px 8px;border-bottom:1px solid #e8ebf1}
+        td.k{color:#555} td.v{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+        .desc{margin-top:16px;max-width:640px;font-size:11.5px;line-height:1.55;color:#333}
+        .foot{margin-top:20px;font-size:9.5px;color:#999}
+        @page{margin:16mm} @media print{body{margin:0}}
       </style></head>
       <body onload="window.print()">
-        <h1>MarketCatalyst — Stock Screener</h1>
-        <div class="sub">${filtered.length} matches · generated ${new Date().toLocaleString()}</div>
-        <div class="filters">${active.length ? active.map(a => `<span class="chip">${esc(a)}</span>`).join("") : '<span class="chip">No filters — full universe</span>'}</div>
-        <table><thead><tr>
-          <th>Ticker</th><th>Company</th><th>Sector</th><th class="n">Mkt Cap</th><th class="n">P/E</th><th class="n">RS</th>
-          <th class="n">Sales Gr</th><th class="n">EPS Gr</th><th class="n">Gr Margin</th><th class="n">RVOL</th><th>Tech</th>
-        </tr></thead><tbody>${rows}</tbody></table>
+        <h1>${esc(s.ticker)}</h1>
+        <div class="name">${esc(s.name)}</div>
+        <div class="sub">${esc(s.sector)} · generated ${new Date().toLocaleString()}</div>
+        <table><tbody>${metricsHtml}</tbody></table>
+        ${c?.description ? `<div class="desc">${esc(c.description)}</div>` : ""}
+        <div class="foot">MarketCatalyst — informational only, not investment advice.</div>
       </body></html>`;
     const w = window.open("", "_blank");
-    if (!w) { alert("Please allow pop-ups for this site to export the screener as a PDF."); return; }
+    if (!w) { alert("Please allow pop-ups for this site to export the PDF."); return; }
     w.document.open(); w.document.write(html); w.document.close();
   }
 
@@ -245,20 +247,14 @@ export function ScreenerScreen() {
         <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
           {filtered.length} match{filtered.length !== 1 ? "es" : ""}
         </span>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={exportPdf} title="Export the current matches as a PDF">
-            <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
-              <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Export PDF
-          </button>
-          <button className="btn primary" onClick={saveScreen}>
-            <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
-              <path d="M5 5h14v14l-7-4-7 4z" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
-            </svg>
-            {saved ? "Saved ✓" : "Save screen"}
-          </button>
-        </div>
+        <button className="btn primary" onClick={exportPdf} disabled={!selStock}
+          title={selStock ? `Export ${selStock.ticker} data as PDF` : "Select a stock first"}
+          style={{ opacity: selStock ? 1 : 0.5 }}>
+          <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
+            <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Export PDF{selStock ? ` · ${selStock.ticker}` : ""}
+        </button>
       </div>
 
       <div style={{ padding: "0 18px 18px" }}>

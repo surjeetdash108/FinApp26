@@ -55,6 +55,8 @@ export interface CompanyDoc {
   // count new highs/lows without a dedicated breadth job.
   high52?: number | null;
   low52?: number | null;
+  sma50?: number | null;
+  sma200?: number | null;
   // Support/resistance — classic pivot points computed from prior daily and
   // prior-complete-weekly bars (technical-indicators.job).
   keyLevels?: {
