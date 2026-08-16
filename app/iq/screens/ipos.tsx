@@ -38,10 +38,20 @@ function compactNum(n: number): string {
   return `${n}`;
 }
 
-const SECTOR_OPTIONS = [
-  "All", "Consumer", "Data / AI", "Fintech", "Healthcare",
-  "Internet", "Media", "Retail", "Semis", "Software",
-];
+// Polygon's raw IPO status → friendly label. "history" (already listed/trading)
+// read as jargon in the calendar, so surface it as "Listed".
+const IPO_STATUS_LABEL: Record<string, string> = {
+  history: "Listed",
+  direct_listing_process: "Direct listing",
+  new: "New",
+  pending: "Pending",
+  priced: "Priced",
+  filed: "Filed",
+  expected: "Expected",
+  withdrawn: "Withdrawn",
+};
+const ipoStatusLabel = (s: string): string =>
+  IPO_STATUS_LABEL[s] ?? s.replace(/_/g, " ");
 
 export function IPOsScreen() {
   const [selectedSym, setSelectedSym] = useState<string | null>(null);
@@ -70,6 +80,12 @@ export function IPOsScreen() {
     });
   })();
   const liveIposSorted = [...liveIpos].sort((a, b) => b.date.localeCompare(a.date));
+  // Prefer the IPO doc's own (SIC-derived) sector; fall back to the companies
+  // universe. The dropdown is built from the sectors actually present.
+  const secForIpo = (e: IpoEventDoc): string => e.sector ?? sectorOf(e.symbol);
+  const sectorOptions = ["All", ...Array.from(
+    new Set(liveIpos.map(secForIpo).filter(s => s && s !== "—")),
+  ).sort()];
 
   // Aftermarket performance (current price, day-1 pop %, return since offer) is
   // computed by the backend ipos job from Polygon daily bars for already-listed
@@ -84,14 +100,14 @@ export function IPOsScreen() {
     since: e.returnSinceIpoPct,
     shares: e.numberOfShares,
     deal: e.totalSharesValue,
-    sec: sectorOf(e.symbol),
+    sec: secForIpo(e),
     live: true,
   }));
   const filtered = liveRows
     .filter(r => sector === "All" || r.sec === sector)
     .sort((a, b) => dateSort === "desc" ? (b.date ?? "").localeCompare(a.date ?? "") : (a.date ?? "").localeCompare(b.date ?? ""));
   // Calendar tab shares the same sector filter (also ticker-based).
-  const filteredCalendar = liveIposSorted.filter(e => sector === "All" || sectorOf(e.symbol) === sector);
+  const filteredCalendar = liveIposSorted.filter(e => sector === "All" || secForIpo(e) === sector);
 
   // Only rows with BOTH an offer price and a current price can produce a return.
   const perf = filtered.filter(
@@ -123,7 +139,7 @@ export function IPOsScreen() {
           onChange={e => setSector(e.target.value)}
           style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem" }}
         >
-          {SECTOR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>
@@ -314,8 +330,8 @@ export function IPOsScreen() {
                     <td>{e.exchange || "—"}</td>
                     <td className="num">{formatIpoPrice(e.priceLow, e.priceHigh)}</td>
                     <td>
-                      <span className={`pill ${e.status === "priced" ? "up" : e.status === "withdrawn" ? "down" : "amc"}`}>
-                        {e.status}
+                      <span className={`pill ${e.status === "priced" || e.status === "history" ? "up" : e.status === "withdrawn" ? "down" : "amc"}`}>
+                        {ipoStatusLabel(e.status)}
                       </span>
                     </td>
                   </tr>

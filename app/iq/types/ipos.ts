@@ -4,6 +4,9 @@ export interface IpoEventDoc {
   date: string;
   symbol: string | null;
   name: string;
+  /** Sector from Polygon's ticker reference (SIC-derived), on the IPO doc since
+   *  new listings aren't in the `companies` universe yet. Null when unknown. */
+  sector?: string | null;
   exchange: string | null;
   priceLow: number | null;
   priceHigh: number | null;
@@ -17,7 +20,9 @@ export interface IpoEventDoc {
   returnSinceIpoPct: number | null;
   numberOfShares: number | null;
   totalSharesValue: number | null;
-  status: "expected" | "priced" | "filed" | "withdrawn";
+  /** Raw Polygon status (e.g. "history", "new", "pending", "priced",
+   *  "direct_listing_process", "withdrawn"). The UI maps it to a friendly label. */
+  status: string;
 }
 
 /** Mirrors backend's `ipo_pipeline` collection (edgar-ipo-pipeline job) — GET /market-data/ipo-pipeline. Recent SEC-EDGAR S-1/424B registration filings. */
