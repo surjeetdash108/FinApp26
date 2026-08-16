@@ -44,6 +44,7 @@ export function AnalystScreen() {
   const { data: companies } = useApiList<CompanyDoc>("/market-data/companies");
   const [tab, setTab] = useState<Tab>("All");
   const [clustersOnly, setClustersOnly] = useState(false);
+  const [consQuery, setConsQuery] = useState(""); // search within Consensus & price targets
   const [shown, setShown] = useState(40); // paginate the feed 40 rows at a time
   const [showAllClusters, setShowAllClusters] = useState(false);
 
@@ -106,9 +107,11 @@ export function AnalystScreen() {
     .filter(a => !clustersOnly || clusterSet.has(a.ticker));
   const feedRows = filteredActions.slice(0, shown);
 
+  const consQ = consQuery.trim().toUpperCase();
   const consensusRows = [...liveConsensus]
+    .filter(c => !consQ || c.ticker.toUpperCase().includes(consQ))
     .sort((a, b) => (b.strongBuy + b.buy) - (a.strongBuy + a.buy))
-    .slice(0, 8);
+    .slice(0, consQ ? 50 : 8); // top 8 by default; up to 50 matches when searching
 
   return (
     <>
@@ -164,11 +167,19 @@ export function AnalystScreen() {
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-h">
           <h3>Consensus &amp; price targets</h3>
-          {consensusRows.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              value={consQuery}
+              onChange={e => setConsQuery(e.target.value.toUpperCase())}
+              placeholder="Search ticker…"
+              style={{ width: 130, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)" }}
+            />
+            {consensusRows.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live</span>}
+          </div>
         </div>
         <div className="card-b" style={{ paddingTop: 4, display: "flex", flexDirection: "column", gap: 8 }}>
           {consensusRows.length === 0 ? (
-            <DataState loading={consensusLoading} label="No live analyst consensus synced yet." />
+            <DataState loading={consensusLoading} label={consQ ? `No analyst consensus for “${consQuery}”.` : "No live analyst consensus synced yet."} />
           ) : consensusRows.map(c => {
             const total = c.strongBuy + c.buy + c.hold + c.sell + c.strongSell || 1;
             const up = upside(c.priceTargetConsensus, c.ticker);
