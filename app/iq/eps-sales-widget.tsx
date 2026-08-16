@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { NotAvailable } from "./utils";
+import { NotAvailable, VendorTag } from "./utils";
 import type { FinancialsDoc, AnnualFinancials, QuarterFinancials } from "./types";
 
 /** "+12%" / "-4%" / "—" — rounded YoY %change, blank when either side is missing. */
@@ -96,7 +96,6 @@ function MetricBars({ title, data, fmt }: {
   const bw = Math.min(gw * 0.62, 30);
   return (
     <div>
-      <div style={{ fontSize: ".82rem", fontWeight: 700, color: "var(--text-dim-solid)", marginBottom: 4 }}>{title}</div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
@@ -172,26 +171,56 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
     quarterlyRows.some(r => r.eps != null || r.sales != null) ||
     forwardRows.length > 0;
 
-  return (
-    <div className="card">
-      <div className="card-h">
-        <h3>EPS and Sales</h3>
-        <div className="ecal-seg">
-          <button className={`ecal-segbtn${period === "Q" ? " on" : ""}`} onClick={() => setPeriod("Q")}>Quarter</button>
-          <button className={`ecal-segbtn${period === "A" ? " on" : ""}`} onClick={() => setPeriod("A")}>Annual</button>
+  // Shared Quarter/Annual toggle, placed on each of the two boxes.
+  const seg = (
+    <div className="ecal-seg">
+      <button className={`ecal-segbtn${period === "Q" ? " on" : ""}`} onClick={() => setPeriod("Q")}>Quarter</button>
+      <button className={`ecal-segbtn${period === "A" ? " on" : ""}`} onClick={() => setPeriod("A")}>Annual</button>
+    </div>
+  );
+
+  if (!hasData) {
+    return (
+      <div className="card">
+        <div className="card-h">
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><h3>EPS &amp; Sales</h3><VendorTag v="polygon" /></span>
         </div>
-      </div>
-      <div className="card-b" style={{ paddingTop: 8 }}>
-        {!hasData ? (
+        <div className="card-b" style={{ paddingTop: 8 }}>
           <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)", padding: "10px 0", lineHeight: 1.55 }}>
             No reported financials — this looks like a pre-revenue or blank-check (SPAC) company, so there&apos;s no revenue, EPS, or earnings history to chart yet.
           </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid var(--border-soft)" }}>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* EPS and Sales in SEPARATE boxes, each with its own bar chart. */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <div className="card">
+          <div className="card-h">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><h3>EPS</h3><VendorTag v="polygon" /></span>
+            {seg}
+          </div>
+          <div className="card-b" style={{ paddingTop: 8 }}>
             <MetricBars title="EPS" data={series.map(d => ({ label: d.label, v: d.eps }))} fmt={v => v.toFixed(2)} />
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-h">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><h3>Sales ($Mil)</h3><VendorTag v="polygon" /></span>
+            {seg}
+          </div>
+          <div className="card-b" style={{ paddingTop: 8 }}>
             <MetricBars title="Sales ($Mil)" data={series.map(d => ({ label: d.label, v: d.sales }))} fmt={v => Math.round(v).toLocaleString()} />
           </div>
-        )}
+        </div>
+      </div>
+
+      {(annualRows.length > 0 || forwardRows.length > 0 || quarterlyRows.length > 0) && (
+      <div className="card">
+        <div className="card-b" style={{ paddingTop: 12 }}>
 
         {/* Fiscal-year table (reported years, then forward `*YYYY` estimates) */}
         {hasData && (annualRows.length > 0 || forwardRows.length > 0) && (
@@ -264,7 +293,9 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
             </div>
           </div>
         )}
+        </div>
       </div>
-    </div>
+      )}
+    </>
   );
 }

@@ -6,7 +6,7 @@ import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { CompanyDoc, HoldingDoc } from "../types";
-import { cls, arr, sign, DataState } from "../utils";
+import { cls, arr, sign, DataState, VendorTag } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 import { TickerSearchField } from "../ticker-search-field";
 import { AiSummaryCard } from "../ai-summary-card";
@@ -125,12 +125,15 @@ export function PortfolioScreen() {
     <>
       <div className="page-head">
         <div>
-          <div className="page-sub">
-            {merged.length} holdings{priced.length > 0 && <> · {usd(totalVal)} ·{" "}
-              <span className={cls(dayPL)}>{dayPL >= 0 ? "+" : ""}{usd(Math.abs(dayPL))} today</span>
-            </>}{unrealizedTotal != null && <> ·{" "}
-              <span className={cls(unrealizedTotal)}>{unrealizedTotal >= 0 ? "+" : "−"}{usd(Math.abs(unrealizedTotal))} unrealized</span>
-            </>}
+          <div className="page-sub" style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span>
+              {merged.length} holdings{priced.length > 0 && <> · {usd(totalVal)} ·{" "}
+                <span className={cls(dayPL)}>{dayPL >= 0 ? "+" : ""}{usd(Math.abs(dayPL))} today</span>
+              </>}{unrealizedTotal != null && <> ·{" "}
+                <span className={cls(unrealizedTotal)}>{unrealizedTotal >= 0 ? "+" : "−"}{usd(Math.abs(unrealizedTotal))} unrealized</span>
+              </>}
+            </span>
+            <VendorTag v="polygon" />
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

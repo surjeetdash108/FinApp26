@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
-import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
+import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState, VendorTag } from "../utils";
 import { ChartCard } from "../stock-panel";
 import { EpsSalesWidget } from "../eps-sales-widget";
 import { EarningsPlaybook } from "./EarningsPlaybook";
@@ -454,10 +454,11 @@ function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
             <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)" }}>
               {sym} · Earnings call
             </div>
-            <div style={{ fontSize: ".76rem", color: "var(--text-dim-solid)" }}>
+            <div style={{ fontSize: ".76rem", color: "var(--text-dim-solid)", display: "flex", alignItems: "center", gap: 6 }}>
               {hasTx
                 ? `Transcript${period ? ` · ${period}` : ""}${data?.date ? ` · ${String(data.date).slice(0, 10)}` : ""}`
                 : "Earnings-call transcript"}
+              <VendorTag v="fmp" />
             </div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
@@ -876,6 +877,9 @@ export function EarningsScreen() {
             <button className={`ecal-segbtn${session === "BMO" ? " on" : ""}`} onClick={() => setSession("BMO")}>Pre-market</button>
             <button className={`ecal-segbtn${session === "AMC" ? " on" : ""}`} onClick={() => setSession("AMC")}>After-market</button>
           </div>
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center" }}>
+            <VendorTag v={["fmp", "polygon"]} />
+          </span>
         </div>
 
         {/* ── Calendar ─────────────────────────────────────────────────── */}
@@ -936,6 +940,7 @@ export function EarningsScreen() {
                       {liveCompanySel.pctChange != null && <span className={cls(liveCompanySel.pctChange)} style={{ marginLeft: 6, fontSize: ".8rem" }}>{sign(liveCompanySel.pctChange)}</span>}
                     </span>
                   )}
+                  <span style={{ marginLeft: "auto" }}><VendorTag v="polygon" /></span>
                 </div>
                 <div className="card-b">
                   {liveCompanySel?.description
@@ -944,7 +949,7 @@ export function EarningsScreen() {
                 </div>
               </div>
               <div className="card">
-                <div className="card-h"><h3>AI summary</h3><span className="pill" style={{ background: "var(--surface-3)", color: "var(--ai)" }}>◆ AI</span></div>
+                <div className="card-h"><h3>AI summary <VendorTag v={["fmp", "polygon", "sec"]} /></h3><span className="pill" style={{ background: "var(--surface-3)", color: "var(--ai)" }}>◆ AI</span></div>
                 <div className="card-b">
                   <p style={{ fontSize: ".82rem", lineHeight: 1.6, color: "var(--text)", margin: "0 0 10px" }}>{aiRead}</p>
                   <div className="ew-aisum">
@@ -964,7 +969,7 @@ export function EarningsScreen() {
               <button
                 onClick={() => setChartOpen(o => !o)}
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "var(--surface-1)", border: "1px solid var(--border-soft)", borderRadius: 12, padding: "10px 14px", cursor: "pointer", color: "var(--text-hi)", fontWeight: 700, fontSize: ".85rem", marginBottom: chartOpen ? 8 : 0 }}>
-                <span>{sel} · Chart</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{sel} · Chart <VendorTag v="polygon" /></span>
                 <span style={{ color: "var(--text-dim-solid)", fontSize: ".75rem", fontWeight: 600 }}>{chartOpen ? "▲ Hide" : "▼ Show"}</span>
               </button>
               {chartOpen && <ChartCard sym={sel} px={liveCompanySel?.price ?? 0} />}
@@ -979,7 +984,7 @@ export function EarningsScreen() {
             {/* Reports — how the stock trades when it reports (bottom). */}
             <div className="card">
               <div className="card-h">
-                <h3>Earnings Playbook</h3>
+                <h3>Earnings Playbook <VendorTag v={["polygon", "fmp"]} /></h3>
                 <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>how {sel} trades when it reports</span>
               </div>
               <div className="card-b" style={{ paddingTop: 6 }}>
@@ -1013,6 +1018,7 @@ export function EarningsScreen() {
               {hasLiveEps && (
                 <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live EPS · Polygon</span>
               )}
+              <VendorTag v={["polygon", "fmp", "sec"]} />
               {/* Action buttons — inline, same row */}
               <div style={{ display: "flex", gap: 6, marginLeft: 4 }}>
               <button
@@ -1083,7 +1089,7 @@ export function EarningsScreen() {
         <div className="col-6">
           <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
-              <h3>{sel} · earnings history</h3>
+              <h3>{sel} · earnings history <VendorTag v={["polygon", "fmp"]} /></h3>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <div className="ecal-seg">
                   <button className={`ecal-segbtn${histPeriod === "Q" ? " on" : ""}`} onClick={() => setHistPeriod("Q")}>Quarterly</button>
@@ -1150,7 +1156,7 @@ export function EarningsScreen() {
         <div className="col-6">
           <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
-              <h3>{sel} · Income statement</h3>
+              <h3>{sel} · Income statement <VendorTag v="polygon" /></h3>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <div className="ecal-seg">
                   <button className={`ecal-segbtn${incPeriod === "Q" ? " on" : ""}`} onClick={() => setIncPeriod("Q")}>Quarterly</button>
@@ -1220,7 +1226,7 @@ export function EarningsScreen() {
               </svg>
             </div>
             <div>
-              <h2>AI earnings read · {sel}</h2>
+              <h2 style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>AI earnings read · {sel} <VendorTag v={["polygon", "fmp"]} /></h2>
               <div className="meta">Reported vs. estimates · guidance focus</div>
             </div>
           </div>

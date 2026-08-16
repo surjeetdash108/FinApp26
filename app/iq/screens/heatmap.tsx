@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIQActions } from "../shell";
-import { sign, heatCol, fmt, StockLogo, NotAvailable, DataState } from "../utils";
+import { sign, heatCol, fmt, StockLogo, NotAvailable, DataState, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { buildSectorList } from "../live-market-indices";
 import { INDEX_MEMBERS, HEATMAP_TAB_KEYS } from "../index-constituents";
@@ -122,6 +122,7 @@ export function HeatmapScreen() {
           </span>
         )}
         <div className="spacer" />
+        <VendorTag v="polygon" />
         <div className="legend" style={{ gap: 4 }}>
           <span style={{ fontSize: ".66rem", color: "var(--down)" }}>−3%</span>
           {(["rgba(208,52,76,.85)", "rgba(208,52,76,.4)", "#3a4658", "rgba(28,170,112,.4)", "rgba(28,170,112,.85)"] as const).map((bg, i) => (
@@ -269,6 +270,7 @@ export function HeatmapScreen() {
             <div className="dp-head" style={{ cursor: "pointer" }} onClick={() => { setHover(null); setSelectedSym(hover.sym); }}>
               <StockLogo sym={hover.sym} size={28} />
               <span className="dp-sym">{hover.sym}</span>
+              <VendorTag v="polygon" />
               <span className={`pill ${hover.chg >= 0 ? "up" : "dn"}`}>{sign(hover.chg)}</span>
             </div>
             <div className="dp-row"><span>Mkt Cap</span><b>{capFmt(hover.mcap)}</b></div>

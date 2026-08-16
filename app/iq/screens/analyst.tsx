@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useIQActions } from "../shell";
-import { DataState, StockLogo } from "../utils";
+import { DataState, StockLogo, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { AnalystConsensusDoc, CompanyDoc } from "../types";
 
@@ -45,6 +45,7 @@ export function AnalystScreen() {
   const [tab, setTab] = useState<Tab>("All");
   const [clustersOnly, setClustersOnly] = useState(false);
   const [consQuery, setConsQuery] = useState(""); // search within Consensus & price targets
+  const [actQuery, setActQuery] = useState(""); // search within Per-firm analyst actions
   const [shown, setShown] = useState(40); // paginate the feed 40 rows at a time
   const [showAllClusters, setShowAllClusters] = useState(false);
 
@@ -102,9 +103,11 @@ export function AnalystScreen() {
     return { up, down, init, total: allActions.length };
   }, [allActions]);
 
+  const actQ = actQuery.trim().toUpperCase();
   const filteredActions = allActions
     .filter(a => actionMatches(a.action, tab))
-    .filter(a => !clustersOnly || clusterSet.has(a.ticker));
+    .filter(a => !clustersOnly || clusterSet.has(a.ticker))
+    .filter(a => !actQ || a.ticker.toUpperCase().includes(actQ));
   const feedRows = filteredActions.slice(0, shown);
 
   const consQ = consQuery.trim().toUpperCase();
@@ -118,9 +121,9 @@ export function AnalystScreen() {
       {/* ── Signal cards ── */}
       <div className="dash" style={{ marginBottom: 14 }}>
         <div className="col-6">
-          <div className="card">
+          <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Cluster alerts</h3>
+              <h3>Cluster alerts <VendorTag v={["fmp", "polygon"]} /></h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {clusters.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{clusters.length}</span>}
                 {clusters.length > 0 && <span className="link" onClick={() => setShowAllClusters(true)}>View all →</span>}
@@ -130,10 +133,11 @@ export function AnalystScreen() {
               {clusters.length === 0 ? (
                 <DataState loading={consensusLoading} label="No multi-firm clusters in the recent rating-change feed." />
               ) : (
-                // Clip to two rows so the card height matches "Recent rating
-                // activity"; the rest live behind View all.
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 68, overflow: "hidden" }}>
-                  {clusters.slice(0, 24).map(c => (
+                // Show ~two rows of chips (no pixel clip, so nothing is cut
+                // mid-chip); the rest live behind View all. Both cards use
+                // height:100% so they stretch to equal height in the grid.
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {clusters.slice(0, 10).map(c => (
                     <button key={c.ticker} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => openStock(c.ticker)}>
                       <StockLogo sym={c.ticker} size={16} /> {c.ticker}
                       <b style={{ color: "var(--brand-2)" }}>{c.firms}</b>
@@ -145,8 +149,8 @@ export function AnalystScreen() {
           </div>
         </div>
         <div className="col-6">
-          <div className="card">
-            <div className="card-h"><h3>Recent rating activity</h3></div>
+          <div className="card" style={{ height: "100%" }}>
+            <div className="card-h"><h3>Recent rating activity <VendorTag v={["fmp", "polygon"]} /></h3></div>
             <div className="card-b" style={{ paddingTop: 4 }}>
               {activity.total === 0 ? (
                 <DataState loading={consensusLoading} label="No recent per-firm rating changes synced yet." />
@@ -166,16 +170,17 @@ export function AnalystScreen() {
       {/* ── Live analyst consensus + price target ── */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-h">
-          <h3>Consensus &amp; price targets</h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Search sits on the LEFT, next to the title (left-aligned). */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <h3>Consensus &amp; price targets <VendorTag v={["fmp", "polygon"]} /></h3>
             <input
               value={consQuery}
               onChange={e => setConsQuery(e.target.value.toUpperCase())}
               placeholder="Search ticker…"
-              style={{ width: 130, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)" }}
+              style={{ width: 130, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
             />
-            {consensusRows.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live</span>}
           </div>
+          {consensusRows.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live</span>}
         </div>
         <div className="card-b" style={{ paddingTop: 4, display: "flex", flexDirection: "column", gap: 8 }}>
           {consensusRows.length === 0 ? (
@@ -221,7 +226,16 @@ export function AnalystScreen() {
       {/* ── Per-firm analyst actions ── */}
       <div className="card">
         <div className="card-h">
-          <h3>Per-firm analyst actions</h3>
+          {/* Search sits on the LEFT, next to the title — filters THIS table's rows by ticker. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <h3>Per-firm analyst actions <VendorTag v={["fmp", "polygon"]} /></h3>
+            <input
+              value={actQuery}
+              onChange={e => { setActQuery(e.target.value.toUpperCase()); setShown(40); }}
+              placeholder="Search ticker…"
+              style={{ width: 130, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
+            />
+          </div>
           {filteredActions.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{feedRows.length} / {filteredActions.length}</span>}
         </div>
         <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
@@ -236,7 +250,7 @@ export function AnalystScreen() {
               {feedRows.length === 0 ? (
                 <tr>
                   <td colSpan={7} style={{ padding: 0 }}>
-                    <DataState loading={consensusLoading} label={`No ${tab.toLowerCase() === "all" ? "" : tab.toLowerCase() + " "}rating changes${clustersOnly ? " in clusters" : ""} in the recent feed.`} />
+                    <DataState loading={consensusLoading} label={actQ ? `No ${tab.toLowerCase() === "all" ? "" : tab.toLowerCase() + " "}rating changes for “${actQuery}”.` : `No ${tab.toLowerCase() === "all" ? "" : tab.toLowerCase() + " "}rating changes${clustersOnly ? " in clusters" : ""} in the recent feed.`} />
                   </td>
                 </tr>
               ) : feedRows.map((a, i) => {
@@ -270,7 +284,7 @@ export function AnalystScreen() {
         <div className="chart-modal-overlay" onClick={() => setShowAllClusters(false)}>
           <div className="chart-modal" onClick={e => e.stopPropagation()}>
             <div className="chart-modal-head">
-              <h3>Cluster alerts · {clusters.length} tickers</h3>
+              <h3>Cluster alerts · {clusters.length} tickers <VendorTag v={["fmp", "polygon"]} /></h3>
               <button className="chart-modal-close" onClick={() => setShowAllClusters(false)}>✕</button>
             </div>
             <div className="chart-modal-body">

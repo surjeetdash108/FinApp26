@@ -5,7 +5,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import type { CompanyDoc } from "../types";
-import { arr, sign, DataState } from "../utils";
+import { arr, sign, DataState, VendorTag } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 import { TickerSearchField } from "../ticker-search-field";
 import { AiSummaryCard } from "../ai-summary-card";
@@ -141,9 +141,12 @@ export function WatchlistScreen() {
             </>
           )}
 
-          <div className="page-sub" style={{ marginLeft: 4 }}>
-            {items.length} stocks{priced.length > 0 && <> · {up} up / {dn} down today</>}
-            {watchlists.length > 1 && <> · {totalWatched} across {watchlists.length} lists</>}
+          <div className="page-sub" style={{ marginLeft: 4, display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span>
+              {items.length} stocks{priced.length > 0 && <> · {up} up / {dn} down today</>}
+              {watchlists.length > 1 && <> · {totalWatched} across {watchlists.length} lists</>}
+            </span>
+            <VendorTag v="polygon" />
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

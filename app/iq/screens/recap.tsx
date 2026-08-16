@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useIQActions } from "../shell";
-import { cls, sign, StockLogo, DataState, NotAvailable } from "../utils";
+import { cls, sign, StockLogo, DataState, NotAvailable, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useTapeStream } from "../hooks/useTapeStream";
 import { tapeItemsToIndexDocs } from "../live-market-indices";
-import type { SectorApiDoc, LiveEarningsDoc, NewsArticleDoc, MacroEventDoc, RecapDoc, CompanyDoc, EarningsAnnouncementDoc } from "../types";
+import type { SectorApiDoc, LiveEarningsDoc, NewsArticleDoc, MacroEventDoc, RecapDoc, CompanyDoc, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
 
 const SEC_PAGE = 10;
-const MAJOR_INDEX_LABELS = ["S&P 500", "Nasdaq", "Dow", "Russell 2K"];
+const MAJOR_INDEX_LABELS = ["S&P 500", "Nasdaq", "Dow", "Russell 2000"];
 
 // Compact volume/number formatter for the internals block (e.g. 1.2B, 340M).
 function fmtVol(n: number | null | undefined): string {
@@ -43,7 +43,7 @@ const DL_ICON = (
 
 // Real download: a plain-text digest built from the live data already on
 // screen (date, headlines, earnings surprises) — no fabricated narrative.
-function downloadRecap(dateLabel: string, headlines: NewsArticleDoc[], surprises: EarnSurprise[], which: string) {
+function downloadRecap(dateLabel: string, headlines: NewsArticleDoc[], surprises: EarnSurprise[], grades: RatingChange[], which: string) {
   const lines = [
     `MarketCatalyst ${which} Recap — ${dateLabel}`,
     "",
@@ -52,6 +52,9 @@ function downloadRecap(dateLabel: string, headlines: NewsArticleDoc[], surprises
     "",
     "Earnings surprises:",
     ...(surprises.length ? surprises.slice(0, 10).map(e => `- ${e.ticker}: EPS $${e.epsEstimate.toFixed(2)} → $${e.epsActual.toFixed(2)} (${e.surp >= 0 ? "+" : ""}${e.surp.toFixed(1)}%)`) : ["  (none synced)"]),
+    "",
+    "Analyst rating changes:",
+    ...(grades.length ? grades.slice(0, 10).map(g => `- ${g.ticker}: ${g.firm ?? "Analyst"} ${g.previousGrade ? `${g.previousGrade} → ` : ""}${g.newGrade ?? ""} (${g.action ?? "—"})`) : ["  (none synced)"]),
   ];
   const blob = new Blob([lines.join("\n")], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
@@ -63,6 +66,7 @@ function downloadRecap(dateLabel: string, headlines: NewsArticleDoc[], surprises
 }
 
 interface EarnSurprise { ticker: string; date: string; epsEstimate: number; epsActual: number; surp: number; }
+interface RatingChange { ticker: string; date: string; firm: string | null; previousGrade: string | null; newGrade: string | null; action: string | null; }
 
 function earnSurprises(events: LiveEarningsDoc[]): EarnSurprise[] {
   return events
@@ -89,6 +93,8 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
   const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   const { data: liveNews, loading: liveNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
   const { data: macroEvents, loading: macroLoading } = useApiList<MacroEventDoc>("/market-data/macro-events");
+  // Analyst rating changes (upgrades/downgrades) — FMP-backed analyst_actions.
+  const { data: analystActions, loading: analystLoading } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
   // Recap docs carry the day's market internals (advance/decline, TRIN, up/down
   // volume, breadth %) computed by the backend from OHLCV bars. Pick the latest.
   const { data: recaps } = useApiList<RecapDoc>("/market-data/recaps");
@@ -140,6 +146,16 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
     .slice(0, 8);
 
+  // Analyst rating changes (FMP) — flatten each ticker's recentGrades into one
+  // dated feed, keep only real up/downgrades, then window it like the other
+  // recap blocks (today for daily, trailing week for weekly).
+  const gradeChanges = analystActions
+    .flatMap(a => (a.recentGrades ?? []).map(g => ({ ticker: a.ticker, ...g })))
+    .filter(g => g.date && (g.action === "upgrade" || g.action === "downgrade" || (g.newGrade && g.newGrade !== g.previousGrade)))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const todayGrades = gradeChanges.filter(g => g.date.slice(0, 10) === todayStr).slice(0, 8);
+  const weekGrades = gradeChanges.filter(g => g.date.slice(0, 10) >= weekAgoStr).slice(0, 10);
+
   // ---- Reusable cards ----
 
   const IndicesRow = liveIndices.length === 0 ? (
@@ -163,7 +179,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
   const SectorHeatCard = (
     <div className="card" style={{ marginTop: 14 }}>
       <div className="card-h">
-        <h3>Sector heatmap</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Sector heatmap</h3><VendorTag v="polygon" /></div>
         <span className="link" onClick={() => router.push("/menu/heatmap")}>View all →</span>
       </div>
       <div className="card-b">
@@ -203,7 +219,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
   const EarningsMoversCard = (list: EarnSurprise[], title: string) => (
     <div className="card">
       <div className="card-h">
-        <h3>{title}</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{title}</h3><VendorTag v="polygon" /></div>
         <button className="link" onClick={() => router.push("/menu/earnings")}>View all →</button>
       </div>
       <div className="card-b" style={{ paddingTop: 6 }}>
@@ -224,7 +240,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
   const NewsCard = (list: NewsArticleDoc[], title: string) => (
     <div className="card" style={{ marginTop: 14 }}>
       <div className="card-h">
-        <h3>{title}</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{title}</h3><VendorTag v="polygon" /></div>
         <span className="link" onClick={() => router.push("/menu/commentary")}>View all →</span>
       </div>
       <div className="card-b" style={{ paddingTop: 6 }}>
@@ -239,6 +255,37 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)" }}>{n.source}</div>
             </span>
           </a>
+        ))}
+      </div>
+    </div>
+  );
+
+  const gradeCls = (action: string | null) =>
+    action === "upgrade" ? "up" : action === "downgrade" ? "down" : "";
+
+  const AnalystChangesCard = (list: typeof gradeChanges, title: string) => (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div className="card-h">
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{title}</h3><VendorTag v="fmp" /></div>
+        <span className="link" onClick={() => router.push("/menu/analyst")}>View all →</span>
+      </div>
+      <div className="card-b" style={{ paddingTop: 6 }}>
+        {list.length === 0 ? (
+          <DataState loading={analystLoading} label="No analyst rating changes for this window yet." />
+        ) : list.map((g, i) => (
+          <div key={`${g.ticker}-${g.date}-${i}`} className="minirow" style={{ cursor: "pointer" }} onClick={() => openStock(g.ticker)}>
+            <StockLogo sym={g.ticker} size={20} />
+            <span className="tkr">{g.ticker}</span>
+            <span className="mid" style={{ whiteSpace: "normal", lineHeight: 1.4 }}>
+              {g.firm ?? "Analyst"}
+              {g.previousGrade && g.newGrade
+                ? <span style={{ color: "var(--text-dim-solid)" }}> · {g.previousGrade} → {g.newGrade}</span>
+                : g.newGrade
+                ? <span style={{ color: "var(--text-dim-solid)" }}> · {g.newGrade}</span>
+                : null}
+            </span>
+            <span className={`r ${gradeCls(g.action)}`} style={{ textTransform: "capitalize" }}>{g.action ?? "—"}</span>
+          </div>
         ))}
       </div>
     </div>
@@ -262,6 +309,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>
                 {dateLabel}
               </div>
+              <VendorTag v="polygon" />
               <div style={{ marginLeft: "auto" }}>
                 <button className="btn ai" title="Audio recap isn't connected to a live TTS service yet"
                   onClick={() => setAudioMsg(true)}>
@@ -282,7 +330,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontWeight: 600, letterSpacing: ".03em" }}>
                 DOWNLOAD:
               </span>
-              <button className="btn" onClick={() => downloadRecap(dateLabel, todayHeadlines, todaySurprises, "today")}>{DL_ICON} Today (EOD)</button>
+              <button className="btn" onClick={() => downloadRecap(dateLabel, todayHeadlines, todaySurprises, todayGrades, "today")}>{DL_ICON} Today (EOD)</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 14 }}>
               <div>
@@ -343,10 +391,11 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               </div>
             </div>
           )}
+          {AnalystChangesCard(todayGrades, "Analyst rating changes today")}
           <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
             <div className="col-12">
               <div className="card">
-                <div className="card-h"><h3>Market internals</h3></div>
+                <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market internals</h3><VendorTag v="polygon" /></div></div>
                 <div className="card-b">
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".8rem", marginBottom: 6 }}>
@@ -417,6 +466,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>
                 Week ending {dateLabel}
               </div>
+              <VendorTag v="polygon" />
             </div>
             {weekly && weekly.indices.some(i => i.pctChange != null) ? (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -442,7 +492,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontWeight: 600, letterSpacing: ".03em" }}>
                 DOWNLOAD:
               </span>
-              <button className="btn" onClick={() => downloadRecap(dateLabel, weekHeadlines, weekSurprises, "this-week")}>{DL_ICON} This Week</button>
+              <button className="btn" onClick={() => downloadRecap(dateLabel, weekHeadlines, weekSurprises, weekGrades, "this-week")}>{DL_ICON} This Week</button>
             </div>
             <div style={{ marginTop: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -463,7 +513,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
           <div className="dash" style={{ marginTop: 14, padding: 0 }}>
             <div className="col-6">
               <div className="card">
-                <div className="card-h"><h3>Sector leaders</h3><span className="pill up">Week</span></div>
+                <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Sector leaders</h3><VendorTag v="polygon" /></div><span className="pill up">Week</span></div>
                 <div className="card-b" style={{ paddingTop: 6 }}>
                   {weekly && weekly.sectorLeaders.length > 0 ? (
                     weekly.sectorLeaders.map(s => (
@@ -480,7 +530,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
             </div>
             <div className="col-6">
               <div className="card">
-                <div className="card-h"><h3>Sector laggards</h3><span className="pill dn">Week</span></div>
+                <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Sector laggards</h3><VendorTag v="polygon" /></div><span className="pill dn">Week</span></div>
                 <div className="card-b" style={{ paddingTop: 6 }}>
                   {weekly && weekly.sectorLaggards.length > 0 ? (
                     weekly.sectorLaggards.map(s => (
@@ -498,6 +548,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
           </div>
 
           {EarningsMoversCard(weekSurprises, "Biggest earnings surprises this week")}
+          {AnalystChangesCard(weekGrades, "Analyst rating changes this week")}
           {NewsCard(weekHeadlines, "This week's headlines")}
         </div>
       )}
@@ -509,7 +560,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
           <div className="side-drawer">
             <div className="drawer-h">
               <div style={{ flex: 1 }}>
-                <div className="drawer-title">Biggest Earnings Surprises</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div className="drawer-title">Biggest Earnings Surprises</div><VendorTag v="polygon" /></div>
                 <div className="drawer-sub">Ranked by EPS surprise magnitude</div>
               </div>
               <button className="closebtn" onClick={() => setDrawer(null)}>✕</button>

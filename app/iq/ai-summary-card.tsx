@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { VendorTag } from "./utils";
 
 /**
  * Collapsible AI-summary card — same interaction as the dashboard's
@@ -33,6 +34,7 @@ export function AiSummaryCard({
       >
         <h3 className="ai-c">{title}</h3>
         <span className="collapse-h-right">
+          <VendorTag v="fmp" />
           {pill}
           <svg className="collapse-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path

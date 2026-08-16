@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cls, arr, sign, DataState } from "../utils";
+import { cls, arr, sign, DataState, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
@@ -56,10 +56,14 @@ export function ThemesScreen() {
   const theme     = THEMES.find(t => t.id === themeId) ?? THEMES[0];
   const allStocks = resolveThemeStocks(theme.tickers, byTicker);
 
-  /* ── Sector filter (SIC-derived sector on each company doc, same as the
-     Screener) — options are the sectors actually present in this theme. ── */
+  /* ── Sector filter (SIC-derived sector on each company doc) — SAME option
+     set as the Screener: every sector present across the full companies
+     universe, so the list is identical and consistent across themes rather
+     than only the handful of sectors in the current theme. A sector with no
+     members in the selected theme falls through to the "no constituents"
+     empty state below. ── */
   const sectorOptions = ["All", ...Array.from(
-    new Set(allStocks.map(s => s.sector).filter((s): s is string => !!s)),
+    new Set(companies.map(c => c.sector).filter((s): s is string => !!s && s !== "—")),
   ).sort()];
   const stocks = sector === "All" ? allStocks : allStocks.filter(s => s.sector === sector);
 
@@ -71,7 +75,7 @@ export function ThemesScreen() {
 
   function handleThemeChange(id: string) {
     setThemeId(id);
-    setSector("All"); // sectors differ per theme — a stale pick could show nothing
+    setSector("All"); // reset to the full theme on switch, so a prior sector pick doesn't land on an empty view
     setSel(null);
   }
 
@@ -84,10 +88,13 @@ export function ThemesScreen() {
           <div style={{ fontWeight: 700, fontSize: ".92rem", color: "var(--text-hi)", marginBottom: 2 }}>
             {theme.name}
           </div>
-          <div className="page-sub">
-            {stocks.length} stocks · avg <span className={avg >= 0 ? "up" : "down"}>{avgLabel}</span>
-            {leader  && <> · Leader: <b>{leader.s}</b> <span className="up">{sign(leader.c)}</span></>}
-            {laggard && laggard.s !== leader?.s && <> · Laggard: <b>{laggard.s}</b> <span className="down">{sign(laggard.c)}</span></>}
+          <div className="page-sub" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span>
+              {stocks.length} stocks · avg <span className={avg >= 0 ? "up" : "down"}>{avgLabel}</span>
+              {leader  && <> · Leader: <b>{leader.s}</b> <span className="up">{sign(leader.c)}</span></>}
+              {laggard && laggard.s !== leader?.s && <> · Laggard: <b>{laggard.s}</b> <span className="down">{sign(laggard.c)}</span></>}
+            </span>
+            <VendorTag v="polygon" />
           </div>
         </div>
 

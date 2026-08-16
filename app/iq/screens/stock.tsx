@@ -319,12 +319,19 @@ function MetricBars({
 /** The reference layout's headline: EPS and Sales($Mil) bars side by side,
  * driven by the same Quarterly/Annual toggle as the rest of the card. */
 function EpsSalesBars({ data }: { data: EpsSalesPt[] }) {
+  // EPS and Sales in SEPARATE bordered boxes so each is identified on its own
+  // (matches the Earnings Hub's split EPS / Sales cards).
+  const box = { border: "1px solid var(--border-soft)", borderRadius: 10, background: "var(--surface-2)", padding: "10px 12px" };
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-      <MetricBars title="EPS" data={data.map(d => ({ label: d.label, v: d.eps }))}
-        fmt={v => v.toFixed(2)} />
-      <MetricBars title="Sales ($Mil)" data={data.map(d => ({ label: d.label, v: d.sales }))}
-        fmt={v => Math.round(v).toLocaleString()} />
+      <div style={box}>
+        <MetricBars title="EPS" data={data.map(d => ({ label: d.label, v: d.eps }))}
+          fmt={v => v.toFixed(2)} />
+      </div>
+      <div style={box}>
+        <MetricBars title="Sales ($Mil)" data={data.map(d => ({ label: d.label, v: d.sales }))}
+          fmt={v => Math.round(v).toLocaleString()} />
+      </div>
     </div>
   );
 }
@@ -852,8 +859,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
         .filter(c => c.sector === group && c.ticker !== sym && c.pctChange != null)
         .sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0))
         .map(c => ({ t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating, name: c.name }));
-  const peers = peersAll.slice(0, 5);       // card shows the top few
-  const peersTotal = peersAll.length;        // and the drawer shows all of them
+  const peers = peersAll;                    // card shows ALL peers (scrolls within the card body when they overflow)
+  const peersTotal = peersAll.length;
   const pcs = peersAll.map(x => x.c);
   const pmx = pcs.length ? Math.max(...pcs) : 0;
   const pmn = pcs.length ? Math.min(...pcs) : 0;
@@ -1482,7 +1489,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {/* Peers */}
           <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <div className="card-h">
-              <h3>Peers · who&apos;s leading{peersTotal > 0 ? ` · ${Math.min(peers.length, peersTotal)} of ${peersTotal}` : ""}</h3>
+              <h3>Peers · who&apos;s leading{peersTotal > 0 ? ` · ${peersTotal}` : ""}</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <VendorTag v="polygon" />
                 {peersTotal > peers.length && <span className="link" onClick={() => setInnerDrawer("peers")}>View all →</span>}
@@ -1506,6 +1513,58 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   </div>
                 );
               }) : <DataState loading={companiesLoading} label="No live peers found in this sector yet." />}
+            </div>
+          </div>
+
+          {/* Key levels (pivots) — directly below Peers; both flex-fill so the
+              Peers + Key levels pair spans the same height as the Financials
+              card in the LEFT column. */}
+          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <div className="card-h">
+              <h3>Key levels (pivots)</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <VendorTag v="polygon" />
+                <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
+              </div>
+            </div>
+            <div className="card-b" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+                Weekly pivots
+              </div>
+              {(["R2", "R1", "Pivot", "S1", "S2"] as const).map(label => {
+                const wk = klWeekly;
+                const v = wk ? ({ R2: wk.r2, R1: wk.r1, Pivot: wk.pivot, S1: wk.s1, S2: wk.s2 } as Record<string, number | null>)[label] : null;
+                const tone = label.startsWith("R") ? "var(--down)" : label.startsWith("S") ? "var(--up)" : "var(--text-hi)";
+                return (
+                  <div key={label} className="minirow">
+                    <span className="tkr" style={{ width: 50, color: tone }}>{label}</span>
+                    <span className="mid" />
+                    <span className="r mono">{v != null ? `$${v.toFixed(2)}` : <NotAvailable />}</span>
+                  </div>
+                );
+              })}
+              <div style={{ height: 1, background: "var(--border-soft)", margin: "12px 0 8px" }} />
+              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+                Moving averages &amp; range
+              </div>
+              {hi == null && lo == null && ema50 == null && sma200 == null ? (
+                <DataState loading={liveCompanyLoading || yearBarsLoading} label="No historical price data synced for this ticker yet." />
+              ) : (
+                ([
+                  ["52W High", hi,     isUp ? "up"   : "dim"],
+                  ["EMA 50",   ema50,  isUp ? "up"   : "down"],
+                  ["SMA 200",  sma200, sma200 != null && p > sma200 ? "up" : "down"],
+                  ["52W Low",  lo,     isUp ? "dim"  : "down"],
+                ] as [string, number | null, string][]).map(x => (
+                  <div key={x[0]} className="minirow">
+                    <span className="tkr" style={{ width: 70 }}>{x[0]}</span>
+                    <span className="mid" />
+                    <span className="r mono" style={{ color: x[2] === "dim" ? "var(--text-hi)" : `var(--${x[2]})` }}>
+                      {x[1] != null ? `$${nf(x[1])}` : <NotAvailable />}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -1569,56 +1628,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     </div>
                   ))}
                 </>
-              )}
-            </div>
-          </div>
-
-          {/* Key levels (pivots) — moved into RIGHT COLUMN, same reason as above. */}
-          <div className="card">
-            <div className="card-h">
-              <h3>Key levels (pivots)</h3>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <VendorTag v="polygon" />
-                <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
-              </div>
-            </div>
-            <div className="card-b">
-              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
-                Weekly pivots
-              </div>
-              {(["R2", "R1", "Pivot", "S1", "S2"] as const).map(label => {
-                const wk = klWeekly;
-                const v = wk ? ({ R2: wk.r2, R1: wk.r1, Pivot: wk.pivot, S1: wk.s1, S2: wk.s2 } as Record<string, number | null>)[label] : null;
-                const tone = label.startsWith("R") ? "var(--down)" : label.startsWith("S") ? "var(--up)" : "var(--text-hi)";
-                return (
-                  <div key={label} className="minirow">
-                    <span className="tkr" style={{ width: 50, color: tone }}>{label}</span>
-                    <span className="mid" />
-                    <span className="r mono">{v != null ? `$${v.toFixed(2)}` : <NotAvailable />}</span>
-                  </div>
-                );
-              })}
-              <div style={{ height: 1, background: "var(--border-soft)", margin: "12px 0 8px" }} />
-              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
-                Moving averages &amp; range
-              </div>
-              {hi == null && lo == null && ema50 == null && sma200 == null ? (
-                <DataState loading={liveCompanyLoading || yearBarsLoading} label="No historical price data synced for this ticker yet." />
-              ) : (
-                ([
-                  ["52W High", hi,     isUp ? "up"   : "dim"],
-                  ["EMA 50",   ema50,  isUp ? "up"   : "down"],
-                  ["SMA 200",  sma200, sma200 != null && p > sma200 ? "up" : "down"],
-                  ["52W Low",  lo,     isUp ? "dim"  : "down"],
-                ] as [string, number | null, string][]).map(x => (
-                  <div key={x[0]} className="minirow">
-                    <span className="tkr" style={{ width: 70 }}>{x[0]}</span>
-                    <span className="mid" />
-                    <span className="r mono" style={{ color: x[2] === "dim" ? "var(--text-hi)" : `var(--${x[2]})` }}>
-                      {x[1] != null ? `$${nf(x[1])}` : <NotAvailable />}
-                    </span>
-                  </div>
-                ))
               )}
             </div>
           </div>

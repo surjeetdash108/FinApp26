@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { CandleChart, RsiPane, DataState, Spark, type EarnQ } from "./utils";
+import { CandleChart, RsiPane, DataState, Spark, VendorTag, type EarnQ } from "./utils";
 import { ExpandBtn } from "./shell";
 import { useApiList } from "./hooks/useApiList";
 import { useApiResource } from "./hooks/useApiResource";
@@ -131,7 +131,10 @@ export function StockListCard({
     <div style={{ width: 340, flexShrink: 0, display: "flex", flexDirection: "column" }}>
       <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <div className="card-h">
-          <h3>{title}</h3>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <h3>{title}</h3>
+            <VendorTag v="polygon" />
+          </span>
           {headerRight}
         </div>
         <div className="pf-list" style={{ flex: 1, maxHeight: maxListHeight ?? "none", overflowY: "auto" }}>
@@ -285,6 +288,7 @@ export function ChartCard({
             <button className={`rng indbtn${showRsi ? " on" : ""}`} onClick={() => setShowRsi(v => !v)}>RSI</button>
             <button className={`rng indbtn${showEarnings ? " on" : ""}`} onClick={() => setShowEarnings(v => !v)}>Earnings</button>
             <div style={{ flex: 1 }} />
+            <VendorTag v="polygon" />
             <ExpandBtn
               title={`${sym} · Price Chart`}
               node={

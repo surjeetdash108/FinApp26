@@ -706,7 +706,7 @@ export function DashboardScreen() {
                   >
                     <StockLogo sym={s.ticker} size={26} />
                     <span className="tkr">{s.ticker}</span>
-                    <span className="mid">RS {s.rsRating} · {s.sector ?? "—"}</span>
+                    <span className="mid">{s.sector ?? "—"}</span>
                     <span className={`r ${cls(dayC)}`}>{sign(dayC)}</span>
                   </div>
                 );
@@ -784,7 +784,7 @@ export function DashboardScreen() {
                 >
                   <StockLogo sym={w.ticker} size={26} />
                   <span className="tkr">{w.ticker}</span>
-                  <span className="mid">{companyByTicker.get(w.ticker) ? "live" : "not synced"}</span>
+                  <span className="mid">{companyByTicker.get(w.ticker)?.name ?? "not synced"}</span>
                   <span className={`r ${cls(w.pctChange)}`}>{sign(w.pctChange)}</span>
                 </div>
               ))}

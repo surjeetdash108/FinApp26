@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useBackendBars } from "../hooks/useBackendBars";
 import type { OHLCBar } from "../utils";
-import { DataState } from "../utils";
+import { DataState, VendorTag } from "../utils";
 
 /** One reported quarter: report date (SEC filing date) + EPS actual/estimate.
  * Sourced from the financials doc's `quarters` (~10 quarters) rather than the
@@ -188,6 +188,16 @@ export function EarningsPlaybook({ sym, reports }: { sym: string; reports: Playb
 
   return (
     <div>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 10 }}>
+        <span style={{ fontSize: ".62rem", color: "var(--text-dim-solid)" }}>Price reaction</span>
+        <VendorTag v="polygon" />
+        {hasBeatMiss && (
+          <>
+            <span style={{ fontSize: ".62rem", color: "var(--text-dim-solid)", marginLeft: 6 }}>Beat / miss</span>
+            <VendorTag v="fmp" />
+          </>
+        )}
+      </div>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: "20px 34px" }}>
         <Stat k="Typical move">
           <div style={{ font: "700 1.7rem var(--f-display, inherit)", color: "var(--text-hi)", letterSpacing: "-.02em", lineHeight: 1 }}>

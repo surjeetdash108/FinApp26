@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { StockLogo, DataState, NotAvailable } from "../utils";
+import { useRef, useState, useEffect } from "react";
+import { StockLogo, DataState, NotAvailable, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
@@ -159,8 +159,11 @@ function DividendDrawer({ stock, onClose }: { stock: DivStock; onClose: () => vo
         <div className="drawer-h">
           <StockLogo sym={stock.sym} size={30} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>
-              {stock.sym} · Dividend History
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>
+                {stock.sym} · Dividend History
+              </div>
+              <VendorTag v="polygon" />
             </div>
             <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{stock.name}</div>
           </div>
@@ -282,6 +285,20 @@ export function MacroScreen() {
   const vixTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [vixPop, setVixPop] = useState<{ s: CompanyDoc & { beta: number }; x: number; y: number } | null>(null);
 
+  // Match the Economic calendar's height to the left column (Market holidays +
+  // VIX) so the calendar's bottom lines up with the VIX widget's bottom. Measured
+  // live so it tracks the left column as its content/viewport changes.
+  const leftColRef = useRef<HTMLDivElement | null>(null);
+  const [leftColH, setLeftColH] = useState<number>();
+  useEffect(() => {
+    const el = leftColRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setLeftColH(el.offsetHeight));
+    ro.observe(el);
+    setLeftColH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
+
   const showVixPop = (e: React.MouseEvent, s: CompanyDoc & { beta: number }) => {
     if (vixTimerRef.current) clearTimeout(vixTimerRef.current);
     const x = Math.max(8, Math.min(e.clientX + 14, window.innerWidth - 306));
@@ -301,11 +318,11 @@ export function MacroScreen() {
       </div>
 
       {/* ── Market regime + VIX + Economic calendar ── */}
-      <div className="dash" style={{ alignItems: "stretch" }}>
-        <div className="col-4" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="dash" style={{ alignItems: "flex-start" }}>
+        <div ref={leftColRef} className="col-4" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div className="card">
             <div className="card-h">
-              <h3>Market holidays</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market holidays</h3><VendorTag v="polygon" /></div>
               <button className="link" onClick={() => setHolidaysAllOpen(true)}>Show all →</button>
             </div>
             <div className="card-b" style={{ padding: "6px 13px 10px" }}>
@@ -332,7 +349,7 @@ export function MacroScreen() {
           </div>
           <div className="card vix" style={{ flex: 1 }}>
             <div className="card-h">
-              <h3>VIX</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>VIX</h3><VendorTag v="polygon" /></div>
               <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>
             </div>
             <div className="card-b">
@@ -353,9 +370,12 @@ export function MacroScreen() {
         </div>
 
         <div className="col-8" style={{ display: "flex", flexDirection: "column" }}>
-          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {/* Height matched to the left column (measured) so the calendar's
+              bottom aligns with the VIX widget's bottom; it scrolls internally
+              instead of growing and elongating the VIX column. */}
+          <div className="card" style={{ height: leftColH ?? 460, display: "flex", flexDirection: "column" }}>
             <div className="card-h">
-              <h3>Economic calendar</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Economic calendar</h3><VendorTag v="fmp" /></div>
               <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>
                 {ecoWeekCount} this week
               </span>
@@ -402,7 +422,7 @@ export function MacroScreen() {
       <div style={{ marginTop: 14 }}>
         <div className="card">
           <div className="card-h">
-            <h3>VIX-sensitive stocks</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>VIX-sensitive stocks</h3><VendorTag v="polygon" /></div>
             <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>Highest-beta names — most sensitive to volatility spikes · hover for details</span>
           </div>
           <div className="tbl-wrap">
@@ -538,7 +558,10 @@ export function MacroScreen() {
             <div onClick={e => e.stopPropagation()} style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, width: "min(460px, 100%)", boxShadow: "0 20px 60px rgba(0,0,0,.5)" }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "16px 18px", borderBottom: "1px solid var(--border-soft)" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)", lineHeight: 1.3 }}>{d.name}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)", lineHeight: 1.3 }}>{d.name}</div>
+                    <VendorTag v="fmp" />
+                  </div>
                   <div style={{ fontSize: ".74rem", color: "var(--text-dim-solid)", marginTop: 3 }}>{dateFull}{d.country ? ` · ${d.country}` : ""}</div>
                 </div>
                 <span className="pill" style={{ background: "var(--surface-3)", color: tierColor, flexShrink: 0 }}>{tier} impact</span>

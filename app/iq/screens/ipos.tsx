@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { cls, sign, StockLogo, DataState } from "../utils";
+import { cls, sign, StockLogo, DataState, VendorTag } from "../utils";
 
 // Same embedded stock detail the Movers drawer uses.
 const StockScreenEmbed = dynamic<{ initialSym?: string }>(
@@ -135,6 +135,9 @@ export function IPOsScreen() {
 
       {tab === "recent" && (<>
       {/* Stats strip */}
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: ".68rem", color: "var(--text-dim-solid)" }}>Aftermarket performance</span><VendorTag v="polygon" />
+      </div>
       <div className="dash" style={{ marginBottom: 14 }}>
         <div className="col-4">
           <div className="card">
@@ -171,7 +174,7 @@ export function IPOsScreen() {
 
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-h">
-          <h3>Recent IPO performance</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Recent IPO performance</h3><VendorTag v="polygon" /></div>
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>click any row to open stock detail</span>
         </div>
         <div className="tbl-wrap">
@@ -235,7 +238,7 @@ export function IPOsScreen() {
       {tab === "pipeline" && (
       <div className="card">
         <div className="card-h">
-          <h3>Upcoming pipeline</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Upcoming pipeline</h3><VendorTag v="sec" /></div>
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>SEC-EDGAR registration filings (S-1 / 424B)</span>
         </div>
         <div className="tbl-wrap">
@@ -280,7 +283,7 @@ export function IPOsScreen() {
       {tab === "calendar" && filteredCalendar.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <div className="card-h">
-            <h3>Live IPO Calendar</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Live IPO Calendar</h3><VendorTag v="polygon" /></div>
             <span className="pill ai" style={{ fontSize: ".68rem" }}>live · Polygon</span>
           </div>
           <div className="tbl-wrap">

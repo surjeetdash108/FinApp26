@@ -18,7 +18,7 @@ import { useAppSelector } from "../store/hooks";
 import { AuthGuard } from "../dashboard/auth-guard";
 import { menuItems } from "../dashboard/menu-items";
 import { type PulseItem } from "./data";
-import { fmt, sign, cls, arr, SemiGauge, DataState, NotAvailable } from "./utils";
+import { fmt, sign, cls, arr, SemiGauge, DataState, NotAvailable, VendorTag } from "./utils";
 import { NotificationBell } from "./notification-bell";
 import { useTickerSearch } from "./hooks/useTickerSearch";
 import { useTapeStream } from "./hooks/useTapeStream";
@@ -353,7 +353,7 @@ function IndexDrawer({ idx, pulse: livePulse, sectorsLive, loading, onClose }: {
   const dec = x.value > 1000 ? 0 : 2;
   const dollar = x.value - x.prevClose;
   const c = x.change >= 0 ? "up" : "down";
-  const eq = ["S&P 500", "Nasdaq", "Dow", "Russell 2K"].includes(x.label);
+  const eq = ["S&P 500", "Nasdaq", "Dow", "Russell 2000"].includes(x.label);
   const sortedSectors = [...sectorsLive].sort((a, b) => b.pctChange - a.pctChange);
   const lead = sortedSectors.slice(0, 3);
   const lag = sortedSectors.slice(-3).reverse();
@@ -886,6 +886,11 @@ export function IQShell({ children }: { children: React.ReactNode }) {
                 </div>
                 {searchOpen && (
                   <div className="cmd-dropdown">
+                    {displayMatches.length > 0 && (
+                      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, padding: "6px 12px 2px", fontSize: ".6rem", color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+                        Tickers <VendorTag v="polygon" />
+                      </div>
+                    )}
                     {displayMatches.map(m => (
                       <div key={m.sym} className="palette-item"
                         onMouseDown={e => e.preventDefault()}

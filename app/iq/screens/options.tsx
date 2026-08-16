@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { sign, cls, arr, fmt, StockLogo, DataState, NotAvailable } from "../utils";
+import { sign, cls, arr, fmt, StockLogo, DataState, NotAvailable, VendorTag } from "../utils";
 import { useApiResource } from "../hooks/useApiResource";
 import { useApiList } from "../hooks/useApiList";
 import { OptionsChainDoc, OPTIONS_UNIVERSE } from "../types";
@@ -82,6 +82,7 @@ export function OptionsScreen() {
               onChange={e => setQuery(e.target.value)}
               autoComplete="off"
             />
+            <VendorTag v="polygon" />
           </div>
           <div className="opt-list">
             {filtered.map(o => (
@@ -129,6 +130,7 @@ export function OptionsScreen() {
                     Curated universe only · {OPTIONS_UNIVERSE.join(", ")}
                   </div>
                 )}
+                <span style={{ marginLeft: "auto" }}><VendorTag v="polygon" /></span>
               </div>
 
               {/* Expiry tabs */}
@@ -150,6 +152,7 @@ export function OptionsScreen() {
               <div className="opt-chain-wrap">
                 <span className="opt-cap opt-cap-c">▲ CALLS</span>
                 <span className="opt-cap opt-cap-p">PUTS ▼</span>
+                <span style={{ position: "absolute", top: 6, right: 8 }}><VendorTag v="polygon" /></span>
                 <div className="opt-chain-scroll">
                   <table className="opt-chain">
                     <thead>

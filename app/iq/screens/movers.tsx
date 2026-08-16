@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { type Mover, maPostureLabel } from "../data";
-import { fmt, sign, arr, Spark, StockLogo, DataState } from "../utils";
+import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { LiveMoverDoc, CompanyDoc } from "../types";
@@ -170,6 +170,7 @@ export function MoversScreen() {
       )}
 
       <div className="card">
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", padding: "8px 12px 0" }}><VendorTag v="polygon" /></div>
         <table className="tbl">
           <thead>
             <tr>

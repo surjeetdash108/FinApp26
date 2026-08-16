@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { StockLogo, DataState } from "../utils";
+import { StockLogo, DataState, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
@@ -263,7 +263,7 @@ export function CommentaryScreen() {
           <div className="col-8">
             <div className="card">
               <div className="card-h">
-                <h3>{feedLabel.title}{q ? ` · “${search.trim()}”` : ""}</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}><h3>{feedLabel.title}{q ? ` · “${search.trim()}”` : ""}</h3><VendorTag v={["polygon", "fmp"]} /></div>
                 {feedLabel.badge}
               </div>
               <div className="card-b" style={{ paddingTop: 2, maxHeight: 620, overflowY: "auto" }}>
@@ -283,7 +283,7 @@ export function CommentaryScreen() {
             {/* Quick lookup — tap a ticker to add it to the feed filter */}
             <div className="card" style={{ marginTop: 14 }}>
               <div className="card-h">
-                <h3>{activeTab === 3 ? "Tracked names" : "Quick filter"}</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{activeTab === 3 ? "Tracked names" : "Quick filter"}</h3><VendorTag v="polygon" /></div>
                 <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>tap to add to filter</span>
               </div>
               <div className="card-b" style={{ paddingTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -312,13 +312,37 @@ export function CommentaryScreen() {
                     </svg>
                   </div>
                   <div>
-                    <h2 style={{ fontSize: ".92rem" }}>Before the Bell</h2>
-                    <div className="meta">pushed 8:30a ET</div>
+                    <h2 style={{ fontSize: ".92rem", display: "flex", alignItems: "center", gap: 6 }}>Before the Bell <VendorTag v={["polygon", "fmp"]} /></h2>
+                    <div className="meta">pre-market headlines</div>
                   </div>
                 </div>
               </div>
               <div className="wmn-body" style={{ padding: "6px 18px 14px" }}>
-                <DataState label="A pushed pre-market summary (futures, overnight moves, names reporting before the open) needs a scheduled digest job — not built yet. Live news for any ticker is available via the feed and filter above." />
+                {premarket.length === 0 ? (
+                  <DataState label="No pre-market headlines yet this session. Live news for any ticker is available via the feed and filter above." />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                    {premarket.slice(0, 5).map((n, i) => (
+                      <a
+                        key={n.id ?? `${n.ticker}-${i}`}
+                        href={n.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: "none", color: "inherit", display: "block" }}
+                      >
+                        <div style={{ fontSize: ".8rem", color: "var(--text)", lineHeight: 1.4 }}>
+                          <b style={{ color: "var(--text-hi)" }}>{n.ticker}</b> {n.headline}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: ".64rem", color: "var(--text-dim-solid)" }}>{n.source}</span>
+                          {n.vendor && (
+                            <span className="pill" style={{ fontSize: ".54rem", background: "var(--surface-3)", color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".03em" }}>via {n.vendor}</span>
+                          )}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -339,7 +363,7 @@ export function CommentaryScreen() {
 
             <div className="card">
               <div className="card-h">
-                <h3>Filings wire</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Filings wire</h3><VendorTag v="sec" /></div>
                 <span className="pill ai" style={{ fontSize: ".68rem" }}>SEC 8-K</span>
               </div>
               <div className="card-b">
@@ -361,7 +385,7 @@ export function CommentaryScreen() {
 
             <div className="card" style={{ flex: 1 }}>
               <div className="card-h">
-                <h3>Market regime</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market regime</h3><VendorTag v="fred" /></div>
                 {regime && (
                   <span className="pill" style={{
                     background: regime.regime === "Risk-On" ? "var(--up-dim, rgba(47,230,166,.18))"

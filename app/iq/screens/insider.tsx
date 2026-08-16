@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useIQActions } from "../shell";
-import { StockLogo, DataState, NotAvailable } from "../utils";
+import { StockLogo, DataState, NotAvailable, VendorTag } from "../utils";
 import { apiGet } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import type { InsiderTxDoc } from "../types";
@@ -26,11 +26,36 @@ interface FundHoldingDoc {
 }
 interface PositionDoc { id: string; cusip: string; nameOfIssuer: string; value: number; shares: number; }
 
+// Ticker-indexed 13F ownership rollup from FMP (see backend/src/sync/
+// institutional-ownership.job.ts, market-data/institutional-ownership.controller.ts).
+interface InstOwnDoc {
+  id: string; ticker: string;
+  investorsHolding: number | null; lastInvestorsHolding: number | null;
+  investorsHoldingChange: number | null;
+  numberOf13Fshares: number | null; numberOf13FsharesChange: number | null;
+  totalInvested: number | null; ownershipPercent: number | null; putCallRatio: number | null;
+}
+
 function fmtValue(v: number) {
   if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
   if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
   if (v >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
   return `$${v}`;
+}
+/** Compact signed integer (holder/share counts): 1234 → "1.2K", −5.0M. */
+function fmtCompact(v: number | null): string {
+  if (v == null) return "—";
+  const s = v < 0 ? "−" : "";
+  const a = Math.abs(v);
+  if (a >= 1e9) return `${s}${(a / 1e9).toFixed(1)}B`;
+  if (a >= 1e6) return `${s}${(a / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${s}${(a / 1e3).toFixed(1)}K`;
+  return `${s}${a}`;
+}
+/** Same, with an explicit + sign for positives (QoQ deltas). */
+function fmtDelta(v: number | null): string {
+  if (v == null) return "—";
+  return (v > 0 ? "+" : "") + fmtCompact(v);
 }
 async function fetchPositions(cik: string, accessionNumber: string): Promise<PositionDoc[]> {
   return apiGet<PositionDoc[]>(
@@ -59,7 +84,10 @@ function InsiderDrawer({ sym, liveTxns, loading, onClose, onOpenFull }: {
         <div className="drawer-h">
           <div className="sd-logo" style={{ background: "linear-gradient(135deg,#1f6b4d,#0e3a2a)", color: "#5ff0b3" }}>{sym[0]}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{sym}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{sym}</div>
+              <VendorTag v="sec" />
+            </div>
             <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>Insider activity · Form 4 filings</div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
@@ -128,7 +156,10 @@ function FundDrawer({ fund, onClose }: { fund: FundHoldingDoc; onClose: () => vo
         <div className="drawer-h">
           <div className="sd-logo" style={{ background: "linear-gradient(135deg,#3a2f6b,#241c44)", color: "var(--brand-2)" }}>{fund.fundName[0]}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{fund.fundName}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{fund.fundName}</div>
+              <VendorTag v="sec" />
+            </div>
             <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>13F filed {fund.latestFilingDate}</div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
@@ -173,6 +204,9 @@ export function InsiderScreen() {
 
   const { data: liveInsiderTx, loading: liveInsiderTxLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
   const { data: liveFunds, loading: liveFundsLoading } = useApiList<FundHoldingDoc>("/market-data/fund-holdings");
+  // Ticker-indexed institutional (13F) ownership from FMP — the per-ticker
+  // rollup SEC 13F (CUSIP-keyed) cannot produce.
+  const { data: instOwn, loading: instOwnLoading } = useApiList<InstOwnDoc>("/market-data/institutional-ownership");
 
   // Real cross-fund overlap (CUSIP-matched across live 13F positions).
   const [liveOverlap, setLiveOverlap] = useState<Array<{ cusip: string; name: string; funds: string[] }> | null>(null);
@@ -248,6 +282,31 @@ export function InsiderScreen() {
 
   const sortedFunds = [...liveFunds].sort((a, b) => b.totalValue - a.totalValue);
 
+  // ---- institutional ownership (FMP) filter + sort + rankings ----
+  const instRows = instOwn.filter(d => d.investorsHolding != null);
+  const instFiltered = instRows.filter(d => {
+    const chg = d.investorsHoldingChange ?? 0;
+    if (instFilter === "Net buying")  return chg > 0;
+    if (instFilter === "Net selling") return chg < 0;
+    return true;
+  });
+  const instSorted = [...instFiltered].sort((a, b) =>
+    instSort === "owners"
+      ? (b.investorsHolding ?? 0) - (a.investorsHolding ?? 0)
+      : Math.abs(b.investorsHoldingChange ?? 0) - Math.abs(a.investorsHoldingChange ?? 0),
+  ).slice(0, 50);
+  const instActive = [...instRows]
+    .sort((a, b) => (b.investorsHolding ?? 0) - (a.investorsHolding ?? 0))
+    .slice(0, 6);
+  const mostBought = [...instRows]
+    .filter(d => (d.investorsHoldingChange ?? 0) > 0)
+    .sort((a, b) => (b.investorsHoldingChange ?? 0) - (a.investorsHoldingChange ?? 0))
+    .slice(0, 5);
+  const mostSold = [...instRows]
+    .filter(d => (d.investorsHoldingChange ?? 0) < 0)
+    .sort((a, b) => (a.investorsHoldingChange ?? 0) - (b.investorsHoldingChange ?? 0))
+    .slice(0, 5);
+
   return (
     <>
 
@@ -263,7 +322,7 @@ export function InsiderScreen() {
           {active.length > 0 && (
             <div className="card" style={{ marginBottom: 12 }}>
               <div className="card-h">
-                <h3>Most active by insider $ volume</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Most active by insider $ volume</h3><VendorTag v="sec" /></div>
                 <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>tap a name for all its filings</span>
               </div>
               <div className="card-b" style={{ paddingTop: 8, display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -292,7 +351,7 @@ export function InsiderScreen() {
 
           <div className="card">
             <div className="card-h">
-              <h3>{insFilter === "All" ? "All activity" : insFilter} · {list.length} filings</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{insFilter === "All" ? "All activity" : insFilter} · {list.length} filings</h3><VendorTag v="sec" /></div>
               <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live · SEC EDGAR Form 4</span>
             </div>
             <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
@@ -362,11 +421,26 @@ export function InsiderScreen() {
         <>
           <div className="card" style={{ marginBottom: 12 }}>
             <div className="card-h">
-              <h3>Most active institutional stocks</h3>
-              <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>tap a name for fund detail</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Most held by institutions</h3><VendorTag v="fmp" /></div>
+              <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>tap a ticker for its stock page</span>
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
-              <DataState label="Stock-level institutional ownership (owners count, % owned, buy/sell direction) needs a ticker-indexed 13F aggregation this plan doesn't have yet — SEC 13F positions are keyed by CUSIP, not ticker. The fund-level table and CUSIP-matched overlap below are real." />
+              {instActive.length === 0 ? (
+                <DataState loading={instOwnLoading} label="No institutional-ownership data synced yet." />
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {instActive.map(o => (
+                    <button key={o.ticker} className="tr-pill" onClick={() => openStockFull(o.ticker)}>
+                      <StockLogo sym={o.ticker} size={18} />
+                      <span className="tr-tk">{o.ticker}</span>
+                      <span className="tr-mt">
+                        {fmtCompact(o.investorsHolding)} owners
+                        {o.ownershipPercent != null ? ` · ${o.ownershipPercent.toFixed(1)}%` : ""}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -382,29 +456,57 @@ export function InsiderScreen() {
 
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="card-h">
-              <h3>{instFilter === "All" ? "All institutional activity" : instFilter} · by ticker</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{instFilter === "All" ? "All institutional activity" : instFilter} · by ticker</h3><VendorTag v="fmp" /></div>
               <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>13F · most recent quarter</span>
             </div>
             <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Ticker</th><th className="num">Inst. owners</th><th className="num">Inst. %</th>
-                    <th className="num">Buying</th><th className="num">Net QoQ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td colSpan={5} style={{ padding: 0 }}>
-                    <DataState label="No live per-ticker institutional ownership feed yet." />
-                  </td></tr>
-                </tbody>
-              </table>
+              {instSorted.length === 0 ? (
+                <DataState loading={instOwnLoading} label={
+                  instFilter === "All"
+                    ? "No institutional-ownership data synced yet."
+                    : `No tickers with net institutional ${instFilter === "Net buying" ? "buying" : "selling"} this quarter.`
+                } />
+              ) : (
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Ticker</th><th className="num">Inst. owners</th><th className="num">Inst. %</th>
+                      <th className="num">Owners QoQ</th><th className="num">Shares QoQ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {instSorted.map(d => (
+                      <tr key={d.ticker} data-sym={d.ticker} onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
+                        <td>
+                          <div className="co"><span className="s"><StockLogo sym={d.ticker} size={20} />{d.ticker}</span></div>
+                        </td>
+                        <td className="num">{fmtCompact(d.investorsHolding)}</td>
+                        <td className="num">{d.ownershipPercent != null ? `${d.ownershipPercent.toFixed(1)}%` : <NotAvailable />}</td>
+                        <td className="num">
+                          {d.investorsHoldingChange == null ? <NotAvailable /> : (
+                            <b className={d.investorsHoldingChange > 0 ? "up" : d.investorsHoldingChange < 0 ? "down" : ""}>
+                              {fmtDelta(d.investorsHoldingChange)}
+                            </b>
+                          )}
+                        </td>
+                        <td className="num">
+                          {d.numberOf13FsharesChange == null ? <NotAvailable /> : (
+                            <span className={d.numberOf13FsharesChange > 0 ? "up" : d.numberOf13FsharesChange < 0 ? "down" : ""}>
+                              {fmtDelta(d.numberOf13FsharesChange)}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
 
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="card-h">
-              <h3>Tracked 13F funds · by AUM</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Tracked 13F funds · by AUM</h3><VendorTag v="sec" /></div>
               <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live · SEC EDGAR 13F</span>
             </div>
             <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
@@ -436,7 +538,7 @@ export function InsiderScreen() {
             <div className="col-8">
               <div className="ai-block">
                 <div className="card-h">
-                  <h3 className="ai-c">◆ AI 13F Summary</h3>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3 className="ai-c">◆ AI 13F Summary</h3><VendorTag v="sec" /></div>
                   <span className="pill ai">Needs per-firm event feed</span>
                 </div>
                 <div className="card-b">
@@ -447,16 +549,30 @@ export function InsiderScreen() {
 
             <div className="col-4">
               <div className="card">
-                <div className="card-h"><h3>Cross-fund signals</h3></div>
+                <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Cross-fund signals</h3><VendorTag v={["fmp", "sec"]} /></div></div>
                 <div className="card-b">
                   <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--up)", fontWeight: 700, margin: "4px 0 6px" }}>
-                    Most owned (3+ funds)
+                    Institutions adding most (QoQ)
                   </div>
-                  <DataState label="Needs ticker-indexed 13F data — see note above." />
+                  {mostBought.length === 0 ? (
+                    <DataState loading={instOwnLoading} label="No net-buying data synced yet." />
+                  ) : mostBought.map(d => (
+                    <div key={d.ticker} className="minirow" onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
+                      <span className="mid"><b style={{ color: "var(--text-hi)" }}>{d.ticker}</b></span>
+                      <span className="r up">{fmtDelta(d.investorsHoldingChange)} owners</span>
+                    </div>
+                  ))}
                   <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--down)", fontWeight: 700, margin: "12px 0 6px" }}>
-                    Most sold (3+ funds)
+                    Institutions trimming most (QoQ)
                   </div>
-                  <DataState label="Needs ticker-indexed 13F data — see note above." />
+                  {mostSold.length === 0 ? (
+                    <DataState loading={instOwnLoading} label="No net-selling data synced yet." />
+                  ) : mostSold.map(d => (
+                    <div key={d.ticker} className="minirow" onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
+                      <span className="mid"><b style={{ color: "var(--text-hi)" }}>{d.ticker}</b></span>
+                      <span className="r down">{fmtDelta(d.investorsHoldingChange)} owners</span>
+                    </div>
+                  ))}
                   <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--brand-2)", fontWeight: 700, margin: "12px 0 6px" }}>
                     Live overlap (CUSIP-matched, real)
                   </div>

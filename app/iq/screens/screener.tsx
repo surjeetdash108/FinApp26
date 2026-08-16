@@ -6,6 +6,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
+import { VendorTag } from "../utils";
 
 // Maps the numeric 1-99 tech rating onto the filter's string categories
 // (Strong Buy / Buy / Neutral / Sell / Strong Sell).
@@ -192,7 +193,15 @@ export function ScreenerScreen() {
   }
 
   /* ── Filtered results ── */
-  const filtered = universe.filter(s => {
+  // The results list starts empty: it only populates once the user has picked
+  // at least one filter (a preset, the sector, or any manual criterion). This
+  // is a screener — an unfiltered "everything" list isn't a useful default.
+  const hasActiveFilters =
+    activePresets.size > 0 || sector !== "All" ||
+    rs90 || rs7090 || rsLt40 || salesGt20 || epsGt25 || marginPos ||
+    ratingBuy || mcGt10 || rvolGt15 || dmaAbove || rsiBand || priceGt5;
+
+  const filtered = !hasActiveFilters ? [] : universe.filter(s => {
     // Sector classification filter (from CompanyDoc.sector).
     if (sector !== "All" && s.sector !== sector) return false;
     // Preset filters — stock must pass at least one selected preset (OR logic)
@@ -244,8 +253,9 @@ export function ScreenerScreen() {
   return (
     <>
       <div className="page-head">
-        <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
-          {filtered.length} match{filtered.length !== 1 ? "es" : ""}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
+          {hasActiveFilters ? `${filtered.length} match${filtered.length !== 1 ? "es" : ""}` : "Select a filter to begin"}
+          <VendorTag v="polygon" />
         </span>
         <button className="btn primary" onClick={exportPdf} disabled={!selStock}
           title={selStock ? `Export ${selStock.ticker} data as PDF` : "Select a stock first"}
@@ -383,10 +393,10 @@ export function ScreenerScreen() {
           listCard={
             <StockListCard
               title="Results"
-              headerRight={<span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{filtered.length} matches</span>}
+              headerRight={<span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{hasActiveFilters ? `${filtered.length} matches` : "No filters"}</span>}
               isEmpty={filtered.length === 0}
-              loading={companiesLoading}
-              emptyMessage="No matches — try relaxing filters."
+              loading={hasActiveFilters && companiesLoading}
+              emptyMessage={hasActiveFilters ? "No matches — try relaxing filters." : "Select a filter to start screening — presets, sector, or any criterion below."}
               maxListHeight={414}
             >
               {filtered.map((s, i) => {
