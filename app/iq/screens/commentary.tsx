@@ -6,7 +6,8 @@ import { StockLogo, DataState, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
-import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc, LiveMoverDoc } from "../types";
+import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc } from "../types";
+import { sectorFilterOptions, matchesSector } from "../sector-filter";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 
@@ -128,7 +129,6 @@ export function CommentaryScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
   const { data: liveNews, loading: liveNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
-  const { data: liveMovers } = useApiList<LiveMoverDoc>("/market-data/movers");
   const { data: filingsWire } = useApiList<FilingsWireDoc>("/market-data/filings-wire");
   const filingsSorted = [...filingsWire].sort((a, b) => b.filingDate.localeCompare(a.filingDate));
   const { data: regimeList } = useApiList<MacroRegimeDoc>("/market-data/macro-regime");
@@ -172,13 +172,10 @@ export function CommentaryScreen() {
     return sorted;
   })();
 
-  // Sector dropdown uses the SAME list as the Movers screen — the distinct
-  // sectors from the /market-data/movers feed (GICS). Both screens read the
-  // same normalized sector strings, so filtering the feed by company.sector
-  // still matches these options.
-  const feedSectors = ["All", ...Array.from(
-    new Set(liveMovers.map(m => m.sector).filter((s): s is string => !!s && s !== "—")),
-  ).sort()];
+  // Sector dropdown uses the SAME unified option set as every other screen —
+  // "All" + live GICS sectors + curated theme baskets — so filtering the feed
+  // by company.sector (or by theme ticker membership) is uniform app-wide.
+  const feedSectors = sectorFilterOptions(companies);
   const effSec = feedSectors.includes(secFilter) ? secFilter : "All";
 
   /* Filter the feed by the typed text + sector + market-cap (on top of the tab).
@@ -192,7 +189,7 @@ export function CommentaryScreen() {
         (n.summary ?? "").toLowerCase().includes(q))) return false;
     if (effSec !== "All" || capFilter !== "All") {
       const c = companyByTicker.get(n.ticker);
-      if (effSec !== "All" && c?.sector !== effSec) return false;
+      if (effSec !== "All" && !matchesSector(effSec, n.ticker, c?.sector)) return false;
       if (capFilter !== "All" && capTier(c?.marketCap) !== capFilter) return false;
     }
     return true;
@@ -259,14 +256,16 @@ export function CommentaryScreen() {
 
         <div className="dash">
 
-          {/* col-8: Feed */}
-          <div className="col-8">
-            <div className="card">
+          {/* col-8: Feed — a flex column so the feed card grows to fill the
+              grid row (which the right rail sizes), squaring off the layout
+              instead of leaving an empty L below a short feed. */}
+          <div className="col-8" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div className="card" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
               <div className="card-h">
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}><h3>{feedLabel.title}{q ? ` · “${search.trim()}”` : ""}</h3><VendorTag v={["polygon", "fmp"]} /></div>
                 {feedLabel.badge}
               </div>
-              <div className="card-b" style={{ paddingTop: 2, maxHeight: 620, overflowY: "auto" }}>
+              <div className="card-b" style={{ paddingTop: 2, flex: 1, minHeight: 0, overflowY: "auto" }}>
                 {displayFeed.length === 0 ? (
                   <DataState loading={liveNewsLoading} label={
                     q
@@ -281,7 +280,7 @@ export function CommentaryScreen() {
             </div>
 
             {/* Quick lookup — tap a ticker to add it to the feed filter */}
-            <div className="card" style={{ marginTop: 14 }}>
+            <div className="card" style={{ flexShrink: 0 }}>
               <div className="card-h">
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{activeTab === 3 ? "Tracked names" : "Quick filter"}</h3><VendorTag v="polygon" /></div>
                 <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>tap to add to filter</span>

@@ -7,6 +7,7 @@ import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag } from "../utils
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { LiveMoverDoc, CompanyDoc } from "../types";
+import { sectorFilterOptions, matchesSector } from "../sector-filter";
 
 const StockScreenEmbed = dynamic<{ initialSym?: string }>(
   () => import("./stock").then(m => ({ default: m.StockScreen })),
@@ -67,18 +68,20 @@ export function MoversScreen() {
   const [tab,          setTab]          = useState<TabKey>("win");
   const [sector,       setSector]       = useState("All");
   const [cap,          setCap]          = useState("All");
+  const [query,        setQuery]        = useState("");
+  const [page,         setPage]         = useState(0);
   const [selectedSym,  setSelectedSym]  = useState<string | null>(null);
+  const PAGE_SIZE = 25;
+  const q = query.trim().toUpperCase();
 
-  const sectors = ["All", ...Array.from(new Set(movers.map(m => m.sector))).sort()];
+  const sectors = sectorFilterOptions(rvolCompanies);
 
   // Only the cap tiers present in the current feed are selectable; if the chosen
   // tier is no longer present (data refreshed), behave as "All".
   const availableCaps = ["All", ...CAP_ORDER.filter(c => movers.some(m => m.cap === c))];
   const effCap = availableCaps.includes(cap) ? cap : "All";
 
-  // Rows matching the current tab + cap, but NOT the sector filter — this feeds
-  // the clickable sector tags below so every available sector stays selectable
-  // (a sector-filtered tally would collapse to a single tag after one click).
+  // Rows matching the current tab + cap, before the sector filter is applied.
   const tabCapRows = movers.filter(m => {
     if (effCap !== "All" && m.cap !== effCap) return false;
     if (tab === "win")  return m.pctChange > 0;
@@ -87,48 +90,42 @@ export function MoversScreen() {
   });
 
   const filtered = tabCapRows
-    .filter(m => sector === "All" || m.sector === sector)
+    .filter(m => matchesSector(sector, m.ticker, m.sector))
+    .filter(m => !q || m.ticker.toUpperCase().includes(q) || (m.name ?? "").toUpperCase().includes(q))
     .sort((a, b) => {
       if (tab === "win")  return b.pctChange    - a.pctChange;
       if (tab === "lose") return a.pctChange    - b.pctChange;
       if (tab === "vol")  return b.rvolRatio - a.rvolRatio;
       return Math.abs(b.weekPct ?? 0) - Math.abs(a.weekPct ?? 0);
-    })
-    .slice(0, 50);
+    });
 
-  const tally: Record<string, number> = {};
-  tabCapRows.forEach(m => { tally[m.sector] = (tally[m.sector] || 0) + 1; });
-  const sectorTally = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+  // Paginate the full ranked list (up to 100 gainers / 100 losers per tab).
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const curPage = Math.min(page, totalPages - 1);
+  const pageRows = filtered.slice(curPage * PAGE_SIZE, curPage * PAGE_SIZE + PAGE_SIZE);
 
-  // Live price/%-overlay so the table matches the stock drawer (which reads the
-  // same universal-snapshot quote). The batch `market_movers` doc carries the
-  // session CLOSE, which diverges from the live "last price" on volatile names —
-  // the exact tickers that top this board. Ranking stays EOD-based (sort above);
-  // only the shown price/change go live. Falls back to the batch value per row
-  // when a quote is missing. Polls every 30s; refetches when the visible set
-  // changes (tab/sector/cap). /live/quotes caps at 25 tickers, so the 50 shown
-  // rows are fetched in two batches and merged.
-  const shownTickers = filtered.map(m => m.ticker);
-  const batch1 = shownTickers.slice(0, 25);
-  const batch2 = shownTickers.slice(25, 50);
-  const path1 = batch1.length ? `/live/quotes?tickers=${encodeURIComponent(batch1.join(","))}` : null;
-  const path2 = batch2.length ? `/live/quotes?tickers=${encodeURIComponent(batch2.join(","))}` : null;
+  // Live price/%-overlay so the table matches the stock drawer (same
+  // universal-snapshot quote). Fetched for the CURRENT PAGE only — PAGE_SIZE is
+  // 25, exactly /live/quotes' cap, so it's one call. Ranking stays EOD-based
+  // (sort above); only the shown price/change go live. Polls every 30s and
+  // refetches when the visible page changes (tab/sector/cap/search/page).
+  const shownTickers = pageRows.map(m => m.ticker);
+  const qpath = shownTickers.length ? `/live/quotes?tickers=${encodeURIComponent(shownTickers.join(","))}` : null;
   type QuoteRow = { ticker: string; price: number | null; pctChange: number | null };
-  const { data: liveQuotes1 } = useApiResource<QuoteRow[]>(path1, 30000);
-  const { data: liveQuotes2 } = useApiResource<QuoteRow[]>(path2, 30000);
-  const quoteByTicker = new Map([...(liveQuotes1 ?? []), ...(liveQuotes2 ?? [])].map(q => [q.ticker, q]));
+  const { data: liveQuotes } = useApiResource<QuoteRow[]>(qpath, 30000);
+  const quoteByTicker = new Map((liveQuotes ?? []).map(qr => [qr.ticker, qr]));
 
   return (
     <>
       <div className="page-head">
         <div className="tabs">
           {TABS.map(([k, l]) => (
-            <button key={k} className={`tab${k === tab ? " on" : ""}`} onClick={() => setTab(k as TabKey)}>{l}</button>
+            <button key={k} className={`tab${k === tab ? " on" : ""}`} onClick={() => { setTab(k as TabKey); setPage(0); }}>{l}</button>
           ))}
         </div>
         {liveCount > 0 && (
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {liveCount} names · top 50 gainers + 50 losers · ranked by session move · live prices
+            {liveCount} names · top 100 gainers + 100 losers · ranked by session move · live prices
           </span>
         )}
       </div>
@@ -136,38 +133,22 @@ export function MoversScreen() {
       {/* Filter bar */}
       <div className="fbar">
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Sector</span>
-        <select className="mv-sel" style={{ textTransform: "lowercase" }} value={sector} onChange={e => setSector(e.target.value)}>
-          {sectors.map(s => <option key={s} value={s}>{s.toLowerCase()}</option>)}
+        <select className="mv-sel" style={{ textTransform: "lowercase" }} value={sector} onChange={e => { setSector(e.target.value); setPage(0); }}>
+          {sectors.map(s => <option key={s} value={s} style={{ textTransform: "lowercase" }}>{s.toLowerCase()}</option>)}
         </select>
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 10 }}>Market cap</span>
-        <select className="mv-sel" style={{ textTransform: "lowercase" }} value={effCap} onChange={e => setCap(e.target.value)}>
+        <select className="mv-sel" style={{ textTransform: "lowercase" }} value={effCap} onChange={e => { setCap(e.target.value); setPage(0); }}>
           {availableCaps.map(c => <option key={c} value={c}>{c.toLowerCase()}</option>)}
         </select>
+        <input
+          value={query}
+          onChange={e => { setQuery(e.target.value.toUpperCase()); setPage(0); }}
+          placeholder="Search ticker…"
+          style={{ marginLeft: 10, width: 140, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
+        />
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{filtered.length} stocks</span>
       </div>
-
-      {/* Clickable sector tags — click to filter the movers by that sector,
-          click the active one again to clear back to All. */}
-      {sectorTally.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-          {sectorTally.map(([sec, count]) => {
-            const active = sector === sec;
-            return (
-              <span key={sec} className="pill"
-                onClick={() => setSector(active ? "All" : sec)}
-                style={{
-                  cursor: "pointer",
-                  background: active ? "var(--brand-2)" : "var(--surface-3)",
-                  color: active ? "#fff" : "var(--text-dim-solid)",
-                }}
-              >
-                {sec} <b style={{ color: active ? "#fff" : "var(--text-hi)" }}>{count}</b>
-              </span>
-            );
-          })}
-        </div>
-      )}
 
       <div className="card">
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", padding: "8px 12px 0" }}><VendorTag v="polygon" /></div>
@@ -191,7 +172,7 @@ export function MoversScreen() {
                     : <div style={{ padding: 16, color: "var(--text-dim-solid)" }}>No stocks match these filters.</div>}
                 </td>
               </tr>
-            ) : filtered.map(m => {
+            ) : pageRows.map(m => {
               const lq = quoteByTicker.get(m.ticker);
               const price = lq?.price ?? m.price;
               // Live %-change on the price tabs; the Week tab has no live weekly.
@@ -236,6 +217,16 @@ export function MoversScreen() {
           </tbody>
         </table>
       </div>
+
+      {filtered.length > PAGE_SIZE && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "12px 0" }}>
+          <button className="chip" disabled={curPage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={{ opacity: curPage <= 0 ? 0.4 : 1, cursor: curPage <= 0 ? "default" : "pointer" }}>← Prev</button>
+          <span style={{ fontSize: ".74rem", color: "var(--text-dim-solid)" }}>
+            Page {curPage + 1} of {totalPages} · {curPage * PAGE_SIZE + 1}–{Math.min(filtered.length, (curPage + 1) * PAGE_SIZE)} of {filtered.length}
+          </span>
+          <button className="chip" disabled={curPage >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} style={{ opacity: curPage >= totalPages - 1 ? 0.4 : 1, cursor: curPage >= totalPages - 1 ? "default" : "pointer" }}>Next →</button>
+        </div>
+      )}
 
       {/* Sliding stock detail drawer */}
       {selectedSym && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { cls, sign, StockLogo, DataState, VendorTag } from "../utils";
 
@@ -11,6 +11,9 @@ const StockScreenEmbed = dynamic<{ initialSym?: string }>(
 );
 import { useApiList } from "../hooks/useApiList";
 import type { IpoEventDoc, IpoPipelineDoc, CompanyDoc } from "../types";
+import { sectorFilterOptions, matchesSector } from "../sector-filter";
+
+const IPO_PAGE_SIZE = 20;
 
 function formatIpoPrice(low: number | null, high: number | null): string {
   if (low == null && high == null) return "—";
@@ -58,6 +61,9 @@ export function IPOsScreen() {
   const [sector, setSector] = useState("All");
   const [tab, setTab] = useState<"recent" | "pipeline" | "calendar">("recent");
   const [dateSort, setDateSort] = useState<"desc" | "asc">("desc"); // Recent-IPO date order
+  const [page, setPage] = useState(0);
+  // Back to page 1 whenever the visible set changes (tab, sector, date order).
+  useEffect(() => { setPage(0); }, [tab, sector, dateSort]);
   const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   const { data: pipeline } = useApiList<IpoPipelineDoc>("/market-data/ipo-pipeline");
   // IPO events carry no sector, so join the live companies collection for each
@@ -83,9 +89,7 @@ export function IPOsScreen() {
   // Prefer the IPO doc's own (SIC-derived) sector; fall back to the companies
   // universe. The dropdown is built from the sectors actually present.
   const secForIpo = (e: IpoEventDoc): string => e.sector ?? sectorOf(e.symbol);
-  const sectorOptions = ["All", ...Array.from(
-    new Set(liveIpos.map(secForIpo).filter(s => s && s !== "—")),
-  ).sort()];
+  const sectorOptions = sectorFilterOptions(companies);
 
   // Aftermarket performance (current price, day-1 pop %, return since offer) is
   // computed by the backend ipos job from Polygon daily bars for already-listed
@@ -104,10 +108,33 @@ export function IPOsScreen() {
     live: true,
   }));
   const filtered = liveRows
-    .filter(r => sector === "All" || r.sec === sector)
+    .filter(r => matchesSector(sector, r.s, r.sec))
     .sort((a, b) => dateSort === "desc" ? (b.date ?? "").localeCompare(a.date ?? "") : (a.date ?? "").localeCompare(b.date ?? ""));
   // Calendar tab shares the same sector filter (also ticker-based).
-  const filteredCalendar = liveIposSorted.filter(e => sector === "All" || secForIpo(e) === sector);
+  const filteredCalendar = liveIposSorted.filter(e => matchesSector(sector, e.symbol, secForIpo(e)));
+
+  // ── Pagination (shared across tabs; only one table renders at a time) ──
+  const pageSlice = <T,>(arr: T[]): T[] => {
+    const pc = Math.min(page, Math.max(0, Math.ceil(arr.length / IPO_PAGE_SIZE) - 1));
+    return arr.slice(pc * IPO_PAGE_SIZE, pc * IPO_PAGE_SIZE + IPO_PAGE_SIZE);
+  };
+  const renderPager = (total: number) => {
+    if (total <= IPO_PAGE_SIZE) return null;
+    const pageCount = Math.max(1, Math.ceil(total / IPO_PAGE_SIZE));
+    const pc = Math.min(page, pageCount - 1);
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderTop: "1px solid var(--border-soft)" }}>
+        <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+          {pc * IPO_PAGE_SIZE + 1}–{Math.min((pc + 1) * IPO_PAGE_SIZE, total)} of {total}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button className="chip" disabled={pc === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={{ opacity: pc === 0 ? 0.4 : 1, cursor: pc === 0 ? "default" : "pointer" }}>← Prev</button>
+          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", minWidth: 74, textAlign: "center" }}>Page {pc + 1} / {pageCount}</span>
+          <button className="chip" disabled={pc >= pageCount - 1} onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} style={{ opacity: pc >= pageCount - 1 ? 0.4 : 1, cursor: pc >= pageCount - 1 ? "default" : "pointer" }}>Next →</button>
+        </div>
+      </div>
+    );
+  };
 
   // Only rows with BOTH an offer price and a current price can produce a return.
   const perf = filtered.filter(
@@ -137,15 +164,15 @@ export function IPOsScreen() {
           className="iq-select"
           value={sector}
           onChange={e => setSector(e.target.value)}
-          style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem" }}
+          style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem", textTransform: "lowercase" }}
         >
-          {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          {sectorOptions.map(s => <option key={s} value={s} style={{ textTransform: "lowercase" }}>{s.toLowerCase()}</option>)}
         </select>
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>
-          {tab === "recent" ? `${filtered.length} of ${liveRows.length} shown`
-            : tab === "calendar" ? `${filteredCalendar.length} of ${liveIposSorted.length} shown`
-            : "sector n/a for pre-IPO filings"}
+          {tab === "recent" ? `${filtered.length} of ${liveRows.length} match`
+            : tab === "calendar" ? `${filteredCalendar.length} of ${liveIposSorted.length} match`
+            : `${pipelineSorted.length} filings`}
         </span>
       </div>
 
@@ -217,7 +244,7 @@ export function IPOsScreen() {
                 <tr>
                   <td colSpan={7} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No IPOs match your filter.</td>
                 </tr>
-              ) : filtered.map(r => {
+              ) : pageSlice(filtered).map(r => {
                 // Prefer the backend's return-since-offer; fall back to computing
                 // it from cur/offer. Null → "—" when there's no aftermarket price.
                   const ret = r.since ?? (r.cur != null && r.offer != null && r.offer !== 0 ? (r.cur - r.offer) / r.offer * 100 : null);
@@ -248,6 +275,7 @@ export function IPOsScreen() {
             </tbody>
           </table>
         </div>
+        {renderPager(filtered.length)}
       </div>
       </>)}
 
@@ -274,7 +302,7 @@ export function IPOsScreen() {
                     <DataState label="No recent S-1/424B registrations synced yet (run the edgar-ipo-pipeline job). Rumored/pre-filing names would still need a filings-intelligence feed." />
                   </td>
                 </tr>
-              ) : pipelineSorted.slice(0, 30).map(p => (
+              ) : pageSlice(pipelineSorted).map(p => (
                 <tr key={p.id}>
                   <td><b style={{ color: "var(--text-hi)" }}>{p.companyName}</b></td>
                   <td><span className="pill amc">{p.form}</span></td>
@@ -289,6 +317,7 @@ export function IPOsScreen() {
             </tbody>
           </table>
         </div>
+        {renderPager(pipelineSorted.length)}
         <p style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", padding: "8px 12px 0" }}>
           Raw registration pipeline from EDGAR — includes shells, SPACs and amendments, not a curated IPO list.
         </p>
@@ -315,7 +344,7 @@ export function IPOsScreen() {
                 </tr>
               </thead>
               <tbody>
-                {filteredCalendar.slice(0, 25).map(e => (
+                {pageSlice(filteredCalendar).map(e => (
                   <tr key={e.id} onClick={() => setSelectedSym(e.symbol || "")} style={{ cursor: "pointer" }}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -339,6 +368,7 @@ export function IPOsScreen() {
               </tbody>
             </table>
           </div>
+          {renderPager(filteredCalendar.length)}
         </div>
       )}
 

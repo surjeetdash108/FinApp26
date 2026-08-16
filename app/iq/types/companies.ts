@@ -68,6 +68,8 @@ export interface CompanyDoc {
   week5ChangePct?: number | null;
   stochK?: number | null;
   adx14?: number | null;
+  /** Annualized 30-day realized volatility (%) — the Macro "30d Vol" column. */
+  realizedVol30?: number | null;
   // Sector rank from tech-rating.job; source records which vendor served the profile.
   sectorRank: number | null;
   sectorRankTotal: number | null;

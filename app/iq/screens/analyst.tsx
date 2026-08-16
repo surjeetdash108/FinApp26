@@ -56,6 +56,7 @@ export function AnalystScreen() {
   const [consQuery, setConsQuery] = useState(""); // search within Consensus & price targets
   const [actQuery, setActQuery] = useState(""); // search within Per-firm analyst actions
   const [analystQuery, setAnalystQuery] = useState(""); // search within Analysts
+  const [selAnalyst, setSelAnalyst] = useState<string | null>(null); // firm clicked → drawer of its tickers
   const [shown, setShown] = useState(40); // paginate the feed 40 rows at a time
   const [showAllClusters, setShowAllClusters] = useState(false);
 
@@ -147,6 +148,10 @@ export function AnalystScreen() {
     return [...m.values()].sort((x, y) => y.total - x.total);
   }, [allActions, tab]);
   const analystFiltered = analystRows.filter(a => !analystQ || a.firm.toLowerCase().includes(analystQ));
+
+  // Every recent rating change by the analyst clicked in the Analysts table —
+  // powers the slide drawer (allActions is already newest-first).
+  const selAnalystActions = selAnalyst ? allActions.filter(a => a.firm === selAnalyst) : [];
 
   // Reusable action-type filter chips (used by Per-firm + Analysts views).
   const actionFilterBar = (withClusters: boolean) => (
@@ -362,7 +367,7 @@ export function AnalystScreen() {
                     </td>
                   </tr>
                 ) : analystFiltered.map(a => (
-                  <tr key={a.firm}>
+                  <tr key={a.firm} style={{ cursor: "pointer" }} onClick={() => setSelAnalyst(a.firm)} title={`See all ${a.firm} rating changes`}>
                     <td><b style={{ color: "var(--text-hi)" }}>{a.firm}</b></td>
                     <td className="num" style={{ fontWeight: 700 }}>{a.total}</td>
                     <td className="num" style={{ color: a.up ? "var(--up)" : "var(--text-dim-solid)", fontWeight: a.up ? 600 : 400 }}>{a.up}</td>
@@ -401,6 +406,45 @@ export function AnalystScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Analyst drawer: all of one firm's recent rating changes ── */}
+      {selAnalyst && (
+        <>
+          <div className="scrim" onClick={() => setSelAnalyst(null)} />
+          <div className="side-drawer">
+            <div className="drawer-h">
+              <div>
+                <div className="drawer-title">{selAnalyst}</div>
+                <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+                  {selAnalystActions.length} rating change{selAnalystActions.length === 1 ? "" : "s"} · {new Set(selAnalystActions.map(a => a.ticker)).size} tickers <VendorTag v={["fmp", "polygon"]} />
+                </div>
+              </div>
+              <button className="closebtn" onClick={() => setSelAnalyst(null)}>✕</button>
+            </div>
+            <div className="drawer-b">
+              {selAnalystActions.length === 0 ? (
+                <DataState loading={consensusLoading} label="No recent rating changes for this analyst." />
+              ) : (
+                <table className="tbl">
+                  <thead>
+                    <tr><th>Ticker</th><th>Action</th><th>Previous → New</th><th className="num">Date</th></tr>
+                  </thead>
+                  <tbody>
+                    {selAnalystActions.map((a, i) => (
+                      <tr key={`${a.ticker}-${a.date}-${i}`} style={{ cursor: "pointer" }} onClick={() => { openStock(a.ticker); setSelAnalyst(null); }}>
+                        <td><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StockLogo sym={a.ticker} size={16} /> {a.ticker}</span></td>
+                        <td style={{ color: actionTone(a.action), fontWeight: 600, textTransform: "capitalize" }}>{a.action ?? "—"}</td>
+                        <td style={{ color: "var(--text-dim-solid)" }}>{a.previousGrade ?? "—"} → {a.newGrade ?? "—"}</td>
+                        <td className="num" style={{ color: "var(--text-dim-solid)" }}>{shortDate(a.date)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </>
   );

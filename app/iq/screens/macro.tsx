@@ -247,12 +247,16 @@ export function MacroScreen() {
   const upcomingHolidays = dedupedHolidays.slice(0, 6);
   const { frame: tapeFrame } = useTapeStream();
   const liveVix = tapeFrame ? tapeItemsToIndexDocs(tapeFrame.items).find(i => i.label === "VIX") : null;
-  // Real high-beta names (proxy for "VIX sensitive") — no live implied-vol
-  // source exists, so IV30 is dropped rather than fabricated.
-  const highBetaStocks = [...companies]
+  // Real high-beta names (proxy for "VIX sensitive"). A ticker search lets you
+  // look up ANY name's beta / dividend yield, not just the default top-beta set.
+  const [vixQuery, setVixQuery] = useState("");
+  const vixQ = vixQuery.trim().toUpperCase();
+  const betaStocks = [...companies]
     .filter((c): c is CompanyDoc & { beta: number } => c.beta != null)
-    .sort((a, b) => b.beta - a.beta)
-    .slice(0, 10);
+    .sort((a, b) => b.beta - a.beta);
+  const highBetaStocks = vixQ
+    ? betaStocks.filter(c => c.ticker.toUpperCase().includes(vixQ)).slice(0, 25)
+    : betaStocks.slice(0, 10);
 
   // One clock for the whole screen so tabs cannot disagree mid-render.
   const now = new Date();
@@ -422,19 +426,28 @@ export function MacroScreen() {
       <div style={{ marginTop: 14 }}>
         <div className="card">
           <div className="card-h">
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>VIX-sensitive stocks</h3><VendorTag v="polygon" /></div>
-            <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>Highest-beta names — most sensitive to volatility spikes · hover for details</span>
+            {/* Search sits LEFT next to the title — filters this table by ticker. */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>VIX-sensitive stocks</h3><VendorTag v="polygon" /></div>
+              <input
+                value={vixQuery}
+                onChange={e => setVixQuery(e.target.value.toUpperCase())}
+                placeholder="Search ticker…"
+                style={{ width: 130, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
+              />
+            </div>
+            <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>{vixQ ? `Matches for “${vixQuery}”` : "Highest-beta names — most sensitive to volatility spikes · hover for details"}</span>
           </div>
           <div className="tbl-wrap">
             {highBetaStocks.length === 0 ? (
-              <DataState loading={companiesLoading} label="No live beta data synced yet." />
+              <DataState loading={companiesLoading} label={vixQ ? `No name matching “${vixQuery}” with a beta.` : "No live beta data synced yet."} />
             ) : (
               <table className="tbl">
                 <thead>
                   <tr>
                     <th>Stock</th>
                     <th className="num">Beta</th>
-                    <th className="num">IV 30d</th>
+                    <th className="num">30d Vol</th>
                     <th className="num">Div yield</th>
                   </tr>
                 </thead>
@@ -461,7 +474,7 @@ export function MacroScreen() {
                           </div>
                         </td>
                         <td className="num"><b style={{ color: s.beta >= 2 ? "var(--down)" : "var(--warn)" }}>{s.beta.toFixed(2)}</b></td>
-                        <td className="num"><NotAvailable /></td>
+                        <td className="num">{s.realizedVol30 != null ? `${s.realizedVol30.toFixed(1)}%` : <NotAvailable />}</td>
                         <td className="num">{s.dividendYield != null && s.dividendYield > 0 ? <span className="up">{s.dividendYield.toFixed(2)}%</span> : <span style={{ color: "var(--text-dim-solid)" }}>—</span>}</td>
                       </tr>
                     );

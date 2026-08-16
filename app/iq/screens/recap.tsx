@@ -158,24 +158,6 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
 
   // ---- Reusable cards ----
 
-  const IndicesRow = liveIndices.length === 0 ? (
-    <DataState loading={!tapeFrame} label="No live index snapshot available right now." />
-  ) : (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
-      {liveIndices.map(idx => {
-        const fg = idx.pctChange >= 0 ? "var(--up)" : "var(--down)";
-        return (
-          <div key={idx.id} style={{ background: "var(--surface-2)", borderRadius: 10, padding: "8px 14px", minWidth: 90 }}>
-            <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginBottom: 3 }}>{idx.label}</div>
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, fontFamily: "var(--f-mono)", color: fg }}>
-              {sign(idx.pctChange)}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-
   const SectorHeatCard = (
     <div className="card" style={{ marginTop: 14 }}>
       <div className="card-h">
@@ -291,212 +273,225 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
     </div>
   );
 
-  return (
-    <>
-      {/* ── Page head ── */}
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">{activeTab === 1 ? "Weekly Recap" : "End-of-Day Recap"}</h1>
+  // Live daily sector leaders/laggards derived from the live sector feed.
+  const dailyLeaders = sortedSectors.filter(s => s.pctChange != null).sort((a, b) => b.pctChange - a.pctChange).slice(0, 6);
+  const dailyLaggards = sortedSectors.filter(s => s.pctChange != null).sort((a, b) => a.pctChange - b.pctChange).slice(0, 6);
+
+  // Generic indices row — works for the live daily snapshot and the weekly
+  // rollup alike; shows the standard empty-state when the period has no data.
+  const renderIndicesRow = (
+    list: { label: string; pctChange: number | null }[],
+    emptyLabel: string,
+    loading: boolean,
+  ) => {
+    const items = list.filter((i): i is { label: string; pctChange: number } => i.pctChange != null);
+    if (items.length === 0) return <DataState loading={loading} label={emptyLabel} />;
+    return (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
+        {items.map(idx => {
+          const fg = idx.pctChange >= 0 ? "var(--up)" : "var(--down)";
+          return (
+            <div key={idx.label} style={{ background: "var(--surface-2)", borderRadius: 10, padding: "8px 14px", minWidth: 90 }}>
+              <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginBottom: 3 }}>{idx.label}</div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, fontFamily: "var(--f-mono)", color: fg }}>
+                {sign(idx.pctChange)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Generic sector leaders/laggards card (one col-6 tile).
+  const renderSectorPerfCard = (
+    list: { sector: string; pctChange: number }[],
+    title: string,
+    pillCls: string,
+    pillText: string,
+    emptyLabel: string,
+  ) => (
+    <div className="col-6">
+      <div className="card">
+        <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{title}</h3><VendorTag v="polygon" /></div><span className={`pill ${pillCls}`}>{pillText}</span></div>
+        <div className="card-b" style={{ paddingTop: 6 }}>
+          {list.length === 0 ? (
+            <DataState label={emptyLabel} />
+          ) : list.map(s => (
+            <div key={s.sector} className="minirow" style={{ justifyContent: "space-between" }}>
+              <span className="mid">{s.sector}</span>
+              <span className={`mono ${cls(s.pctChange)}`} style={{ fontWeight: 700 }}>{sign(s.pctChange)}</span>
+            </div>
+          ))}
         </div>
       </div>
+    </div>
+  );
 
-      {/* ── Today (EOD) ── */}
-      {activeTab === 0 && (
-        <div style={{ padding: "14px 18px 18px" }}>
-          <div className="recap-hero">
-            <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
-              <div className="wmn-orb">{STAR_SVG}</div>
-              <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>
-                {dateLabel}
+  // Weekly sector-heatmap shell (same head as the live daily card, empty body).
+  const WeeklyHeatCard = (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div className="card-h">
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Sector heatmap</h3><VendorTag v="polygon" /></div>
+        <span className="link" onClick={() => router.push("/menu/heatmap")}>View all →</span>
+      </div>
+      <div className="card-b">
+        <DataState label="Weekly sector heatmap isn't available yet." />
+      </div>
+    </div>
+  );
+
+  // Market-internals card — real daily breadth block, or a weekly empty-state
+  // in the same card shell (weekly internals aren't aggregated yet).
+  const renderInternalsCard = (period: "daily" | "weekly") => {
+    if (period === "weekly") {
+      return (
+        <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
+          <div className="col-12">
+            <div className="card">
+              <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market internals</h3><VendorTag v="polygon" /></div></div>
+              <div className="card-b">
+                <DataState label="Weekly market internals aren't aggregated yet — check back after the next daily run." />
               </div>
-              <VendorTag v="polygon" />
-              <div style={{ marginLeft: "auto" }}>
-                <button className="btn ai" title="Audio recap isn't connected to a live TTS service yet"
-                  onClick={() => setAudioMsg(true)}>
-                  <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
-                    <path d="M8 5v14l11-7z" fill="currentColor" />
-                  </svg>
-                  60-sec audio recap
-                </button>
-                {audioMsg && (
-                  <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 6, textAlign: "right" }}>
-                    Not connected to a live TTS service yet.
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
+        <div className="col-12">
+          <div className="card">
+            <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market internals</h3><VendorTag v="polygon" /></div></div>
+            <div className="card-b">
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".8rem", marginBottom: 6 }}>
+                  <span className="up mono" style={{ fontWeight: 700 }}>
+                    ▲ {internals?.advancers != null ? internals.advancers.toLocaleString() : <NotAvailable />} advancing
+                  </span>
+                  <span className="down mono" style={{ fontWeight: 700 }}>
+                    ▼ {internals?.decliners != null ? internals.decliners.toLocaleString() : <NotAvailable />} declining
+                  </span>
+                </div>
+                {internals?.breadthPct != null ? (
+                  <>
+                    <div style={{ height: 8, borderRadius: 4, overflow: "hidden", background: "var(--down-dim, rgba(255,84,112,.25))", display: "flex" }}>
+                      <div style={{ width: `${(internals.breadthPct * 100).toFixed(0)}%`, background: "var(--up)" }} />
+                    </div>
+                    <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
+                      {(internals.breadthPct * 100).toFixed(0)}% of the tracked universe advancing
+                      {internals.date ? ` · ${internals.date}` : ""}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
+                    No advance/decline breadth synced yet.
                   </div>
                 )}
               </div>
-            </div>
-            {IndicesRow}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0 4px" }}>
-              <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontWeight: 600, letterSpacing: ".03em" }}>
-                DOWNLOAD:
-              </span>
-              <button className="btn" onClick={() => downloadRecap(dateLabel, todayHeadlines, todaySurprises, todayGrades, "today")}>{DL_ICON} Today (EOD)</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 14 }}>
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <div className="eyebrow">Top headlines</div>
-                  <span className="link" onClick={() => router.push("/menu/commentary")}>View all →</span>
+              {([
+                // Real values computed by the backend market-breadth job.
+                { label: "TRIN (Arms)", value: internals?.trin != null ? internals.trin.toFixed(2) : null },
+                { label: "Up volume", value: internals?.upVolume != null ? fmtVol(internals.upVolume) : null },
+                { label: "Down volume", value: internals?.downVolume != null ? fmtVol(internals.downVolume) : null },
+                // Counted from company docs' 52-wk range (technical-indicators.job).
+                { label: "New 52W Highs", value: newHighs != null ? newHighs.toLocaleString() : null },
+                { label: "New 52W Lows", value: newLows != null ? newLows.toLocaleString() : null },
+                // McClellan from the breadth series (EMA19−EMA39 of net advances).
+                { label: "McClellan Osc", value: internals?.mcclellan != null ? internals.mcclellan.toFixed(2) : null },
+                // No source on the current plan — kept visible, marked N/A.
+                { label: "NYSE TICK", value: null },
+                { label: "Put/Call Ratio", value: null },
+              ] as { label: string; value: string | null }[]).map(({ label, value }) => (
+                <div key={label} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "8px 12px", marginBottom: 6,
+                  background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 8,
+                }}>
+                  <span style={{ fontSize: ".8rem", color: "var(--text)" }}>{label}</span>
+                  {value != null
+                    ? <span className="mono" style={{ fontSize: ".8rem", fontWeight: 700, color: "var(--text-hi)" }}>{value}</span>
+                    : <NotAvailable />}
                 </div>
-                {todayHeadlines.length === 0 ? (
-                  <DataState loading={liveNewsLoading} label="No live news synced yet today." />
-                ) : todayHeadlines.map(n => (
-                  <div key={n.id} style={{ display: "flex", gap: 8, padding: "6px 0", fontSize: ".84rem" }}>
-                    <span className="bullet" style={{ marginTop: 6, flexShrink: 0 }} />
-                    <span><b>{n.ticker}</b> {n.headline}</span>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <div className="eyebrow">Up next</div>
-                  <span className="link" onClick={() => router.push("/menu/macro")}>View all →</span>
-                </div>
-                {upcomingMacro.length === 0 ? (
-                  <DataState loading={macroLoading} label="No upcoming macro events on record." />
-                ) : upcomingMacro.map(e => (
-                  <div key={e.id} className="minirow">
-                    <span className="mono" style={{ width: 66, color: "var(--warn)" }}>{e.eventDate.slice(5)}</span>
-                    <span className="mid">{e.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {NewsCard(todayHeadlines, "Today's headlines")}
-          {SectorHeatCard}
-          {earnMovers.length > 0 && (
-            <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
-              <div className="col-12">
-                <div className="card">
-                  <div className="card-h"><h3>Earnings movers</h3><span className="pill ai" style={{ fontSize: ".68rem" }}>8-K reaction</span></div>
-                  <div className="card-b">
-                    {earnMovers.map(a => (
-                      <div key={a.id} className="minirow" style={{ justifyContent: "space-between", cursor: "pointer" }} onClick={() => openStock(a.ticker)}>
-                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <StockLogo sym={a.ticker} size={22} />
-                          <span className="tkr">{a.ticker}</span>
-                          {a.session && <span className="pill" style={{ fontSize: ".6rem" }}>{a.session}</span>}
-                          <span style={{ fontSize: ".66rem", color: "var(--text-dim-solid)" }}>{a.announceDate.slice(5)}</span>
-                        </span>
-                        <span className={`mono ${cls(a.reactionPct as number)}`} style={{ fontWeight: 700 }}>{sign(a.reactionPct as number)}</span>
-                      </div>
-                    ))}
-                    <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 6 }}>
-                      Price reaction around the SEC-EDGAR 8-K (item 2.02) earnings announcement.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {AnalystChangesCard(todayGrades, "Analyst rating changes today")}
-          <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
-            <div className="col-12">
-              <div className="card">
-                <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market internals</h3><VendorTag v="polygon" /></div></div>
-                <div className="card-b">
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".8rem", marginBottom: 6 }}>
-                      <span className="up mono" style={{ fontWeight: 700 }}>
-                        ▲ {internals?.advancers != null ? internals.advancers.toLocaleString() : <NotAvailable />} advancing
-                      </span>
-                      <span className="down mono" style={{ fontWeight: 700 }}>
-                        ▼ {internals?.decliners != null ? internals.decliners.toLocaleString() : <NotAvailable />} declining
-                      </span>
-                    </div>
-                    {internals?.breadthPct != null ? (
-                      <>
-                        <div style={{ height: 8, borderRadius: 4, overflow: "hidden", background: "var(--down-dim, rgba(255,84,112,.25))", display: "flex" }}>
-                          <div style={{ width: `${(internals.breadthPct * 100).toFixed(0)}%`, background: "var(--up)" }} />
-                        </div>
-                        <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
-                          {(internals.breadthPct * 100).toFixed(0)}% of the tracked universe advancing
-                          {internals.date ? ` · ${internals.date}` : ""}
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 4 }}>
-                        No advance/decline breadth synced yet.
-                      </div>
-                    )}
-                  </div>
-                  {([
-                    // Real values computed by the backend market-breadth job.
-                    { label: "TRIN (Arms)", value: internals?.trin != null ? internals.trin.toFixed(2) : null },
-                    { label: "Up volume", value: internals?.upVolume != null ? fmtVol(internals.upVolume) : null },
-                    { label: "Down volume", value: internals?.downVolume != null ? fmtVol(internals.downVolume) : null },
-                    // Counted from company docs' 52-wk range (technical-indicators.job).
-                    { label: "New 52W Highs", value: newHighs != null ? newHighs.toLocaleString() : null },
-                    { label: "New 52W Lows", value: newLows != null ? newLows.toLocaleString() : null },
-                    // McClellan from the breadth series (EMA19−EMA39 of net advances).
-                    { label: "McClellan Osc", value: internals?.mcclellan != null ? internals.mcclellan.toFixed(2) : null },
-                    // No source on the current plan — kept visible, marked N/A.
-                    { label: "NYSE TICK", value: null },
-                    { label: "Put/Call Ratio", value: null },
-                  ] as { label: string; value: string | null }[]).map(({ label, value }) => (
-                    <div key={label} style={{
-                      display: "flex", justifyContent: "space-between", alignItems: "center",
-                      padding: "8px 12px", marginBottom: 6,
-                      background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 8,
-                    }}>
-                      <span style={{ fontSize: ".8rem", color: "var(--text)" }}>{label}</span>
-                      {value != null
-                        ? <span className="mono" style={{ fontSize: ".8rem", fontWeight: 700, color: "var(--text-hi)" }}>{value}</span>
-                        : <NotAvailable />}
-                    </div>
-                  ))}
-                  <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
-                    Advance/decline, TRIN, up/down volume, McClellan and new 52-week highs/lows are computed from the tracked universe. NYSE TICK and Put/Call need a composite exchange feed not on the current plan.
-                  </div>
-                </div>
+              ))}
+              <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
+                Advance/decline, TRIN, up/down volume, McClellan and new 52-week highs/lows are computed from the tracked universe. NYSE TICK and Put/Call need a composite exchange feed not on the current plan.
               </div>
             </div>
           </div>
         </div>
-      )}
+      </div>
+    );
+  };
 
-      {/* ── This Week ── */}
-      {activeTab === 1 && (
-        <div style={{ padding: "14px 18px 18px" }}>
-          <div className="recap-hero">
-            <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
-              <div className="wmn-orb">{STAR_SVG}</div>
-              <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>
-                Week ending {dateLabel}
-              </div>
-              <VendorTag v="polygon" />
+  // Single shared render body — both the daily and weekly routes render the
+  // identical widget set (windowed to their period) so they can't drift apart.
+  const RecapBody = (period: "daily" | "weekly") => {
+    const isWeek = period === "weekly";
+    const heroTitle = isWeek ? `Week ending ${dateLabel}` : dateLabel;
+    const indicesList = isWeek ? (weekly?.indices ?? []) : liveIndices;
+    const indicesEmpty = isWeek
+      ? "Weekly index performance needs at least two synced sessions this week — check back after the next daily run."
+      : "No live index snapshot available right now.";
+    const heroHeadlines = isWeek ? weekHeadlines : todayHeadlines;
+    const dlSurprises = isWeek ? weekSurprises : todaySurprises;
+    const dlGrades = isWeek ? weekGrades : todayGrades;
+    const leaders = isWeek ? (weekly?.sectorLeaders ?? []) : dailyLeaders;
+    const laggards = isWeek ? (weekly?.sectorLaggards ?? []) : dailyLaggards;
+
+    return (
+      <div style={{ padding: "14px 18px 18px" }}>
+        <div className="recap-hero">
+          <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
+            <div className="wmn-orb">{STAR_SVG}</div>
+            <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1.1rem", color: "var(--text-hi)" }}>
+              {heroTitle}
             </div>
-            {weekly && weekly.indices.some(i => i.pctChange != null) ? (
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {weekly.indices.filter(i => i.pctChange != null).map(i => (
-                  <div key={i.label} style={{
-                    flex: "1 1 120px", minWidth: 110, padding: "10px 12px",
-                    background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 10,
-                  }}>
-                    <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginBottom: 4 }}>{i.label}</div>
-                    <div className={`mono ${cls(i.pctChange!)}`} style={{ fontSize: "1.2rem", fontWeight: 700 }}>
-                      {sign(i.pctChange!)}
-                    </div>
-                  </div>
-                ))}
-                <div style={{ flexBasis: "100%", fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 2 }}>
-                  Week-to-date change from the first to latest session this week.
+            <VendorTag v="polygon" />
+            <div style={{ marginLeft: "auto" }}>
+              <button className="btn ai" title="Audio recap isn't connected to a live TTS service yet"
+                onClick={() => setAudioMsg(true)}>
+                <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
+                  <path d="M8 5v14l11-7z" fill="currentColor" />
+                </svg>
+                60-sec audio recap
+              </button>
+              {audioMsg && (
+                <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 6, textAlign: "right" }}>
+                  Not connected to a live TTS service yet.
                 </div>
-              </div>
-            ) : (
-              <DataState label="Weekly index performance needs at least two synced sessions this week — check back after the next daily run." />
-            )}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0 4px" }}>
-              <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontWeight: 600, letterSpacing: ".03em" }}>
-                DOWNLOAD:
-              </span>
-              <button className="btn" onClick={() => downloadRecap(dateLabel, weekHeadlines, weekSurprises, weekGrades, "this-week")}>{DL_ICON} This Week</button>
+              )}
             </div>
-            <div style={{ marginTop: 14 }}>
+          </div>
+          {renderIndicesRow(indicesList, indicesEmpty, !tapeFrame)}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0 4px" }}>
+            <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontWeight: 600, letterSpacing: ".03em" }}>
+              DOWNLOAD:
+            </span>
+            {isWeek ? (
+              <button className="btn" onClick={() => downloadRecap(dateLabel, weekHeadlines, weekSurprises, weekGrades, "this-week")}>{DL_ICON} This Week</button>
+            ) : (
+              <button className="btn" onClick={() => downloadRecap(dateLabel, todayHeadlines, todaySurprises, todayGrades, "today")}>{DL_ICON} Today (EOD)</button>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 14 }}>
+            <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div className="eyebrow">Up next · next week</div>
+                <div className="eyebrow">Top headlines</div>
+                <span className="link" onClick={() => router.push("/menu/commentary")}>View all →</span>
+              </div>
+              {heroHeadlines.length === 0 ? (
+                <DataState loading={liveNewsLoading} label={isWeek ? "No live news synced this week yet." : "No live news synced yet today."} />
+              ) : heroHeadlines.map(n => (
+                <div key={n.id} style={{ display: "flex", gap: 8, padding: "6px 0", fontSize: ".84rem" }}>
+                  <span className="bullet" style={{ marginTop: 6, flexShrink: 0 }} />
+                  <span><b>{n.ticker}</b> {n.headline}</span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div className="eyebrow">{isWeek ? "Up next · next week" : "Up next"}</div>
                 <span className="link" onClick={() => router.push("/menu/macro")}>View all →</span>
               </div>
               {upcomingMacro.length === 0 ? (
@@ -509,49 +504,57 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               ))}
             </div>
           </div>
+        </div>
 
-          <div className="dash" style={{ marginTop: 14, padding: 0 }}>
-            <div className="col-6">
+        {NewsCard(heroHeadlines, isWeek ? "This week's headlines" : "Today's headlines")}
+        {isWeek ? WeeklyHeatCard : SectorHeatCard}
+        <div className="dash" style={{ marginTop: 14, padding: 0 }}>
+          {renderSectorPerfCard(leaders, "Sector leaders", "up", isWeek ? "Week" : "Today", "Sector performance not synced for this period yet.")}
+          {renderSectorPerfCard(laggards, "Sector laggards", "dn", isWeek ? "Week" : "Today", "Sector performance not synced for this period yet.")}
+        </div>
+        {EarningsMoversCard(dlSurprises, isWeek ? "Biggest earnings surprises this week" : "Biggest earnings surprises today")}
+        {earnMovers.length > 0 && (
+          <div className="dash" style={{ marginTop: 14, padding: "0 0 14px" }}>
+            <div className="col-12">
               <div className="card">
-                <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Sector leaders</h3><VendorTag v="polygon" /></div><span className="pill up">Week</span></div>
-                <div className="card-b" style={{ paddingTop: 6 }}>
-                  {weekly && weekly.sectorLeaders.length > 0 ? (
-                    weekly.sectorLeaders.map(s => (
-                      <div key={s.sector} className="minirow" style={{ justifyContent: "space-between" }}>
-                        <span className="mid">{s.sector}</span>
-                        <span className={`mono ${cls(s.pctChange)}`} style={{ fontWeight: 700 }}>{sign(s.pctChange)}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <DataState label="Weekly sector performance needs sector history synced this week." />
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="col-6">
-              <div className="card">
-                <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Sector laggards</h3><VendorTag v="polygon" /></div><span className="pill dn">Week</span></div>
-                <div className="card-b" style={{ paddingTop: 6 }}>
-                  {weekly && weekly.sectorLaggards.length > 0 ? (
-                    weekly.sectorLaggards.map(s => (
-                      <div key={s.sector} className="minirow" style={{ justifyContent: "space-between" }}>
-                        <span className="mid">{s.sector}</span>
-                        <span className={`mono ${cls(s.pctChange)}`} style={{ fontWeight: 700 }}>{sign(s.pctChange)}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <DataState label="Weekly sector performance needs sector history synced this week." />
-                  )}
+                <div className="card-h"><h3>Earnings movers</h3><span className="pill ai" style={{ fontSize: ".68rem" }}>8-K reaction</span></div>
+                <div className="card-b">
+                  {earnMovers.map(a => (
+                    <div key={a.id} className="minirow" style={{ justifyContent: "space-between", cursor: "pointer" }} onClick={() => openStock(a.ticker)}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <StockLogo sym={a.ticker} size={22} />
+                        <span className="tkr">{a.ticker}</span>
+                        {a.session && <span className="pill" style={{ fontSize: ".6rem" }}>{a.session}</span>}
+                        <span style={{ fontSize: ".66rem", color: "var(--text-dim-solid)" }}>{a.announceDate.slice(5)}</span>
+                      </span>
+                      <span className={`mono ${cls(a.reactionPct as number)}`} style={{ fontWeight: 700 }}>{sign(a.reactionPct as number)}</span>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 6 }}>
+                    Price reaction around the SEC-EDGAR 8-K (item 2.02) earnings announcement.
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+        )}
+        {AnalystChangesCard(dlGrades, isWeek ? "Analyst rating changes this week" : "Analyst rating changes today")}
+        {renderInternalsCard(period)}
+      </div>
+    );
+  };
 
-          {EarningsMoversCard(weekSurprises, "Biggest earnings surprises this week")}
-          {AnalystChangesCard(weekGrades, "Analyst rating changes this week")}
-          {NewsCard(weekHeadlines, "This week's headlines")}
+  return (
+    <>
+      {/* ── Page head ── */}
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">{activeTab === 1 ? "Weekly Recap" : "End-of-Day Recap"}</h1>
         </div>
-      )}
+      </div>
+
+      {/* ── Shared recap body (identical widget set for daily + weekly) ── */}
+      {RecapBody(mode)}
 
       {/* ── Sliding drawer ── */}
       {drawer === "earn-movers" && (

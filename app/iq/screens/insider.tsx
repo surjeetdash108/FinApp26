@@ -200,6 +200,8 @@ export function InsiderScreen() {
   const [insPage,    setInsPage]    = useState(0);
   const [instFilter, setInstFilter] = useState<InstFilter>("All");
   const [instSort,   setInstSort]   = useState<InstSort>("owners");
+  // Cross-fund signals: which of the 3 sub-panels is showing.
+  const [xfTab,      setXfTab]      = useState<0 | 1 | 2>(0);
   const [drawer,     setDrawer]     = useState<DrawerState>(null);
 
   const { data: liveInsiderTx, loading: liveInsiderTxLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
@@ -551,42 +553,56 @@ export function InsiderScreen() {
               <div className="card">
                 <div className="card-h"><div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Cross-fund signals</h3><VendorTag v={["fmp", "sec"]} /></div></div>
                 <div className="card-b">
-                  <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--up)", fontWeight: 700, margin: "4px 0 6px" }}>
-                    Institutions adding most (QoQ)
+                  <div className="tabs" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+                    <button className={`tab${xfTab === 0 ? " on" : ""}`} onClick={() => setXfTab(0)}>Adding most</button>
+                    <button className={`tab${xfTab === 1 ? " on" : ""}`} onClick={() => setXfTab(1)}>Trimming most</button>
+                    <button className={`tab${xfTab === 2 ? " on" : ""}`} onClick={() => setXfTab(2)}>Live overlap</button>
                   </div>
-                  {mostBought.length === 0 ? (
-                    <DataState loading={instOwnLoading} label="No net-buying data synced yet." />
-                  ) : mostBought.map(d => (
-                    <div key={d.ticker} className="minirow" onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
-                      <span className="mid"><b style={{ color: "var(--text-hi)" }}>{d.ticker}</b></span>
-                      <span className="r up">{fmtDelta(d.investorsHoldingChange)} owners</span>
+
+                  {xfTab === 0 && (<>
+                    <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--up)", fontWeight: 700, margin: "0 0 6px" }}>
+                      Institutions adding most (QoQ)
                     </div>
-                  ))}
-                  <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--down)", fontWeight: 700, margin: "12px 0 6px" }}>
-                    Institutions trimming most (QoQ)
-                  </div>
-                  {mostSold.length === 0 ? (
-                    <DataState loading={instOwnLoading} label="No net-selling data synced yet." />
-                  ) : mostSold.map(d => (
-                    <div key={d.ticker} className="minirow" onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
-                      <span className="mid"><b style={{ color: "var(--text-hi)" }}>{d.ticker}</b></span>
-                      <span className="r down">{fmtDelta(d.investorsHoldingChange)} owners</span>
+                    {mostBought.length === 0 ? (
+                      <DataState loading={instOwnLoading} label="No net-buying data synced yet." />
+                    ) : mostBought.map(d => (
+                      <div key={d.ticker} className="minirow" onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
+                        <span className="mid"><b style={{ color: "var(--text-hi)" }}>{d.ticker}</b></span>
+                        <span className="r up">{fmtDelta(d.investorsHoldingChange)} owners</span>
+                      </div>
+                    ))}
+                  </>)}
+
+                  {xfTab === 1 && (<>
+                    <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--down)", fontWeight: 700, margin: "0 0 6px" }}>
+                      Institutions trimming most (QoQ)
                     </div>
-                  ))}
-                  <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--brand-2)", fontWeight: 700, margin: "12px 0 6px" }}>
-                    Live overlap (CUSIP-matched, real)
-                  </div>
-                  {liveOverlap === null || liveOverlap.length === 0 ? (
-                    <DataState loading={liveOverlap === null} label="No overlap found yet in synced 13F data." />
-                  ) : liveOverlap.slice(0, 5).map(o => (
-                    <div key={o.cusip} className="minirow">
-                      <span className="mid">
-                        <b style={{ color: "var(--text-hi)" }}>{o.name}</b>
-                        <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)" }}>{o.funds.join(", ")}</div>
-                      </span>
-                      <span className="r">{o.funds.length} funds</span>
+                    {mostSold.length === 0 ? (
+                      <DataState loading={instOwnLoading} label="No net-selling data synced yet." />
+                    ) : mostSold.map(d => (
+                      <div key={d.ticker} className="minirow" onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
+                        <span className="mid"><b style={{ color: "var(--text-hi)" }}>{d.ticker}</b></span>
+                        <span className="r down">{fmtDelta(d.investorsHoldingChange)} owners</span>
+                      </div>
+                    ))}
+                  </>)}
+
+                  {xfTab === 2 && (<>
+                    <div style={{ fontSize: ".7rem", textTransform: "uppercase" as const, letterSpacing: ".06em", color: "var(--brand-2)", fontWeight: 700, margin: "0 0 6px" }}>
+                      Live overlap (CUSIP-matched, real)
                     </div>
-                  ))}
+                    {liveOverlap === null || liveOverlap.length === 0 ? (
+                      <DataState loading={liveOverlap === null} label="No overlap found yet in synced 13F data." />
+                    ) : liveOverlap.slice(0, 5).map(o => (
+                      <div key={o.cusip} className="minirow">
+                        <span className="mid">
+                          <b style={{ color: "var(--text-hi)" }}>{o.name}</b>
+                          <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)" }}>{o.funds.join(", ")}</div>
+                        </span>
+                        <span className="r">{o.funds.length} funds</span>
+                      </div>
+                    ))}
+                  </>)}
                 </div>
               </div>
             </div>

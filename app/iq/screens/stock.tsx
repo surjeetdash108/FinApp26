@@ -355,7 +355,7 @@ function EarnEpsChart({ hist }: { hist: EarnQ[] }) {
         const ah = Math.max(2, (Math.abs(x.a) / maxE) * ih);
         return (
           <g key={x.q}>
-            <rect x={(cx - bw - 2).toFixed(1)} y={(PADT + ih - eh).toFixed(1)} width={bw.toFixed(1)} height={eh.toFixed(1)} rx="2" style={{ fill: "var(--surface-3)" }} />
+            <rect x={(cx - bw - 2).toFixed(1)} y={(PADT + ih - eh).toFixed(1)} width={bw.toFixed(1)} height={eh.toFixed(1)} rx="2" style={{ fill: "var(--text-dim-solid)" }} />
             <rect x={(cx + 2).toFixed(1)} y={(PADT + ih - ah).toFixed(1)} width={bw.toFixed(1)} height={ah.toFixed(1)} rx="2" style={{ fill: x.surp >= 0 ? "var(--up)" : "var(--down)" }} />
             {(i % 2 === 0 || i === n - 1) && (
               <text x={cx.toFixed(1)} y={H - 10} textAnchor="middle" style={{ fill: "var(--text-dim-solid)", fontSize: "0.5625rem" }}>
@@ -726,6 +726,30 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const isUp = data.pctChange >= 0;
   const p = data.price;
 
+  // Cross-column height match: cap the RIGHT column's Peers card so its bottom
+  // lines up with the LEFT column's Financials card, then Key levels (below
+  // Peers) flex-fills the rest down to the column base (Insider & institutional).
+  // Both live in separate grid columns, so this can only be done by measuring.
+  const financialsRef = useRef<HTMLDivElement>(null);
+  const peersRef = useRef<HTMLDivElement>(null);
+  const sdGridRef = useRef<HTMLDivElement>(null);
+  const [peersH, setPeersH] = useState<number>();
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const f = financialsRef.current, pr = peersRef.current;
+      if (!f || !pr) { setPeersH(undefined); return; }
+      // getBoundingClientRect diffs are scroll-invariant and layout-relative.
+      const h = f.getBoundingClientRect().bottom - pr.getBoundingClientRect().top;
+      setPeersH(h > 120 ? Math.round(h) : undefined);
+    };
+    const ro = new ResizeObserver(() => requestAnimationFrame(measure));
+    if (sdGridRef.current) ro.observe(sdGridRef.current);
+    requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [sym, financialsDoc, companies, liveCompany]);
+
   const rating = ratingLabel(liveCompany?.techRating ?? null);
   const rs = liveCompany?.rsRating ?? null;
   const rv = liveCompany?.rvol ?? null;
@@ -983,7 +1007,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
         </div>
       )}
 
-      <div className="sd-grid" style={hideHeader ? { paddingTop: 0 } : undefined}>
+      <div ref={sdGridRef} className="sd-grid" style={hideHeader ? { paddingTop: 0 } : undefined}>
 
         {/* Full-width chart */}
         {!hideChart && <div style={{ gridColumn: "1 / -1" }}>
@@ -1170,7 +1194,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             const prevA   = histEps[4]?.a;
             const yoy     = prevA != null ? ((latestA - prevA) / Math.abs(prevA || 1)) * 100 : null;
             return (
-              <div className="card">
+              <div ref={financialsRef} className="card">
                 <div className="card-h">
                   <h3>Financials</h3>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1486,8 +1510,15 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-          {/* Peers */}
-          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {/* Peers — capped to line its bottom up with the LEFT column's
+              Financials card (measured via peersH); its list scrolls inside. */}
+          <div
+            ref={peersRef}
+            className="card"
+            style={peersH
+              ? { height: peersH, flexShrink: 0, display: "flex", flexDirection: "column" }
+              : { flex: 1, display: "flex", flexDirection: "column" }}
+          >
             <div className="card-h">
               <h3>Peers · who&apos;s leading{peersTotal > 0 ? ` · ${peersTotal}` : ""}</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1516,9 +1547,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-          {/* Key levels (pivots) — directly below Peers; both flex-fill so the
-              Peers + Key levels pair spans the same height as the Financials
-              card in the LEFT column. */}
+          {/* Key levels (pivots) — flex-fills the space below the (capped) Peers
+              card down to the right column's base, so its bottom lines up with
+              the LEFT column's last card (Insider & institutional). */}
           <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <h3>Key levels (pivots)</h3>
@@ -1527,7 +1558,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
               </div>
             </div>
-            <div className="card-b" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <div className="card-b" style={{ paddingTop: 6, flex: 1, overflowY: "auto", minHeight: 0 }}>
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
                 Weekly pivots
               </div>
@@ -1568,8 +1599,13 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
+        </div>
+
+        {/* Industry Group rank + Earnings history — full-width row, 50/50, equal
+            height (grid align-items: stretch + flex-column cards). */}
+        <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "stretch" }}>
           {/* Industry Group rank */}
-          <div className="card">
+          <div className="card" style={{ display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <h3>Industry Group rank</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1577,7 +1613,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <span className="link" onClick={() => setInnerDrawer("industry")}>View all →</span>
               </div>
             </div>
-            <div className="card-b">
+            <div className="card-b" style={{ flex: 1 }}>
               {topSectors.length === 0 ? (
                 <DataState loading={sectorsLoading} label="No live sector performance data yet." />
               ) : (
@@ -1599,10 +1635,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-          {/* Earnings history — moved into RIGHT COLUMN's own flex stack (not
-              a separate grid row) so this column's total height always
-              matches its own real content instead of stretching to match
-              LEFT's, which left a blank gap whenever LEFT had more data. */}
+          {/* Earnings history */}
           <div className="card" style={{ display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <h3>Earnings history</h3>
@@ -1631,7 +1664,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               )}
             </div>
           </div>
-
         </div>
 
         {/* News — last card, alone in its row: span both grid columns so it
@@ -1963,7 +1995,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       {Math.abs(beatStreak)}-qtr {beatStreak >= 0 ? "beat" : "miss"} streak
                     </div>
                     <div className="ec-legend">
-                      <span><i style={{ background: "var(--surface-3)" }} />EPS estimate</span>
+                      <span><i style={{ background: "var(--text-dim-solid)" }} />EPS estimate</span>
                       <span><i style={{ background: "var(--up)" }} />Beat</span>
                       <span><i style={{ background: "var(--down)" }} />Miss</span>
                     </div>
@@ -2035,7 +2067,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       {hist10.length === 0 ? <DataState loading={earningsLoading} label={`No live earnings-estimate history synced for ${sym} yet.`} /> : (
                         <>
                           <div className="ec-legend">
-                            <span><i style={{ background: "var(--surface-3)" }} />EPS estimate</span>
+                            <span><i style={{ background: "var(--text-dim-solid)" }} />EPS estimate</span>
                             <span><i style={{ background: "var(--up)" }} />Beat</span>
                             <span><i style={{ background: "var(--down)" }} />Miss</span>
                           </div>

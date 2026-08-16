@@ -7,6 +7,7 @@ import { useApiResource } from "../hooks/useApiResource";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 import { VendorTag } from "../utils";
+import { sectorFilterOptions, matchesSector } from "../sector-filter";
 
 // Maps the numeric 1-99 tech rating onto the filter's string categories
 // (Strong Buy / Buy / Neutral / Sell / Strong Sell).
@@ -68,11 +69,9 @@ export function ScreenerScreen() {
   const [activePresets, setActivePresets] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(true);
 
-  /* ── Sector filter (SIC-derived sector on each company doc) ── */
+  /* ── Sector/theme filter — one uniform option set app-wide (sectors + themes). ── */
   const [sector, setSector] = useState("All");
-  const sectorOptions = ["All", ...Array.from(
-    new Set(companies.map(c => c.sector).filter((s): s is string => !!s && s !== "—")),
-  ).sort()];
+  const sectorOptions = sectorFilterOptions(companies);
 
   /* ── Manual filter state ── */
   const [rs90,       setRs90]       = useState(false);
@@ -203,7 +202,7 @@ export function ScreenerScreen() {
 
   const filtered = !hasActiveFilters ? [] : universe.filter(s => {
     // Sector classification filter (from CompanyDoc.sector).
-    if (sector !== "All" && s.sector !== sector) return false;
+    if (!matchesSector(sector, s.ticker, s.sector)) return false;
     // Preset filters — stock must pass at least one selected preset (OR logic)
     if (activePresets.size > 0) {
       const passesAny = [...activePresets].some(idx => {
@@ -348,9 +347,9 @@ export function ScreenerScreen() {
               className="iq-select"
               value={sector}
               onChange={e => setSector(e.target.value)}
-              style={{ width: "auto", minWidth: 150, padding: "4px 10px", fontSize: ".72rem" }}
+              style={{ width: "auto", minWidth: 150, padding: "4px 10px", fontSize: ".72rem", textTransform: "lowercase" }}
             >
-              {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              {sectorOptions.map(s => <option key={s} value={s} style={{ textTransform: "lowercase" }}>{s.toLowerCase()}</option>)}
             </select>
           </div>
 

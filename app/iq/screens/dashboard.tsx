@@ -1079,7 +1079,7 @@ export function DashboardScreen() {
 /** Live Market Feed — real synced news only; honest empty state when none are synced. */
 function LiveFeedList() {
   const { data: news, loading } = useApiList<NewsArticleDoc>("/market-data/news");
-  const recent = [...news].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 5);
+  const recent = [...news].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 4);
 
   // No mock fallback: when there's no live news, show an honest empty state
   // rather than fabricated headlines that read as real market events.

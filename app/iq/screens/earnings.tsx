@@ -257,7 +257,7 @@ function EpsChart({ hist }: { hist: EarnQ[] }) {
     const eh = x.e / maxE * ih, ah = x.a / maxE * ih;
     const ex = cx - bw - 2, ax = cx + 2;
     bars.push(
-      <rect key={`e${i}`} x={ex} y={PADT + ih - eh} width={bw} height={eh} rx={2} style={{ fill: "var(--surface-3)" }} />,
+      <rect key={`e${i}`} x={ex} y={PADT + ih - eh} width={bw} height={eh} rx={2} style={{ fill: "var(--text-dim-solid)" }} />,
       <rect key={`a${i}`} x={ax} y={PADT + ih - ah} width={bw} height={ah} rx={2}
         style={{ fill: x.surp > 0 ? "var(--up)" : x.surp < 0 ? "var(--down)" : "var(--brand-2)" }} />,
     );
@@ -1115,7 +1115,7 @@ export function EarningsScreen() {
                   <div className="ec-legend">
                     {hasEstimates ? (
                       <>
-                        <span><i style={{ background: "var(--surface-3)" }} /> EPS estimate</span>
+                        <span><i style={{ background: "var(--text-dim-solid)" }} /> EPS estimate</span>
                         <span><i style={{ background: "var(--up)" }} /> Beat</span>
                         <span><i style={{ background: "var(--down)" }} /> Miss</span>
                       </>
