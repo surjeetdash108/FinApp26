@@ -3,6 +3,60 @@
 import { useState, useRef, useCallback, useMemo } from "react";
 import { backendUrl } from "./backend";
 
+// ---- TEMPORARY data-source attribution tag ----
+// Shows which upstream vendor supplies a widget's data (Polygon / FMP / FRED /
+// SEC EDGAR), so anyone can visually identify the source. This is a temporary
+// diagnostic aid — remove every <VendorTag .../> usage (and this block) later.
+// Search the codebase for "VendorTag" to find them all.
+export type VendorKey = "polygon" | "fmp" | "fred" | "sec" | "firebase";
+
+const VENDOR_META: Record<VendorKey, { label: string; bg: string; fg: string }> = {
+  polygon: { label: "POLYGON", bg: "#1e3a8a", fg: "#dbeafe" }, // blue
+  fmp: { label: "FMP", bg: "#5b21b6", fg: "#ede9fe" }, // violet
+  fred: { label: "FRED", bg: "#065f46", fg: "#d1fae5" }, // green
+  sec: { label: "SEC EDGAR", bg: "#9a3412", fg: "#ffedd5" }, // amber
+  // Not a market-data vendor — the app's own Firestore data (e.g. search counts).
+  firebase: { label: "FIREBASE", bg: "#475569", fg: "#e2e8f0" }, // slate
+};
+
+/**
+ * Temporary vendor-source badge. Pass one vendor or several (for a widget that
+ * blends sources). Renders small uppercase pills, colour-coded per vendor.
+ *   <VendorTag v="polygon" />
+ *   <VendorTag v={["polygon", "fmp"]} />
+ */
+export function VendorTag({ v }: { v: VendorKey | VendorKey[] }) {
+  const list = Array.isArray(v) ? v : [v];
+  return (
+    <span
+      style={{ display: "inline-flex", gap: 3, verticalAlign: "middle", flexWrap: "wrap" }}
+      title="Data source (temporary attribution tag)"
+    >
+      {list.map((k) => {
+        const m = VENDOR_META[k];
+        return (
+          <span
+            key={k}
+            style={{
+              fontSize: ".54rem",
+              fontWeight: 700,
+              letterSpacing: ".04em",
+              lineHeight: 1,
+              padding: "2px 5px",
+              borderRadius: 4,
+              background: m.bg,
+              color: m.fg,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {m.label}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 // ---- "Not available" / loading placeholders ----
 // The single reusable primitive for "we removed the mock value here and there
 // is no live source yet" — used instead of either (a) silently rendering

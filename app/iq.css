@@ -78,6 +78,14 @@
      wasn't dim-on-dark, it was low-contrast-on-light. */
   --text-dim: #5C6780;
   --text-dim-solid: #5C6780;
+  /* The dark-theme neon green/red glow on a light background — the mint #2FE6A6
+     read as glowing and failed contrast on off-white. Darker, saturated
+     up/down that stay readable (≈4.5:1) on light surfaces; dim tints lowered to
+     match. */
+  --up: #0B8A57;
+  --up-dim: rgba(11,138,87,.12);
+  --down: #D22C49;
+  --down-dim: rgba(210,44,73,.12);
   --shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 4px 16px -4px rgba(0,0,50,.08);
 }
 

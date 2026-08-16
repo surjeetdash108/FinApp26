@@ -5,7 +5,7 @@ import Link from "next/link";
 import { firebaseAuth } from "../../firebase";
 import { useIQActions, ExpandBtn } from "../shell";
 import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem, maPostureLabel } from "../data";
-import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable } from "../utils";
+import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable, VendorTag } from "../utils";
 import { isoDay } from "../calendar-range";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
@@ -229,6 +229,7 @@ function DashPopContent({
     <div className="dp-head">
       <span className="dp-sym">{sym}</span>
       <span className="dp-nm">{name}</span>
+      <VendorTag v={block === "analyst" ? ["fmp", "polygon"] : block === "insider" ? "sec" : "polygon"} />
       <span className="dp-tag">{BLOCK_LABEL[block]}</span>
     </div>
     <div>{body}</div>
@@ -242,6 +243,7 @@ function MoverPopup({ m }: { m: Mover }) {
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
         <span style={{ fontWeight: 800, color: "var(--text-hi)", fontSize: ".9rem" }}>{m.ticker}</span>
         <span style={{ flex: 1, fontSize: ".72rem", color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
+        <VendorTag v="polygon" />
         <span className={`r ${cls(m.pctChange)}`} style={{ fontSize: ".78rem" }}>{sign(m.pctChange)}</span>
       </div>
       <div className="mvtabs">
@@ -410,7 +412,8 @@ export function DashboardScreen() {
 
         {/* ── 1. Pulse strip ── */}
         <div className="col-12">
-          <div className="pulse">
+          <div className="pulse" style={{ position: "relative" }}>
+            <span style={{ position: "absolute", top: 4, right: 6, zIndex: 2, pointerEvents: "none" }}><VendorTag v="polygon" /></span>
             {pulse.slice(0, 6).map((x, i) => (
               <div key={x.label} className="p" style={{ cursor: "pointer" }} onClick={() => openIndex(i)}>
                 <div className="lbl">{x.label}</div>
@@ -459,7 +462,7 @@ export function DashboardScreen() {
         <div className="col-12">
           <div className="card">
             <div className="card-h">
-              <h3>Most Searched Tickers</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Most Searched Tickers</h3><VendorTag v={["firebase", "polygon"]} /></div>
               <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>by user searches</span>
             </div>
             <div className="card-b" style={{ paddingTop: 6 }}>
@@ -506,7 +509,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Earnings Today</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Earnings Today</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/earnings">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
@@ -537,7 +540,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Movers</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Movers</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/movers">View all →</Link>
             </div>
             <div style={{ display: "flex", gap: 4, padding: "6px 13px 0" }}>
@@ -572,7 +575,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Market Heatmap</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market Heatmap</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/heatmap">Full map →</Link>
             </div>
             {(() => {
@@ -650,7 +653,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Analyst Actions</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Analyst Actions</h3><VendorTag v={["fmp", "polygon"]} /></div>
               <Link className="link" href="/menu/analyst">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
@@ -679,7 +682,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Screener · Leaders &amp; Laggards</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Screener · Leaders &amp; Laggards</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/screener">View all →</Link>
             </div>
             <div style={{ display: "flex", gap: 4, padding: "6px 13px 0" }}>
@@ -716,7 +719,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Portfolio Pulse</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Portfolio Pulse</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/portfolio">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
@@ -768,7 +771,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Watchlist</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Watchlist</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/watchlist">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
@@ -793,7 +796,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Insider &amp; Institutional</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Insider &amp; Institutional</h3><VendorTag v="sec" /></div>
               <Link className="link" href="/menu/insider">View all →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 4 }}>
@@ -820,7 +823,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Live Market Feed</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Live Market Feed</h3><VendorTag v={["polygon", "fmp"]} /></div>
               <Link className="link" href="/menu/commentary">Commentary →</Link>
             </div>
             <div className="card-b" style={{ paddingTop: 2 }}>
@@ -833,7 +836,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Recaps</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Recaps</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/recap">All →</Link>
             </div>
             <div className="card-b">
@@ -891,7 +894,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card vix" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>VIX · Volatility</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>VIX · Volatility</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/macro">View all →</Link>
             </div>
             <div className="card-b">
@@ -913,7 +916,7 @@ export function DashboardScreen() {
         <div className="col-4">
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
-              <h3>Fear &amp; Greed</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Fear &amp; Greed</h3><VendorTag v="polygon" /></div>
               {fgVal != null && fgLabel != null && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <button className="link" onClick={() => setDrawer("fg-history")}>History →</button>
@@ -1008,6 +1011,7 @@ export function DashboardScreen() {
         >
           <div className="heat-pop-h">
             <span>{heatPop.sd.name}</span>
+            <VendorTag v="polygon" />
             <span className={`pill ${heatPop.sd.pctChange == null ? "" : heatPop.sd.pctChange >= 0 ? "up" : "dn"}`}>
               {heatPop.sd.pctChange == null ? <NotAvailable /> : sign(heatPop.sd.pctChange)}
             </span>
