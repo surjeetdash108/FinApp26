@@ -164,6 +164,8 @@ export function InsiderScreen() {
   const [view,       setView]       = useState<"insider" | "13f">("insider");
   const [insFilter,  setInsFilter]  = useState<InsFilter>("All");
   const [insSort,    setInsSort]    = useState<InsSort>("value");
+  const [insDir,     setInsDir]     = useState<"asc" | "desc">("desc");
+  const [insQuery,   setInsQuery]   = useState("");
   const [insPage,    setInsPage]    = useState(0);
   const [instFilter, setInstFilter] = useState<InstFilter>("All");
   const [instSort,   setInstSort]   = useState<InstSort>("owners");
@@ -202,22 +204,34 @@ export function InsiderScreen() {
     date: x.transactionDate,
   }));
 
-  // ---- insider filter + sort ----
+  // Click a sort field: re-clicking the active field flips direction, a new
+  // field activates it descending (largest value / most recent date first).
+  function toggleInsSort(field: InsSort) {
+    if (insSort === field) setInsDir(d => (d === "desc" ? "asc" : "desc"));
+    else { setInsSort(field); setInsDir("desc"); }
+  }
+
+  // ---- insider search + filter + sort ----
+  const insQ = insQuery.trim().toUpperCase();
   const filtered = FEED.filter(x => {
+    if (insQ && !x.s.toUpperCase().includes(insQ)) return false;
     if (insFilter === "Buys")  return x.dir === "buy";
     if (insFilter === "Sells") return x.dir === "sell";
     return true;
   });
-  const list = [...filtered].sort((a, b) =>
-    insSort === "date" ? b.date.localeCompare(a.date) : (b.valUsd ?? 0) - (a.valUsd ?? 0)
-  );
+  const list = [...filtered].sort((a, b) => {
+    const cmp = insSort === "date"
+      ? (a.date ?? "").localeCompare(b.date ?? "")
+      : (a.valUsd ?? 0) - (b.valUsd ?? 0);
+    return insDir === "desc" ? -cmp : cmp;
+  });
   // Paginate the feed — 2000+ filings should not all render at once.
   const INS_PAGE_SIZE = 50;
   const insPageCount = Math.max(1, Math.ceil(list.length / INS_PAGE_SIZE));
   const insPageClamped = Math.min(insPage, insPageCount - 1);
   const pageRows = list.slice(insPageClamped * INS_PAGE_SIZE, insPageClamped * INS_PAGE_SIZE + INS_PAGE_SIZE);
-  // Reset to the first page whenever the filter or sort changes.
-  useEffect(() => { setInsPage(0); }, [insFilter, insSort]);
+  // Reset to the first page whenever the search, filter or sort changes.
+  useEffect(() => { setInsPage(0); }, [insFilter, insSort, insDir, insQuery]);
 
   // most active by real $ volume
   const agg: Record<string, { n: number; buy: number; sell: number }> = {};
@@ -268,10 +282,12 @@ export function InsiderScreen() {
             {(["All", "Buys", "Sells"] as InsFilter[]).map(c => (
               <button key={c} className={`chip${insFilter === c ? " on" : ""}`} onClick={() => setInsFilter(c)}>{c}</button>
             ))}
-            <div style={{ flex: 1 }} />
-            <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginRight: 6 }}>Sort</span>
-            <button className={`chip${insSort === "value" ? " on" : ""}`} onClick={() => setInsSort("value")}>Value</button>
-            <button className={`chip${insSort === "date"  ? " on" : ""}`} onClick={() => setInsSort("date")}>Date</button>
+            <input
+              value={insQuery}
+              onChange={e => setInsQuery(e.target.value.toUpperCase())}
+              placeholder="Search ticker…"
+              style={{ width: 150, boxSizing: "border-box", alignSelf: "center", marginLeft: 4, background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", fontSize: ".76rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)" }}
+            />
           </div>
 
           <div className="card">
@@ -281,13 +297,18 @@ export function InsiderScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 2, overflowX: "auto" }}>
               {list.length === 0 ? (
-                <DataState loading={liveInsiderTxLoading} label="No Form 4 filings synced yet." />
+                <DataState loading={liveInsiderTxLoading} label={insQ ? `No filings match “${insQuery}”.` : "No Form 4 filings synced yet."} />
               ) : (
                 <table className="tbl" id="insTbl">
                   <thead>
                     <tr>
                       <th>Ticker</th><th>Side</th><th>Insider / owner</th><th>Transaction</th>
-                      <th className="num">Value</th><th className="num">Date</th>
+                      <th className="num" style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleInsSort("value")} title="Sort by value">
+                        Value <span style={{ fontSize: ".82em", color: "var(--brand-2)", opacity: insSort === "value" ? 1 : 0.3 }}>{insSort === "value" && insDir === "asc" ? "▲" : "▼"}</span>
+                      </th>
+                      <th className="num" style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleInsSort("date")} title="Sort by date">
+                        Date <span style={{ fontSize: ".82em", color: "var(--brand-2)", opacity: insSort === "date" ? 1 : 0.3 }}>{insSort === "date" && insDir === "asc" ? "▲" : "▼"}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
