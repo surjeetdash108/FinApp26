@@ -596,6 +596,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // (replacing the direct companies Firestore listener this screen used to
   // hold open). Re-fetches whenever `sym` changes since it's part of the path.
   const { data: liveCompany, loading: liveCompanyLoading } = useApiResource<CompanyDoc>(`/live/company?ticker=${encodeURIComponent(sym)}`);
+  // Which symbol's "no data" popup the user has dismissed (so it doesn't reopen).
+  const [dismissedNoData, setDismissedNoData] = useState("");
   const { data: dividendHistory, loading: dividendLoading } = useApiResource<DividendHistoryDoc>(`/live/dividend-history?ticker=${encodeURIComponent(sym)}`);
   const { data: splitsDoc } = useApiResource<SplitsDoc>(`/live/splits?ticker=${encodeURIComponent(sym)}`);
   const { data: financialsDoc, loading: financialsLoading } = useApiResource<FinancialsDoc>(`/live/financials?ticker=${encodeURIComponent(sym)}`);
@@ -663,6 +665,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     : [];
 
   const isLiveStock = !!liveCompany && liveCompany.price != null;
+  // No usable market data for the searched ticker (delisted, brand-new, or
+  // non-US listing) — nothing priced came back after the fetch settled.
+  const noData = !liveCompanyLoading && !!liveCompany && liveCompany.price == null && liveCompany.marketCap == null;
+  const showNoDataPopup = noData && dismissedNoData !== sym;
 
   // Real 52-week high/low and average volume from a year of daily bars.
   const yr = yearBars ?? [];
@@ -2301,6 +2307,22 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           onClose={() => setWlPicker(null)}
           anchor={{ x: wlPicker.x, y: wlPicker.y }}
         />
+      )}
+
+      {/* ── No-data popup — the searched ticker has no market data ── */}
+      {showNoDataPopup && (
+        <div onClick={() => setDismissedNoData(sym)}
+          style={{ position: "fixed", inset: 0, zIndex: 9500, background: "rgba(4,7,14,.62)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 14, width: "min(400px,100%)", padding: "26px 24px", textAlign: "center", boxShadow: "0 24px 64px rgba(0,0,0,.5)" }}>
+            <div style={{ fontSize: "1.9rem", marginBottom: 8 }}>🔍</div>
+            <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--text-hi)", marginBottom: 6, fontFamily: "var(--f-display)" }}>Data not available</div>
+            <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)", lineHeight: 1.55, marginBottom: 18 }}>
+              No market data is available for <b style={{ color: "var(--text-hi)" }}>{sym}</b> yet. It may be a newly listed, delisted, or non-US-listed ticker. Try another symbol.
+            </div>
+            <button className="btn primary" onClick={() => setDismissedNoData(sym)}>Close</button>
+          </div>
+        </div>
       )}
     </>
   );
