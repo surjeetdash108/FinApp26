@@ -110,6 +110,50 @@ export function ScreenerScreen() {
     setTimeout(() => setSaved(false), 1800);
   }
 
+  /* ── Export the current matches as a PDF (via the browser's print → Save as PDF) ── */
+  function exportPdf() {
+    const esc = (s: string) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+    const active: string[] = [];
+    if (sector !== "All") active.push(`Sector: ${sector}`);
+    if (rs90) active.push("RS ≥ 90"); if (rs7090) active.push("RS 70–90"); if (rsLt40) active.push("RS < 40");
+    if (salesGt20) active.push("Sales growth > 20%"); if (epsGt25) active.push("EPS growth > 25%"); if (marginPos) active.push("Positive gross margin");
+    if (ratingBuy) active.push("Tech rating Buy"); if (mcGt10) active.push("Market cap > $10B"); if (rvolGt15) active.push("RVOL > 1.5×");
+    if (dmaAbove) active.push("Above key MAs"); if (rsiBand) active.push("RSI 40–70"); if (priceGt5) active.push("Price > $5");
+    [...activePresets].forEach(p => active.push(`Preset: ${p}`));
+    const num = (v: number, suffix = "", d = 1) => (v ? `${v.toFixed(d)}${suffix}` : "—");
+    const rows = filtered.map(s => `<tr>
+      <td class="tk">${esc(s.ticker)}</td><td>${esc(s.name)}</td><td>${esc(s.sector)}</td>
+      <td class="n">${s.marketCap ? "$" + s.marketCap.toFixed(1) + "B" : "—"}</td>
+      <td class="n">${num(s.peRatio)}</td><td class="n">${s.relativeStrength || "—"}</td>
+      <td class="n">${num(s.salesGrowth, "%")}</td><td class="n">${num(s.epsGrowth, "%")}</td>
+      <td class="n">${num(s.grossMargin, "%")}</td><td class="n">${num(s.rvolRatio, "×")}</td>
+      <td>${esc(s.techRating)}</td></tr>`).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>MarketCatalyst Screener</title>
+      <style>
+        *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111;margin:24px;font-size:11px}
+        h1{font-size:17px;margin:0 0 2px} .sub{color:#666;font-size:11px;margin-bottom:10px}
+        .filters{margin:0 0 12px;font-size:10.5px;color:#333}
+        .chip{display:inline-block;background:#eef1f6;border:1px solid #d7dce6;border-radius:10px;padding:2px 8px;margin:0 4px 4px 0}
+        table{width:100%;border-collapse:collapse} th,td{padding:4px 6px;border-bottom:1px solid #e5e8ef;text-align:left}
+        th{font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:#666;border-bottom:1.5px solid #c8ccd6}
+        td.n,th.n{text-align:right;font-variant-numeric:tabular-nums} td.tk{font-weight:700}
+        tr:nth-child(even) td{background:#fafbfd}
+        @page{margin:14mm} @media print{body{margin:0}}
+      </style></head>
+      <body onload="window.print()">
+        <h1>MarketCatalyst — Stock Screener</h1>
+        <div class="sub">${filtered.length} matches · generated ${new Date().toLocaleString()}</div>
+        <div class="filters">${active.length ? active.map(a => `<span class="chip">${esc(a)}</span>`).join("") : '<span class="chip">No filters — full universe</span>'}</div>
+        <table><thead><tr>
+          <th>Ticker</th><th>Company</th><th>Sector</th><th class="n">Mkt Cap</th><th class="n">P/E</th><th class="n">RS</th>
+          <th class="n">Sales Gr</th><th class="n">EPS Gr</th><th class="n">Gr Margin</th><th class="n">RVOL</th><th>Tech</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+      </body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) { alert("Please allow pop-ups for this site to export the screener as a PDF."); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+
   /* ── More dropdown ── */
   const [ddOpen, setDdOpen] = useState(false);
   const ddRef = useRef<HTMLDivElement>(null);
@@ -201,12 +245,20 @@ export function ScreenerScreen() {
         <span style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>
           {filtered.length} match{filtered.length !== 1 ? "es" : ""}
         </span>
-        <button className="btn primary" onClick={saveScreen}>
-          <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
-            <path d="M5 5h14v14l-7-4-7 4z" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
-          </svg>
-          {saved ? "Saved ✓" : "Save screen"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={exportPdf} title="Export the current matches as a PDF">
+            <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Export PDF
+          </button>
+          <button className="btn primary" onClick={saveScreen}>
+            <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
+              <path d="M5 5h14v14l-7-4-7 4z" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
+            </svg>
+            {saved ? "Saved ✓" : "Save screen"}
+          </button>
+        </div>
       </div>
 
       <div style={{ padding: "0 18px 18px" }}>
