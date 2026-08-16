@@ -25,7 +25,17 @@ interface IpoRow {
    *  price, day-1 pop %, and return-since-offer %. Null when the name hasn't
    *  listed yet or Polygon has no series for it. */
   cur: number | null; day1: number | null; since: number | null;
+  /** Shares offered and total deal size (shares × offer), from the ipos job. */
+  shares: number | null; deal: number | null;
   sec: string; live?: boolean;
+}
+
+/** Compact magnitude label (12.5M, 1.2B) for share counts and deal sizes. */
+function compactNum(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
+  return `${n}`;
 }
 
 const SECTOR_OPTIONS = [
@@ -37,6 +47,7 @@ export function IPOsScreen() {
   const [selectedSym, setSelectedSym] = useState<string | null>(null);
   const [sector, setSector] = useState("All");
   const [tab, setTab] = useState<"recent" | "pipeline" | "calendar">("recent");
+  const [dateSort, setDateSort] = useState<"desc" | "asc">("desc"); // Recent-IPO date order
   const { data: liveIpos } = useApiList<IpoEventDoc>("/market-data/ipos");
   const { data: pipeline } = useApiList<IpoPipelineDoc>("/market-data/ipo-pipeline");
   // IPO events carry no sector, so join the live companies collection for each
@@ -71,10 +82,14 @@ export function IPOsScreen() {
     cur: e.currentPrice,
     day1: e.day1PopPct,
     since: e.returnSinceIpoPct,
+    shares: e.numberOfShares,
+    deal: e.totalSharesValue,
     sec: sectorOf(e.symbol),
     live: true,
   }));
-  const filtered = liveRows.filter(r => sector === "All" || r.sec === sector);
+  const filtered = liveRows
+    .filter(r => sector === "All" || r.sec === sector)
+    .sort((a, b) => dateSort === "desc" ? (b.date ?? "").localeCompare(a.date ?? "") : (a.date ?? "").localeCompare(b.date ?? ""));
   // Calendar tab shares the same sector filter (also ticker-based).
   const filteredCalendar = liveIposSorted.filter(e => sector === "All" || sectorOf(e.symbol) === sector);
 
@@ -165,7 +180,13 @@ export function IPOsScreen() {
               <tr>
                 <th>Company</th>
                 <th>Sector</th>
-                <th>IPO date</th>
+                <th style={{ cursor: "pointer", userSelect: "none" }}
+                  onClick={() => setDateSort(s => s === "desc" ? "asc" : "desc")}
+                  title="Sort by IPO date">
+                  IPO date <span style={{ color: "var(--brand-2)", fontSize: ".7rem" }}>{dateSort === "desc" ? "▼" : "▲"}</span>
+                </th>
+                <th className="num">Shares</th>
+                <th className="num">Deal size</th>
                 <th className="num">Offer</th>
                 <th className="num">Current</th>
                 <th className="num">Day 1</th>
@@ -194,6 +215,8 @@ export function IPOsScreen() {
                     </td>
                     <td>{r.sec}</td>
                     <td>{r.date}</td>
+                    <td className="num">{r.shares != null ? compactNum(r.shares) : "—"}</td>
+                    <td className="num">{r.deal != null ? `$${compactNum(r.deal)}` : "—"}</td>
                     <td className="num">{r.offer != null ? `$${r.offer.toFixed(2)}` : "—"}</td>
                     <td className="num">{r.cur != null ? `$${r.cur.toFixed(2)}` : "—"}</td>
                     <td className={`num ${r.day1 != null ? cls(r.day1) : ""}`}>{r.day1 != null ? sign(r.day1) : "—"}</td>
