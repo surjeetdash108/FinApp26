@@ -170,12 +170,15 @@ function DashPopContent({
       <div className="dp-note">Why it&apos;s moving: trading with its sector and the broad tape.</div>
     </>;
   } else if (block === "analyst" && an) {
+    const grades = an.recentGrades ?? [];
     body = <>
       <DpRow label="Consensus"><b style={{ color: "var(--text-hi)" }}>{an.consensus}</b></DpRow>
       <DpRow label="Strong Buy / Buy">{an.strongBuy} / {an.buy}</DpRow>
       <DpRow label="Hold">{an.hold}</DpRow>
       <DpRow label="Sell / Strong Sell">{an.sell} / {an.strongSell}</DpRow>
-      <div className="dp-note">Analyst consensus vote count. Per-firm upgrades/downgrades/price targets need a Benzinga-class feed, not built yet.</div>
+      <DpRow label="PT median">{an.priceTargetMedian != null ? `$${fmt(an.priceTargetMedian, 2)}` : <NotAvailable />}</DpRow>
+      <DpRow label="PT low / high">{an.priceTargetLow != null && an.priceTargetHigh != null ? `$${fmt(an.priceTargetLow, 2)} – $${fmt(an.priceTargetHigh, 2)}` : <NotAvailable />}</DpRow>
+      <div className="dp-note">{grades.length > 0 ? `${grades.length} recent rating change${grades.length === 1 ? "" : "s"} — open the analyst page for per-firm detail.` : "Analyst consensus vote count and price-target range."}</div>
     </>;
   } else if (block === "watchlist") {
     const px = w?.price ?? mv?.price;
@@ -247,8 +250,8 @@ function MoverPopup({ m }: { m: Mover }) {
       </div>
       <div className="mvp mvp-t">
         <div className="dp-row"><span>Price</span><b>${fmt(m.price)}</b></div>
-        <div className="dp-row"><span>RVOL</span><b>{m.rvolRatio}×</b></div>
-        <div className="dp-row"><span>RS Rating</span><b>{m.relativeStrength}/99</b></div>
+        <div className="dp-row"><span>RVOL</span>{m.rvolRatio > 0 ? <b>{m.rvolRatio.toFixed(1)}×</b> : <NotAvailable />}</div>
+        <div className="dp-row"><span>RS Rating</span>{m.relativeStrength > 0 ? <b>{m.relativeStrength}/99</b> : <NotAvailable />}</div>
         <div className="dp-row"><span>MA posture</span>{m.maPosture === "—" ? <NotAvailable /> : <b>{m.maPosture}</b>}</div>
         <div className="dp-row"><span>1-Week</span>{m.weekPct == null ? <NotAvailable /> : <b className={cls(m.weekPct)}>{sign(m.weekPct)}</b>}</div>
         <div className="dp-note" style={{ marginTop: 6 }}>{m.techContext}</div>

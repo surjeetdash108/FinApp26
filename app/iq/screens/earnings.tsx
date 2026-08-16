@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState } from "../utils";
 import { ChartCard } from "../stock-panel";
@@ -366,11 +366,84 @@ function EcChip({ sym, selected, onSelect }: { sym: string; selected: boolean; o
 }
 
 // ── Earnings call drawer ──────────────────────────────────────────────────
-// No live vendor for call audio/transcripts/AI summaries is wired up — the
-// drawer stays reachable from the "Earnings call" button, but says so rather
-// than showing fabricated call summaries and invented transcript dialogue.
+// Real earnings-call transcript from FMP (GET /live/earnings-transcript). FMP
+// carries the transcript TEXT, not call audio, so "Play" reads the transcript
+// aloud via the browser's built-in speech synthesis — no audio vendor needed.
+
+interface TranscriptDoc {
+  ticker: string;
+  quarter?: number | null;
+  year?: number | null;
+  date?: string | null;
+  content?: string | null;
+  hasTranscript?: boolean;
+}
+
+/**
+ * Splits transcript text into short sentence groups for speech. Chrome cuts a
+ * single SpeechSynthesisUtterance off after ~15s, so we queue many small ones;
+ * pause/resume then acts on the whole queue as one.
+ */
+function chunkForSpeech(text: string): string[] {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return [];
+  const sentences = clean.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) ?? [clean];
+  const chunks: string[] = [];
+  let cur = "";
+  for (const s of sentences) {
+    if ((cur + s).length > 220 && cur) { chunks.push(cur.trim()); cur = s; }
+    else cur += s;
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks;
+}
 
 function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
+  const { data, loading } = useApiResource<TranscriptDoc>(
+    `/live/earnings-transcript?ticker=${encodeURIComponent(sym)}`,
+  );
+  const content = data?.content ?? "";
+  const hasTx = !!data?.hasTranscript && content.trim().length > 0;
+  const paras = hasTx ? content.split(/\n+/).map(p => p.trim()).filter(Boolean) : [];
+
+  const period = [
+    data?.quarter ? `Q${data.quarter}` : null,
+    data?.year ?? null,
+  ].filter(Boolean).join(" ");
+
+  // ── Text-to-speech play / pause ──
+  const ttsSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const [tts, setTts] = useState<"idle" | "playing" | "paused">("idle");
+  const chunks = useRef<string[]>([]);
+
+  // Rebuild the speech queue when the transcript changes; stop any prior speech.
+  useEffect(() => {
+    chunks.current = chunkForSpeech(content);
+    if (ttsSupported) window.speechSynthesis.cancel();
+    setTts("idle");
+  }, [content, ttsSupported]);
+
+  // Never keep talking after the drawer closes.
+  useEffect(() => () => { if (ttsSupported) window.speechSynthesis.cancel(); }, [ttsSupported]);
+
+  function play() {
+    if (!ttsSupported || !hasTx) return;
+    const synth = window.speechSynthesis;
+    if (tts === "paused") { synth.resume(); setTts("playing"); return; }
+    synth.cancel();
+    for (const c of chunks.current) {
+      const u = new SpeechSynthesisUtterance(c);
+      u.onend = () => { if (!synth.pending && !synth.speaking) setTts("idle"); };
+      synth.speak(u);
+    }
+    setTts("playing");
+  }
+  function pause() {
+    if (!ttsSupported) return;
+    window.speechSynthesis.pause();
+    setTts("paused");
+  }
+
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -381,11 +454,45 @@ function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
             <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)" }}>
               {sym} · Earnings call
             </div>
+            <div style={{ fontSize: ".76rem", color: "var(--text-dim-solid)" }}>
+              {hasTx
+                ? `Transcript${period ? ` · ${period}` : ""}${data?.date ? ` · ${String(data.date).slice(0, 10)}` : ""}`
+                : "Earnings-call transcript"}
+            </div>
           </div>
           <button className="closebtn" onClick={onClose}>✕</button>
         </div>
         <div className="drawer-b">
-          <DataState label="Earnings-call audio, AI summaries, and transcripts aren't connected to a live vendor yet." />
+          {!hasTx ? (
+            <DataState loading={loading} label={`No earnings-call transcript available for ${sym} yet.`} />
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                {ttsSupported && (
+                  <button
+                    onClick={tts === "playing" ? pause : play}
+                    className="btn primary"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 7 }}
+                  >
+                    {tts === "playing"
+                      ? <><span style={{ fontSize: ".9em" }}>❚❚</span> Pause</>
+                      : <><span style={{ fontSize: ".9em" }}>▶</span> {tts === "paused" ? "Resume" : "Play"}</>}
+                  </button>
+                )}
+                <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>
+                  live · FMP transcript
+                </span>
+                {tts === "playing" && (
+                  <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Reading aloud…</span>
+                )}
+              </div>
+              <div style={{ fontSize: ".84rem", lineHeight: 1.6, color: "var(--text)" }}>
+                {paras.map((p, i) => (
+                  <p key={i} style={{ marginBottom: 10, whiteSpace: "pre-wrap" }}>{p}</p>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>

@@ -77,8 +77,9 @@ function FeedItem({ item, i, total, onTicker }: {
       </div>
       <a
         href={item.url} target="_blank" rel="noreferrer"
-        style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit", borderRadius: 8 }}
+        style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit", borderRadius: 8, display: "flex", gap: 10 }}
       >
+        <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: ".88rem", color: "var(--text)" }}>
           <b
             onClick={e => { e.preventDefault(); onTicker(item.ticker); }}
@@ -106,6 +107,16 @@ function FeedItem({ item, i, total, onTicker }: {
             </span>
           )}
         </div>
+        </div>
+        {item.imageUrl && (
+          <img
+            src={item.imageUrl}
+            alt=""
+            loading="lazy"
+            style={{ flexShrink: 0, width: 84, height: 84, objectFit: "cover", borderRadius: 8, background: "var(--surface-3)" }}
+            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+          />
+        )}
       </a>
     </div>
   );
