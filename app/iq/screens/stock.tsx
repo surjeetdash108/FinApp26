@@ -733,25 +733,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // lines up with the LEFT column's Financials card, then Key levels (below
   // Peers) flex-fills the rest down to the column base (Insider & institutional).
   // Both live in separate grid columns, so this can only be done by measuring.
-  const financialsRef = useRef<HTMLDivElement>(null);
-  const peersRef = useRef<HTMLDivElement>(null);
-  const sdGridRef = useRef<HTMLDivElement>(null);
-  const [peersH, setPeersH] = useState<number>();
-  useEffect(() => {
-    if (typeof ResizeObserver === "undefined") return;
-    const measure = () => {
-      const f = financialsRef.current, pr = peersRef.current;
-      if (!f || !pr) { setPeersH(undefined); return; }
-      // getBoundingClientRect diffs are scroll-invariant and layout-relative.
-      const h = f.getBoundingClientRect().bottom - pr.getBoundingClientRect().top;
-      setPeersH(h > 120 ? Math.round(h) : undefined);
-    };
-    const ro = new ResizeObserver(() => requestAnimationFrame(measure));
-    if (sdGridRef.current) ro.observe(sdGridRef.current);
-    requestAnimationFrame(measure);
-    window.addEventListener("resize", measure);
-    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
-  }, [sym, financialsDoc, companies, liveCompany]);
 
   const rating = ratingLabel(liveCompany?.techRating ?? null);
   const rs = liveCompany?.rsRating ?? null;
@@ -1016,7 +997,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
         </div>
       )}
 
-      <div ref={sdGridRef} className="sd-grid" style={hideHeader ? { paddingTop: 0 } : undefined}>
+      <div className="sd-grid" style={hideHeader ? { paddingTop: 0 } : undefined}>
 
         {/* Full-width chart */}
         {!hideChart && <div style={{ gridColumn: "1 / -1" }}>
@@ -1197,7 +1178,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             const prevA   = histEps[4]?.a;
             const yoy     = prevA != null ? ((latestA - prevA) / Math.abs(prevA || 1)) * 100 : null;
             return (
-              <div ref={financialsRef} className="card">
+              <div className="card">
                 <div className="card-h">
                   <h3>Financials</h3>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1537,15 +1518,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-          {/* Peers — capped to line its bottom up with the LEFT column's
-              Financials card (measured via peersH); its list scrolls inside. */}
-          <div
-            ref={peersRef}
-            className="card"
-            style={peersH
-              ? { height: peersH, flexShrink: 0, display: "flex", flexDirection: "column" }
-              : { flex: 1, display: "flex", flexDirection: "column" }}
-          >
+          {/* Peers — content-sized; a long list scrolls inside the capped body. */}
+          <div className="card">
             <div className="card-h">
               <h3>Peers · who&apos;s leading{peersTotal > 0 ? ` · ${peersTotal}` : ""}</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1553,7 +1527,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 {peersTotal > peers.length && <span className="link" onClick={() => setInnerDrawer("peers")}>View all →</span>}
               </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 6, flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <div className="card-b" style={{ paddingTop: 6, overflowY: "auto", maxHeight: 420 }}>
               {peers.length ? peers.map(peer => {
                 const tag = peer.c === pmx ? "Leader" : peer.c === pmn ? "Laggard" : "";
                 return (
@@ -1574,10 +1548,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-          {/* Key levels (pivots) — flex-fills the space below the (capped) Peers
-              card down to the right column's base, so its bottom lines up with
-              the LEFT column's last card (Insider & institutional). */}
-          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {/* Key levels (pivots) — content-sized, directly below Peers. */}
+          <div className="card">
             <div className="card-h">
               <h3>Key levels (pivots)</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1585,7 +1557,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
               </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 6, flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <div className="card-b" style={{ paddingTop: 6 }}>
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
                 Weekly pivots
               </div>
