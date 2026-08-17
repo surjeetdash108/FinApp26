@@ -1065,7 +1065,7 @@ export function EarningsScreen() {
                   sym={sel}
                   reports={(financialsDoc?.quarters ?? [])
                     .filter(q => q.filingDate)
-                    .map(q => ({ date: q.filingDate as string, epsActual: q.epsActual, epsEstimate: q.epsEstimate }))}
+                    .map(q => ({ date: q.filingDate as string, epsActual: q.epsActual, epsEstimate: q.epsEstimate, epsReported: q.epsActualReported ?? null, epsEstimateReported: q.epsEstimateReported ?? null }))}
                 />
               </div>
             </div>
