@@ -23,6 +23,20 @@ export function useApiResource<T>(path: string | null, refetchMs?: number) {
     }
     let cancelled = false;
 
+    // Path changed: clear the previous resource and show a loading state so
+    // consumers render loading instead of lingering on the prior ticker's data
+    // until this fetch resolves (BUG-DATA-009). Deferred like the null branch
+    // above to avoid a synchronous setState in the effect body; the `cancelled`
+    // guard below still stops a superseded path's late response from overwriting
+    // the current data.
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setData(null);
+        setError(null);
+        setLoading(true);
+      }
+    });
+
     async function load() {
       try {
         const result = await apiGet<T>(path as string);

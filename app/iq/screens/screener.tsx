@@ -24,21 +24,33 @@ function ratingLabel(n: number | null): string {
  * Live-only universe: a ticker appears here only if `companies` has a doc for
  * it (i.e. it has actually been synced — the on-demand redesign retired the
  * fixed 241-ticker mock catalog in favor of this dynamic, usage-driven set).
- * Individual score fields render a neutral 0/"Neutral" only when that
- * specific compute job hasn't reached this ticker yet, never a mock number.
+ * Score fields stay null (never a defaulted 0) when the compute job hasn't
+ * reached this ticker yet — a 0 would silently pass "less-than" screens (e.g.
+ * RS < 40 laggards) and print a fake "RS 0". Filters below treat null as
+ * "unknown" and exclude it; the row renders "—".
  */
-function companiesToScreenerStocks(companies: CompanyDoc[]): (ScreenerStock & { live: boolean })[] {
+type ScreenerRow = Omit<ScreenerStock, "peRatio" | "relativeStrength" | "salesGrowth" | "epsGrowth" | "grossMargin" | "rvolRatio"> & {
+  peRatio: number | null;
+  relativeStrength: number | null;
+  salesGrowth: number | null;
+  epsGrowth: number | null;
+  grossMargin: number | null;
+  rvolRatio: number | null;
+  live: boolean;
+};
+
+function companiesToScreenerStocks(companies: CompanyDoc[]): ScreenerRow[] {
   return companies.map(c => ({
     ticker: c.ticker,
     name: c.name ?? c.ticker,
     sector: c.sector ?? "—",
     marketCap: c.marketCap != null ? c.marketCap / 1e9 : 0,
-    peRatio: c.peRatio ?? 0,
-    relativeStrength: c.rsRating ?? 0,
-    salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : 0,
-    epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : 0,
-    grossMargin: c.grossMargin != null ? c.grossMargin * 100 : 0,
-    rvolRatio: c.rvol ?? 0,
+    peRatio: c.peRatio ?? null,
+    relativeStrength: c.rsRating ?? null,
+    salesGrowth: c.revenueGrowthYoY != null ? c.revenueGrowthYoY * 100 : null,
+    epsGrowth: c.epsGrowthYoY != null ? c.epsGrowthYoY * 100 : null,
+    grossMargin: c.grossMargin != null ? c.grossMargin * 100 : null,
+    rvolRatio: c.rvol ?? null,
     techRating: ratingLabel(c.techRating),
     live: c.marketCap != null || c.peRatio != null || c.rsRating != null || c.techRating != null,
   }));
@@ -207,10 +219,10 @@ export function ScreenerScreen() {
     if (activePresets.size > 0) {
       const passesAny = [...activePresets].some(idx => {
         const pf = screenerPresets[idx].f;
-        if (pf.relativeStrength_min !== undefined && s.relativeStrength < pf.relativeStrength_min) return false;
-        if (pf.salesGrowth_min      !== undefined && s.salesGrowth      < pf.salesGrowth_min)      return false;
-        if (pf.epsGrowth_min        !== undefined && s.epsGrowth        < pf.epsGrowth_min)        return false;
-        if (pf.rvolRatio_min        !== undefined && s.rvolRatio        < pf.rvolRatio_min)        return false;
+        if (pf.relativeStrength_min !== undefined && (s.relativeStrength == null || s.relativeStrength < pf.relativeStrength_min)) return false;
+        if (pf.salesGrowth_min      !== undefined && (s.salesGrowth == null || s.salesGrowth < pf.salesGrowth_min))                return false;
+        if (pf.epsGrowth_min        !== undefined && (s.epsGrowth == null || s.epsGrowth < pf.epsGrowth_min))                      return false;
+        if (pf.rvolRatio_min        !== undefined && (s.rvolRatio == null || s.rvolRatio < pf.rvolRatio_min))                      return false;
         if (pf.marketCap_min        !== undefined && s.marketCap        < pf.marketCap_min)        return false;
         if (pf.techRating           !== undefined && !pf.techRating.includes(s.techRating))        return false;
         return true;
@@ -218,15 +230,15 @@ export function ScreenerScreen() {
       if (!passesAny) return false;
     }
     // Manual filters — all must pass (AND logic)
-    if (rs90      && s.relativeStrength < 90)                                 return false;
-    if (rs7090    && (s.relativeStrength < 70 || s.relativeStrength >= 90))   return false;
-    if (rsLt40    && s.relativeStrength >= 40)                                return false;
-    if (salesGt20 && s.salesGrowth < 20)                                      return false;
-    if (epsGt25   && s.epsGrowth   < 25)                                      return false;
-    if (marginPos && s.grossMargin <= 10)                                      return false;
+    if (rs90      && (s.relativeStrength == null || s.relativeStrength < 90))                              return false;
+    if (rs7090    && (s.relativeStrength == null || s.relativeStrength < 70 || s.relativeStrength >= 90))  return false;
+    if (rsLt40    && (s.relativeStrength == null || s.relativeStrength >= 40))                             return false;
+    if (salesGt20 && (s.salesGrowth == null || s.salesGrowth < 20))                                        return false;
+    if (epsGt25   && (s.epsGrowth == null || s.epsGrowth < 25))                                            return false;
+    if (marginPos && (s.grossMargin == null || s.grossMargin <= 10))                                       return false;
     if (ratingBuy && !["Strong Buy", "Buy"].includes(s.techRating))           return false;
     if (mcGt10    && s.marketCap < 10)                                        return false;
-    if (rvolGt15  && s.rvolRatio < 1.5)                                       return false;
+    if (rvolGt15  && (s.rvolRatio == null || s.rvolRatio < 1.5))                                           return false;
     // Technicals read from the company doc (technical-indicators.job).
     if (dmaAbove || rsiBand || priceGt5) {
       const c = byTicker.get(s.ticker);
@@ -407,11 +419,11 @@ export function ScreenerScreen() {
                     sym={s.ticker}
                     name={s.name}
                     seed={i + 11}
-                    sparkUp={s.relativeStrength >= 60}
+                    sparkUp={(s.relativeStrength ?? 0) >= 60}
                     isSelected={selSym === s.ticker}
                     onClick={() => setScrSel(s.ticker)}
                     valueTop={px == null ? "—" : px >= 1000 ? `$${(px / 1000).toFixed(2)}K` : `$${px.toFixed(2)}`}
-                    valueBottom={`RS ${s.relativeStrength} · ${s.techRating}`}
+                    valueBottom={`RS ${s.relativeStrength ?? "—"} · ${s.techRating}`}
                     valueBottomClass={s.techRating.includes("Buy") ? "up" : s.techRating.includes("Sell") ? "down" : ""}
                   />
                 );

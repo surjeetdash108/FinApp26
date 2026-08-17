@@ -17,10 +17,16 @@ interface BarsResponse {
  * timeframes (the old hook only ever had real data for 3M/6M/1Y; 1D/1W/1M/5Y
  * always fell back to the synthetic generator).
  */
-export function useBackendBars(sym: string, tf: string): { bars: OHLCBar[] | undefined; loading: boolean } {
+export function useBackendBars(
+  sym: string,
+  tf: string,
+): { bars: OHLCBar[] | undefined; loading: boolean; asOf?: string; source?: BarsResponse["source"] } {
   const { data, loading } = useApiResource<BarsResponse>(`/live/bars?ticker=${encodeURIComponent(sym)}&tf=${tf}`);
   const bars = !data || data.bars.length < 2
     ? undefined
     : data.bars.map((b) => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
-  return { bars, loading };
+  // Surface the backend's freshness stamp (createdAt) and serving tier additively
+  // (BUG-DATA-008); existing call sites destructure only { bars, loading } and
+  // are unaffected.
+  return { bars, loading, asOf: data?.asOf, source: data?.source };
 }

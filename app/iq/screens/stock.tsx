@@ -596,7 +596,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const { data: liveEarningsEvents, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
   const { bars: yearBars, loading: yearBarsLoading } = useBackendBars(sym, "1Y");
   const [emaStep, setEmaStep] = useState(0);
-  const { bars: realBars } = useBackendBars(sym, tfActive);
+  const { bars: realBars, asOf: barsAsOf } = useBackendBars(sym, tfActive);
   // Live (delayed) price stream for the header + chart overlay: SSE push with a
   // /live/quotes poll fallback (Firebase Hosting doesn't proxy the SSE stream).
   const live = useLiveTick(sym);
@@ -663,15 +663,31 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const symbolList = [...companies].filter(c => !!c.ticker).sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).map(c => c.ticker);
   // Match by ticker prefix OR company name (so "apple" finds AAPL), largest first.
   const suggestions: { ticker: string; name: string }[] = search
-    ? [...companies]
-        .filter(c => {
-          if (!c.ticker) return false;
-          const q = search.toLowerCase();
-          return c.ticker.toLowerCase().startsWith(q) || (c.name ?? "").toLowerCase().includes(q);
-        })
-        .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
-        .slice(0, 8)
-        .map(c => ({ ticker: c.ticker, name: c.name ?? c.ticker }))
+    ? (() => {
+        const q = search.toLowerCase();
+        const qUpper = search.toUpperCase();
+        // Rank by match quality (exact ticker → ticker-prefix → name-prefix →
+        // name-substring) so an exact-ticker match always wins over a larger-cap
+        // company that merely CONTAINS the query in its name. Prevents a short
+        // foreign/ambiguous query (e.g. "ITC"/"TCS"/"RELIANCE") from surfacing an
+        // unrelated US security above the exact match; market cap only breaks ties
+        // within a tier. The company name is shown per row for disambiguation.
+        const rank = (c: (typeof companies)[number]) => {
+          const tk = (c.ticker ?? "").toUpperCase();
+          if (tk === qUpper) return 0;
+          if (tk.startsWith(qUpper)) return 1;
+          if ((c.name ?? "").toLowerCase().startsWith(q)) return 2;
+          return 3;
+        };
+        return [...companies]
+          .filter(c => {
+            if (!c.ticker) return false;
+            return c.ticker.toLowerCase().startsWith(q) || (c.name ?? "").toLowerCase().includes(q);
+          })
+          .sort((a, b) => rank(a) - rank(b) || (b.marketCap ?? 0) - (a.marketCap ?? 0))
+          .slice(0, 8)
+          .map(c => ({ ticker: c.ticker, name: c.name ?? c.ticker }));
+      })()
     : [];
 
   const isLiveStock = !!liveCompany && liveCompany.price != null;
@@ -716,8 +732,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     name: liveCompany?.name ?? sym,
     description: liveCompany?.description ?? null,
     homepageUrl: liveCompany?.homepageUrl ?? null,
-    price: liveCompany?.price ?? 0,
-    pctChange: liveCompany?.pctChange ?? 0,
+    // Null (not 0) when the company doc has no price yet, so the header renders a
+    // loading dash instead of a fabricated $0.00 / +0.00% (BUG-DATA-007).
+    price: liveCompany?.price ?? null,
+    pctChange: liveCompany?.pctChange ?? null,
     peRatio: liveCompany?.peRatio ?? null,
     dividendYield: liveCompany?.dividendYield ?? null,
     beta: liveCompany?.beta ?? null,
@@ -726,8 +744,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     week52High: week52?.high ?? null,
     week52Low: week52?.low ?? null,
   };
-  const isUp = data.pctChange >= 0;
-  const p = data.price;
+  const isUp = (data.pctChange ?? 0) >= 0;
+  // `p` keeps a 0 fallback purely as the numeric baseline for the derived
+  // technical stats and the chart below (which have always assumed a number).
+  // The header quote uses the nullable `data.price` / `dispPrice` directly, so a
+  // genuinely-missing price shows a dash rather than $0.00 (BUG-DATA-007).
+  const p = data.price ?? 0;
 
   // Cross-column height match: cap the RIGHT column's Peers card so its bottom
   // lines up with the LEFT column's Financials card, then Key levels (below
@@ -756,9 +778,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     ?? symEvents[symEvents.length - 1]?.date
     ?? "—";
 
-  // EPS (TTM) is real arithmetic on two live numbers (price ÷ P/E), not a
-  // fabricated figure — only rendered when both inputs are real.
-  const eps = data.peRatio != null && data.peRatio !== 0 ? p / data.peRatio : null;
+  // EPS (TTM): the stored trailing-twelve-month EPS from the company doc, shown
+  // as-is — NOT reconstructed as price ÷ P/E (circular: the sync-time P/E was
+  // itself derived from EPS, so live-price ÷ stale-P/E drifts). N/A when unstored
+  // (BUG-DATA-006). `epsTtm`/`eps` are written by the /live/company backend
+  // (ondemand.service) but aren't declared on the shared CompanyDoc mirror yet,
+  // so read them via a narrow local view rather than widening that shared type.
+  const epsCo = liveCompany as (CompanyDoc & { epsTtm?: number | null; eps?: number | null }) | null;
+  const eps = epsCo?.epsTtm ?? epsCo?.eps ?? null;
   // Real RSI(14)/MACD from technical-indicators.job — "not available" (never
   // a seeded formula) until that job has run for this ticker.
   const rsi = liveCompany?.rsi14 ?? null;
@@ -766,15 +793,28 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const macdBuy = macd != null ? macd >= (liveCompany?.macdSignal ?? 0) : null;
   const stochKv = liveCompany?.stochK ?? null;
   const adx14 = liveCompany?.adx14 ?? null;
-  const dollar = Math.abs(data.pctChange / 100 * p);
+  const dollar = data.pctChange != null ? Math.abs((data.pctChange / 100) * p) : null;
 
   // Live overlay values for the header. Kept separate from `p`/`dollar` so the
   // many derived stats below (EPS, 52w positioning, chart baseline) stay pinned
   // to the company snapshot and don't churn on every tick.
   const livePrice = live.tick?.price ?? null;
-  const dispPrice = livePrice ?? p;
+  // Nullable: live tick, then the company snapshot — but NOT `p`'s 0 fallback, so
+  // an entirely-unknown quote stays null and the header renders a dash instead of
+  // $0.00 (BUG-DATA-007).
+  const dispPrice = livePrice ?? data.price;
   const dispPct = live.pct ?? data.pctChange;
   const dispDollar = live.change != null ? Math.abs(live.change) : dollar;
+  // Freshness stamp for the price-chart bars (backend createdAt), surfaced by the
+  // chart toolbar in the same muted style as the header's delayed-quote marker
+  // (BUG-DATA-008).
+  const barsAsOfLabel = (() => {
+    if (!barsAsOf) return null;
+    const d = new Date(barsAsOf);
+    return isNaN(d.getTime())
+      ? barsAsOf
+      : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  })();
 
   const cap = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(2)}T` : v >= 10 ? `$${Math.round(v)}B` : `$${v.toFixed(1)}B`;
   const nf = (x: number) => Math.round(x).toLocaleString("en-US");
@@ -950,8 +990,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
                 <h1>{sym}</h1>
                 <div className="sd-px" style={{ margin: 0, display: "flex", alignItems: "baseline", gap: 10 }}>
-                  <span className="p">${fmt(dispPrice, 2)}</span>
-                  <span className={`c ${cls(dispPct)}`}>{arr(dispPct)} {dispPct >= 0 ? "+" : ""}${fmt(dispDollar, 2)} ({sign(dispPct)})</span>
+                  {dispPrice != null
+                    ? <span className="p">${fmt(dispPrice, 2)}</span>
+                    : <span className="p" style={{ color: "var(--text-dim-solid)" }}>—</span>}
+                  {dispPct != null && (
+                    <span className={`c ${cls(dispPct)}`}>{arr(dispPct)} {dispPct >= 0 ? "+" : ""}${fmt(dispDollar ?? 0, 2)} ({sign(dispPct)})</span>
+                  )}
                   {livePrice != null && (
                     <span style={{ fontSize: ".56rem", color: "var(--text-dim-solid)", letterSpacing: ".02em" }}>
                       {live.connected ? "● live" : "○ delayed"} · {live.delayMinutes ?? 15}m delayed
@@ -1031,6 +1075,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               {realBars && (
                 <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem", marginRight: 6 }}>
                   live · Polygon
+                </span>
+              )}
+              {barsAsOfLabel && (
+                <span style={{ fontSize: ".62rem", color: "var(--text-dim-solid)", letterSpacing: ".02em", marginRight: 6 }}>
+                  as of {barsAsOfLabel}
                 </span>
               )}
               <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>drag-free · hover for OHLC</span>
@@ -1471,7 +1520,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   {consensusDoc.priceTargetConsensus != null && (
                     <div className="counts" style={{ marginTop: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
                       <span style={{ color: "var(--text-dim-solid)" }}>Target<b style={{ color: "var(--text-hi)" }}>${consensusDoc.priceTargetConsensus.toFixed(0)}</b></span>
-                      {dispPrice > 0 && (
+                      {dispPrice != null && dispPrice > 0 && (
                         <span style={{ color: consensusDoc.priceTargetConsensus >= dispPrice ? "var(--up)" : "var(--down)" }}>
                           Upside<b>{consensusDoc.priceTargetConsensus >= dispPrice ? "+" : ""}{(((consensusDoc.priceTargetConsensus - dispPrice) / dispPrice) * 100).toFixed(1)}%</b>
                         </span>

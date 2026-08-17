@@ -727,13 +727,21 @@ export function DashboardScreen() {
             </div>
             <div className="card-b" style={{ paddingTop: 8 }}>
               {isRealFolio ? (() => {
-                const totalVal = realHoldings.reduce((s, h) => s + h.shares * (companyByTicker.get(h.ticker)?.price ?? 0), 0);
-                const dayPL = realHoldings.reduce((s, h) => s + h.shares * (companyByTicker.get(h.ticker)?.price ?? 0) * (companyByTicker.get(h.ticker)?.pctChange ?? 0) / 100, 0);
-                // Unrealized = Σ (live price − cost basis) × shares, over holdings
-                // that carry a basis. null when none do → no line shown.
-                const withBasis = realHoldings.filter(h => h.costBasis != null && h.costBasis > 0 && (companyByTicker.get(h.ticker)?.price ?? 0) > 0);
+                // Value only holdings with a real synced price. A holding whose
+                // price hasn't synced must NEVER be treated as $0 — that silently
+                // understates total value and day P&L. Unpriced holdings are
+                // excluded here and the coverage is disclosed below (mirrors the
+                // `priced` filter in portfolio.tsx).
+                const priced = realHoldings
+                  .map(h => ({ h, price: companyByTicker.get(h.ticker)?.price ?? null, pctChange: companyByTicker.get(h.ticker)?.pctChange ?? 0 }))
+                  .filter((x): x is { h: HoldingDoc; price: number; pctChange: number } => x.price != null);
+                const totalVal = priced.reduce((s, { h, price }) => s + h.shares * price, 0);
+                const dayPL = priced.reduce((s, { h, price, pctChange }) => s + h.shares * price * pctChange / 100, 0);
+                // Unrealized = Σ (live price − cost basis) × shares, over priced
+                // holdings that carry a basis. null when none do → no line shown.
+                const withBasis = priced.filter(({ h }) => h.costBasis != null && h.costBasis > 0);
                 const unrealized = withBasis.length
-                  ? withBasis.reduce((s, h) => s + h.shares * ((companyByTicker.get(h.ticker)!.price!) - (h.costBasis as number)), 0)
+                  ? withBasis.reduce((s, { h, price }) => s + h.shares * (price - (h.costBasis as number)), 0)
                   : null;
                 return (
                   <>
@@ -741,6 +749,11 @@ export function DashboardScreen() {
                     <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)" }}>${totalVal >= 1000 ? (totalVal / 1000).toFixed(1) + "K" : totalVal.toFixed(2)}</span>
                     <span className={`mono ${cls(dayPL)}`} style={{ fontWeight: 600 }}>{arr(dayPL)} {dayPL >= 0 ? "+" : ""}${Math.abs(dayPL).toFixed(2)}</span>
                   </div>
+                  {priced.length < realHoldings.length && (
+                    <div style={{ fontSize: ".7rem", color: "var(--text-dim-solid)", marginBottom: 6 }}>
+                      {priced.length} of {realHoldings.length} priced
+                    </div>
+                  )}
                   {unrealized != null && (
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
                       <span>Unrealized{withBasis.length < realHoldings.length ? ` (${withBasis.length}/${realHoldings.length})` : ""}</span>

@@ -76,7 +76,9 @@ export function AnalystScreen() {
     const rows = liveConsensus.flatMap(c =>
       (c.recentGrades ?? []).map(g => ({
         ticker: c.ticker,
-        pt: c.priceTargetConsensus ?? null,
+        // THIS firm's own target (not the ticker consensus — that made every
+        // row identical). null shows "—" when the firm posted no target.
+        pt: g.priceTarget ?? null,
         date: g.date,
         firm: g.firm,
         previousGrade: g.previousGrade,
@@ -298,30 +300,25 @@ export function AnalystScreen() {
             <thead>
               <tr>
                 <th>Ticker</th><th>Firm</th><th>Action</th>
-                <th>Previous → New</th><th className="num">PT</th><th className="num">Upside</th><th className="num">Date</th>
+                <th>Previous → New</th><th className="num">Date</th>
               </tr>
             </thead>
             <tbody>
               {feedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: 0 }}>
+                  <td colSpan={5} style={{ padding: 0 }}>
                     <DataState loading={consensusLoading} label={actQ ? `No ${tab.toLowerCase() === "all" ? "" : tab.toLowerCase() + " "}rating changes for “${actQuery}”.` : `No ${tab.toLowerCase() === "all" ? "" : tab.toLowerCase() + " "}rating changes${clustersOnly ? " in clusters" : ""} in the recent feed.`} />
                   </td>
                 </tr>
-              ) : feedRows.map((a, i) => {
-                const up = upside(a.pt, a.ticker);
-                return (
+              ) : feedRows.map((a, i) => (
                   <tr key={`${a.ticker}-${a.firm}-${a.date}-${i}`} style={{ cursor: "pointer" }} onClick={() => openStock(a.ticker)}>
                     <td style={{ display: "flex", alignItems: "center", gap: 6 }}><StockLogo sym={a.ticker} size={16} /> {a.ticker}</td>
                     <td>{a.firm ?? "—"}</td>
                     <td><span style={{ color: actionTone(a.action), fontWeight: 600, textTransform: "capitalize" }}>{a.action ?? "—"}</span></td>
                     <td style={{ color: "var(--text-dim-solid)" }}>{a.previousGrade ?? "—"} <span style={{ opacity: .6 }}>→</span> <b style={{ color: "var(--text)" }}>{a.newGrade ?? "—"}</b></td>
-                    <td className="num">{money(a.pt)}</td>
-                    <td className="num" style={{ color: up == null ? "var(--text-dim-solid)" : up >= 0 ? "var(--up)" : "var(--down)", fontWeight: 600 }}>{up == null ? "—" : `${up >= 0 ? "+" : ""}${up.toFixed(0)}%`}</td>
                     <td className="num" style={{ color: "var(--text-dim-solid)" }}>{shortDate(a.date)}</td>
                   </tr>
-                );
-              })}
+                ))}
             </tbody>
           </table>
           {feedRows.length < filteredActions.length && (

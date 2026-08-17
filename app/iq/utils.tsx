@@ -112,40 +112,24 @@ export function arr(n: number): string {
   return n >= 0 ? '▲' : '▼';
 }
 
-// ---- Sparkline SVG (deterministic from seed) ----
-function _hash3(s: number): number { return s * s * s % 7; }
+// ---- Sparkline (BUG-DATA-004: fabricated trend shapes removed) ----
+// The old sparkline drew a deterministic shape hashed from the ticker symbol
+// (via _hash3) — NOT real prices; only the up/down colour was real. These call
+// sites (stock-panel / movers / dashboard / watchlist / portfolio / screener
+// rows) pass only a seed and an up/down flag, with no real price series, so any
+// drawn shape is fabricated. We now render NOTHING instead. Signatures are kept
+// byte-for-byte compatible so every consumer keeps compiling and simply shows
+// no sparkline. (_hash3 was the fabrication helper and has been removed.)
 
-export function sparkSVG(seed: number, up: boolean, w = 80, h = 26): string {
-  let p = 50;
-  const pts = Array.from({ length: 20 }, (_, i) => {
-    p = Math.min(90, Math.max(10, p + (_hash3(seed * (i + 3)) % 11) - 5));
-    return p;
-  });
-  if (up) pts[pts.length - 1] = Math.max(pts[pts.length - 2], pts[pts.length - 1]);
-  else pts[pts.length - 1] = Math.min(pts[pts.length - 2], pts[pts.length - 1]);
-  const xs = (i: number) => (i / (pts.length - 1)) * w;
-  const ys = (v: number) => (1 - v / 100) * h;
-  const d = 'M' + pts.map((v, i) => `${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join('L');
-  const fill = `${d}L${w},${h}L0,${h}Z`;
-  const color = up ? '#2FE6A6' : '#FF5470';
-  const id = `sg${seed}w${w}`;
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:${h}px">
-    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${color}" stop-opacity=".3"/>
-      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-    </linearGradient></defs>
-    <path d="${fill}" fill="url(#${id})"/>
-    <path d="${d}" fill="none" stroke="${color}" stroke-width="1.5"/>
-  </svg>`;
+/** Kept for signature stability; emits no markup — no real price series to plot. */
+export function sparkSVG(_seed: number, _up: boolean, _w = 80, _h = 26): string {
+  return "";
 }
 
-export function Spark({ seed, up, w = 80, h = 26 }: { seed: number; up: boolean; w?: number; h?: number }) {
-  return (
-    <div
-      className="spark"
-      dangerouslySetInnerHTML={{ __html: sparkSVG(seed, up, w, h) }}
-    />
-  );
+/** Renders nothing: with only a seed (no real price series) any sparkline shape
+ *  would be fabricated. Consumers keep passing {seed, up} and get an empty render. */
+export function Spark(_props: { seed: number; up: boolean; w?: number; h?: number }) {
+  return null;
 }
 
 // ---- Stock logo — real logo via Parqet CDN, letter avatar fallback ----
@@ -376,18 +360,6 @@ export function ChartSelect({ value, options, onChange, title }: {
 // ---- Candlestick chart (matches HTML genOHLC + candleChart) ----
 export type OHLCBar = { t: number; o: number; h: number; l: number; c: number; v: number };
 
-/** Approximate real trading-session span per timeframe, used to space out synthetic bar timestamps. */
-const TF_SPAN_MS: Record<string, number> = {
-  "1H": 60 * 60 * 1000,
-  "1D": 6.5 * 60 * 60 * 1000,
-  "1W": 5 * 24 * 60 * 60 * 1000,
-  "1M": 22 * 24 * 60 * 60 * 1000,
-  "3M": 90 * 24 * 60 * 60 * 1000,
-  "6M": 182 * 24 * 60 * 60 * 1000,
-  "1Y": 365 * 24 * 60 * 60 * 1000,
-  "5Y": 5 * 365 * 24 * 60 * 60 * 1000,
-};
-
 /** X-axis tick label for one bar, in ET — intraday timeframes show a clock time, longer ones a date. */
 function xAxisLabel(t: number, tf: string): string {
   const d = new Date(t);
@@ -401,11 +373,6 @@ function xAxisLabel(t: number, tf: string): string {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
   }
   return d.toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "America/New_York" });
-}
-
-function _seed(n: number) {
-  let s = n;
-  return () => { s = (Math.imul(1664525, s) + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
 }
 
 function _sma(data: OHLCBar[], p: number): (number | null)[] {
@@ -437,53 +404,43 @@ const MA_PERS = [9, 21, 50, 200];
 const MA_COLS = ['#f5b14c', '#34E2F0', '#7C6CF5', '#ff79c6'];
 const EMA_COLS = ['#5ff0b3', '#22b8d6', '#a78bfa', '#ff9aab'];
 
-function genOHLC(sym: string, tf: string, px: number): OHLCBar[] {
-  const C: Record<string, [number, number]> = {
-    "1D": [78, 0.5], "1W": [65, 0.9], "1M": [44, 1.5],
-    "3M": [64, 1.1], "6M": [120, 1.3], "1Y": [252, 1.8], "5Y": [260, 2.6],
-  };
-  const [n, volat] = C[tf] ?? [64, 1.1];
-  const rnd = _seed(hashStr(sym + tf) + 7);
-  let price = px * (tf === "5Y" ? 0.32 : tf === "1Y" ? 0.6 : 0.86);
-  const out: OHLCBar[] = [];
-  const bias = 0.08;
-  const span = TF_SPAN_MS[tf] ?? TF_SPAN_MS["3M"];
-  const now = Date.now();
-  for (let i = 0; i < n; i++) {
-    const o = price;
-    const ch = (rnd() - 0.5) * volat * 2 + bias * volat * 0.9;
-    const c = Math.max(0.5, o * (1 + ch / 100));
-    const h = Math.max(o, c) * (1 + rnd() * volat / 160);
-    const l = Math.min(o, c) * (1 - rnd() * volat / 160);
-    const v = 0.5 + rnd() * 0.7 + (Math.abs(ch) > volat ? 0.9 : 0);
-    const t = now - (n - 1 - i) * (span / n);
-    out.push({ t, o, h, l, c, v });
-    price = c;
-  }
-  const k = px / out[out.length - 1].c;
-  out.forEach(d => { d.o *= k; d.h *= k; d.l *= k; d.c *= k; });
-  return out;
-}
-
-export function CandleChart({
-  sym, tf, px, maStep = 0, emaStep = 0, showVol = true, chartType = "candles", realBars, live,
-}: {
+type CandleChartProps = {
   sym: string; tf: string; px: number;
   maStep?: number; emaStep?: number;
   showVol?: boolean; chartType?: string;
-  /** Real OHLCV bars for this ticker/timeframe, oldest-first — falls back to the simulated generator when omitted or too short to plot. */
+  /** Real OHLCV bars for this ticker/timeframe, oldest-first. */
   realBars?: OHLCBar[];
-  /** Latest live (delayed) price, folded onto the most recent real bar so the chart updates in place. Ignored on the synthetic fallback. */
+  /** Latest live (delayed) price, folded onto the most recent real bar so the chart updates in place. */
   live?: { price: number; high: number | null; low: number | null } | null;
-}) {
+};
+
+/**
+ * BUG-DATA-002: never fabricate a chart. When the backend returns fewer than
+ * two real bars for this ticker/timeframe there is nothing honest to plot, so
+ * we show an explicit empty state instead of the old seeded genOHLC series
+ * (which rendered a fully synthetic candlestick chart scaled to the real price,
+ * with no "simulated" label). Export name and props are unchanged, so callers
+ * in stock.tsx / stock-panel.tsx need no edits.
+ */
+export function CandleChart(props: CandleChartProps) {
+  if (!props.realBars || props.realBars.length < 2) {
+    return <DataState label="Not enough price history to plot a chart yet." height={264} />;
+  }
+  return <CandleChartInner {...props} />;
+}
+
+function CandleChartInner({
+  sym, tf, px, maStep = 0, emaStep = 0, showVol = true, chartType = "candles", realBars, live,
+}: CandleChartProps) {
   const [tip, setTip] = useState<{ html: string; left: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   const data = useMemo(() => {
-    const base = realBars && realBars.length > 1 ? realBars : genOHLC(sym, tf, px);
+    // Guaranteed non-empty (>= 2 bars) by the CandleChart wrapper above; the
+    // empty fallback is a type-safe no-op that can never fabricate data.
+    const base = realBars && realBars.length > 1 ? realBars : [];
     // Overlay the live price onto the current (last) real bar: its close tracks
-    // the tick and its high/low stretch to include it. Only on real bars — the
-    // synthetic generator has no notion of "now".
+    // the tick and its high/low stretch to include it.
     if (live && live.price > 0 && realBars && realBars.length > 1) {
       const last = base[base.length - 1];
       const c = live.price;

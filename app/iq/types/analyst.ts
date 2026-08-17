@@ -5,6 +5,9 @@ export interface AnalystRatingChange {
   previousGrade: string | null;
   newGrade: string | null;
   action: string | null; // upgrade | downgrade | initiate | maintain
+  /** This firm's own price target (FMP price-target-news). null when the firm
+   * posted none — NOT the ticker consensus, so rows aren't all identical. */
+  priceTarget?: number | null;
 }
 
 /** Mirrors backend's `analyst_actions` collection (src/market-data/analyst-actions.controller.ts) — GET /market-data/analyst-actions. */
