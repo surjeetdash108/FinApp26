@@ -70,6 +70,19 @@ export interface CompanyDoc {
   adx14?: number | null;
   /** Annualized 30-day realized volatility (%) — the Macro "30d Vol" column. */
   realizedVol30?: number | null;
+  // FMP 13F institutional-ownership rollup (stock-detail Institutional card).
+  /** % of shares outstanding held by 13F institutions (0-100). */
+  instOwnershipPct?: number | null;
+  /** Number of institutions holding (13F filers). */
+  inst13FHolders?: number | null;
+  /** QoQ change in holder count. */
+  inst13FHoldersChange?: number | null;
+  inst13FShares?: number | null;
+  inst13FSharesChange?: number | null;
+  instTotalInvested?: number | null;
+  instPutCallRatio?: number | null;
+  /** Rollup period, e.g. "Q1 2026". */
+  instAsOf?: string | null;
   // Sector rank from tech-rating.job; source records which vendor served the profile.
   sectorRank: number | null;
   sectorRankTotal: number | null;

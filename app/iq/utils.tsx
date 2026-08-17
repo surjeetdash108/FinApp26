@@ -354,6 +354,25 @@ export function EarningsGrowthChart({ hist }: { hist: EarnQ[] }) {
   );
 }
 
+// Chart timeframe + type option lists, shared by every chart toolbar.
+export const TF_OPTIONS = ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y"] as const;
+export const CHART_TYPE_OPTIONS = ["Candles", "Hollow", "Bars", "Line", "Area"] as const;
+
+/** Compact styled <select> that replaces the old inline button rows for the
+ *  chart timeframe (1D–5Y) and chart type (Candles–Area) pickers. */
+export function ChartSelect({ value, options, onChange, title }: {
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+  title?: string;
+}) {
+  return (
+    <select className="chart-select" value={value} title={title} onChange={e => onChange(e.target.value)}>
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
 // ---- Candlestick chart (matches HTML genOHLC + candleChart) ----
 export type OHLCBar = { t: number; o: number; h: number; l: number; c: number; v: number };
 
@@ -559,6 +578,20 @@ export function CandleChart({
             fill={d.c >= d.o ? "var(--up)" : "var(--down)"} opacity={0.34} />;
         })}
         {showVol && <text className="caxis" x="6" y={VY0 + 10}>Vol</text>}
+        {/* Average-volume reference line — helps spot above-average (often
+            institutional) volume days at a glance. */}
+        {showVol && n > 0 && (() => {
+          const avgV = data.reduce((s, d) => s + d.v, 0) / n;
+          const ah = Math.max(1, (avgV / vmax) * (VH - 4));
+          const ay = VYb - ah;
+          return (
+            <g>
+              <line x1={6} x2={W - axisW} y1={ay} y2={ay} stroke="var(--text-dim-solid)"
+                strokeWidth="1" strokeDasharray="3 3" opacity={0.85} />
+              <text className="caxis" x={W - axisW - 2} y={ay - 2} textAnchor="end">avg vol</text>
+            </g>
+          );
+        })()}
 
         {/* Area fill */}
         {ct === 'area' && (
@@ -604,6 +637,12 @@ export function CandleChart({
             </g>
           );
         })}
+        {/* Legend backing panel — keeps the MA/EMA labels legible instead of
+            overlapping (interfering with) the candles behind them. */}
+        {(maStep + emaStep) > 0 && (
+          <rect x={7} y={PADT + 2} width={62} height={(maStep + emaStep) * 12 + 4} rx={5}
+            fill="var(--surface-0)" opacity={0.72} />
+        )}
         {/* MA overlays */}
         {maPaths.map((d, idx) => d && (
           <g key={`ma${idx}`}>

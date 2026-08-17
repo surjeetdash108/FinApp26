@@ -14,7 +14,7 @@ import { pulseFromLive, buildSectorList, tapeItemsToIndexDocs } from "../live-ma
 import type {
   LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
   InsiderTxDoc, AnalystConsensusDoc, MarketSentimentDoc, MarketSentimentHistoryDoc, EarningsAnnouncementDoc,
-  WatchlistDoc, HoldingDoc, NewsArticleDoc, RecapDoc,
+  HoldingDoc, NewsArticleDoc, RecapDoc,
 } from "../types";
 
 // Insider mini-list, market internals and F&G history all had hardcoded mock
@@ -237,35 +237,6 @@ function DashPopContent({
   </>;
 }
 
-function MoverPopup({ m }: { m: Mover }) {
-  return (
-    <div className="mv-dp" onClick={e => e.stopPropagation()}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
-        <span style={{ fontWeight: 800, color: "var(--text-hi)", fontSize: ".9rem" }}>{m.ticker}</span>
-        <span style={{ flex: 1, fontSize: ".72rem", color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
-        <VendorTag v="polygon" />
-        <span className={`r ${cls(m.pctChange)}`} style={{ fontSize: ".78rem" }}>{sign(m.pctChange)}</span>
-      </div>
-      <div className="mvtabs">
-        <span className="mvt mvt-t">Technical</span>
-        <span className="mvt mvt-n">News</span>
-      </div>
-      <div className="mvp mvp-t">
-        <div className="dp-row"><span>Price</span><b>${fmt(m.price)}</b></div>
-        <div className="dp-row"><span>RVOL</span>{m.rvolRatio > 0 ? <b>{m.rvolRatio.toFixed(1)}×</b> : <NotAvailable />}</div>
-        <div className="dp-row"><span>RS Rating</span>{m.relativeStrength > 0 ? <b>{m.relativeStrength}/99</b> : <NotAvailable />}</div>
-        <div className="dp-row"><span>MA posture</span>{m.maPosture === "—" ? <NotAvailable /> : <b>{m.maPosture}</b>}</div>
-        <div className="dp-row"><span>1-Week</span>{m.weekPct == null ? <NotAvailable /> : <b className={cls(m.weekPct)}>{sign(m.weekPct)}</b>}</div>
-        <div className="dp-note" style={{ marginTop: 6 }}>{m.techContext}</div>
-      </div>
-      <div className="mvp mvp-n">
-        <div className="dp-note">{m.newsContext}</div>
-      </div>
-    </div>
-  );
-}
-
-
 export function DashboardScreen() {
   const { openStock, openMoverModal, openEarnings, openSector, openIndex } = useIQActions();
 
@@ -330,12 +301,17 @@ export function DashboardScreen() {
   // Real watchlist/portfolio (signed-in user). No demo fallback: an empty
   // list renders DataState instead of a fabricated $128,430 showcase.
   const uid = firebaseAuth.currentUser?.uid ?? null;
-  const { data: watchlistDoc, loading: watchlistLoading } = useApiResource<WatchlistDoc>(uid ? "/api/watchlist" : null);
+  const { data: watchlistsRes, loading: watchlistLoading } = useApiResource<{ watchlists: { id: string; name: string; tickers: string[] }[] }>(uid ? "/api/watchlists" : null);
   const { data: portfolioDoc, loading: portfolioLoading } = useApiResource<{ holdings: HoldingDoc[] }>(uid ? "/api/portfolio" : null);
-  const realWatchTickers = watchlistDoc?.tickers ?? [];
+  // A user can keep several named watchlists (backend GET /api/watchlists). The
+  // widget shows one at a time; a dropdown appears in its header only when there
+  // is more than one list to switch between.
+  const watchlists = watchlistsRes?.watchlists ?? [];
+  const [selWatchId, setSelWatchId] = useState<string | null>(null);
+  const activeWatchlist = watchlists.find(w => w.id === selWatchId) ?? watchlists[0] ?? null;
   const realHoldings = portfolioDoc?.holdings ?? [];
 
-  const watchMini: WatchItem[] = realWatchTickers.map(t => {
+  const watchMini: WatchItem[] = (activeWatchlist?.tickers ?? []).map(t => {
     const c = companyByTicker.get(t);
     return {
       ticker: t, name: c?.name ?? t, price: c?.price ?? 0, pctChange: c?.pctChange ?? 0,
@@ -359,9 +335,19 @@ export function DashboardScreen() {
 
   // Leaders/Laggards: real rsRating from `companies`, not the mock screener
   // catalog. Only tickers the rs-rating job has actually scored are ranked.
+  // Top / bottom 20 by relative strength — the widget scrolls through them.
   const rankedCompanies = companies.filter(c => c.rsRating != null);
-  const leaders  = [...rankedCompanies].sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0)).slice(0, 3);
-  const laggards = [...rankedCompanies].sort((a, b) => (a.rsRating ?? 0) - (b.rsRating ?? 0)).slice(0, 3);
+  const leaders  = [...rankedCompanies].sort((a, b) => (b.rsRating ?? 0) - (a.rsRating ?? 0)).slice(0, 20);
+  const laggards = [...rankedCompanies].sort((a, b) => (a.rsRating ?? 0) - (b.rsRating ?? 0)).slice(0, 20);
+
+  // Analyst Actions widget: deterministic pick — the 4 names with the strongest
+  // BUY lean and the 4 with the strongest SELL lean, measured by the buy−sell
+  // vote margin. Not the first rows off the feed.
+  const analystLean = (a: AnalystConsensusDoc) => (a.strongBuy + a.buy) - (a.sell + a.strongSell);
+  const analystRated = consensusLive.filter(a => (a.strongBuy + a.buy + a.hold + a.sell + a.strongSell) > 0);
+  const analystTopBuy  = [...analystRated].sort((a, b) => analystLean(b) - analystLean(a)).slice(0, 4);
+  const analystBuyIds  = new Set(analystTopBuy.map(a => a.ticker));
+  const analystTopSell = [...analystRated].sort((a, b) => analystLean(a) - analystLean(b)).filter(a => !analystBuyIds.has(a.ticker)).slice(0, 4);
 
   const [drawer, setDrawer] = useState<DrawerKey>(null);
   const [moversTab, setMoversTab] = useState<0 | 1 | 2>(0);
@@ -414,7 +400,7 @@ export function DashboardScreen() {
         <div className="col-12">
           <div className="pulse" style={{ position: "relative" }}>
             <span style={{ position: "absolute", top: 4, right: 6, zIndex: 2, pointerEvents: "none" }}><VendorTag v="polygon" /></span>
-            {pulse.slice(0, 6).map((x, i) => (
+            {pulse.slice(0, 9).map((x, i) => (
               <div key={x.label} className="p" style={{ cursor: "pointer" }} onClick={() => openIndex(i)}>
                 <div className="lbl">{x.label}</div>
                 <div className="val">{fmt(x.value, x.value > 1000 ? 0 : 2)}</div>
@@ -538,7 +524,7 @@ export function DashboardScreen() {
 
         {/* ── 4. Market Movers ── */}
         <div className="col-4">
-          <div className="card" style={{ height: "100%" }}>
+          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Movers</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/movers">View all →</Link>
@@ -552,19 +538,21 @@ export function DashboardScreen() {
                 >{label}</button>
               ))}
             </div>
-            <div className="card-b" style={{ paddingTop: 8 }}>
+            <div className="card-b" style={{ paddingTop: 8, flex: 1, minHeight: 0, maxHeight: 440, overflowY: "auto" }}>
               {(moversTab === 0
                 ? [...movers].filter(m => m.pctChange > 0).sort((a, b) => b.pctChange - a.pctChange)
                 : moversTab === 1
                 ? [...movers].filter(m => m.pctChange < 0).sort((a, b) => a.pctChange - b.pctChange)
                 : [...movers].sort((a, b) => b.rvolRatio - a.rvolRatio)
-              ).slice(0, 6).map(m => (
-                <div key={m.ticker} className="minirow mv-dash-row" style={{ cursor: "pointer" }} onClick={() => openMoverModal(m.ticker)}>
+              ).slice(0, 40).map(m => (
+                <div key={m.ticker} className="minirow" style={{ cursor: "pointer" }}
+                  onClick={() => openMoverModal(m.ticker)}
+                  {...mr(m.ticker, "movers")}
+                >
                   <StockLogo sym={m.ticker} size={26} />
                   <span className="tkr">{m.ticker}</span>
                   <span className="mid">{moversTab === 2 ? `${m.rvolRatio}× vol` : m.name}</span>
                   <span className={`r ${cls(m.pctChange)}`}>{sign(m.pctChange)}</span>
-                  <MoverPopup m={m} />
                 </div>
               ))}
             </div>
@@ -651,36 +639,51 @@ export function DashboardScreen() {
 
         {/* ── 6. Analyst Actions ── */}
         <div className="col-4">
-          <div className="card" style={{ height: "100%" }}>
+          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Analyst Actions</h3><VendorTag v={["fmp", "polygon"]} /></div>
               <Link className="link" href="/menu/analyst">View all →</Link>
             </div>
-            <div className="card-b" style={{ paddingTop: 4 }}>
-              {consensusLive.length === 0 ? (
+            <div className="card-b" style={{ paddingTop: 4, flex: 1, minHeight: 0, maxHeight: 440, overflowY: "auto" }}>
+              {analystRated.length === 0 ? (
                 <DataState loading={consensusLoading} label="No analyst consensus synced yet." height={80} />
-              ) : consensusLive.slice(0, 5).map(a => (
-                <div key={a.ticker} className="minirow" style={{ cursor: "pointer" }}
-                  onClick={() => openStock(a.ticker)}
-                  {...mr(a.ticker, "analyst")}
-                >
-                  <StockLogo sym={a.ticker} size={26} />
-                  <span className="tkr">{a.ticker}</span>
-                  <span className="mid">
-                    {a.strongBuy + a.buy}B / {a.hold}H / {a.sell + a.strongSell}S
-                  </span>
-                  <span className="r">
-                    <b style={{ color: "var(--text-hi)" }}>{a.consensus}</b>
-                  </span>
-                </div>
-              ))}
+              ) : (
+                <>
+                  <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--up)", margin: "2px 0 4px" }}>Most buy-rated</div>
+                  {analystTopBuy.map(a => (
+                    <div key={a.ticker} className="minirow" style={{ cursor: "pointer" }}
+                      onClick={() => openStock(a.ticker)}
+                      {...mr(a.ticker, "analyst")}
+                    >
+                      <StockLogo sym={a.ticker} size={26} />
+                      <span className="tkr">{a.ticker}</span>
+                      <span className="mid">{a.strongBuy + a.buy}B / {a.hold}H / {a.sell + a.strongSell}S</span>
+                      <span className="r"><b style={{ color: "var(--text-hi)" }}>{a.consensus}</b></span>
+                    </div>
+                  ))}
+                  {analystTopSell.length > 0 && (
+                    <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--down)", margin: "8px 0 4px" }}>Most sell-rated</div>
+                  )}
+                  {analystTopSell.map(a => (
+                    <div key={a.ticker} className="minirow" style={{ cursor: "pointer" }}
+                      onClick={() => openStock(a.ticker)}
+                      {...mr(a.ticker, "analyst")}
+                    >
+                      <StockLogo sym={a.ticker} size={26} />
+                      <span className="tkr">{a.ticker}</span>
+                      <span className="mid">{a.strongBuy + a.buy}B / {a.hold}H / {a.sell + a.strongSell}S</span>
+                      <span className="r"><b style={{ color: "var(--text-hi)" }}>{a.consensus}</b></span>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </div>
 
         {/* ── 7. Screener · Leaders & Laggards ── */}
         <div className="col-4">
-          <div className="card" style={{ height: "100%" }}>
+          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Screener · Leaders &amp; Laggards</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/screener">View all →</Link>
@@ -694,7 +697,7 @@ export function DashboardScreen() {
                 >{label}</button>
               ))}
             </div>
-            <div className="card-b" style={{ paddingTop: 8 }}>
+            <div className="card-b" style={{ paddingTop: 8, flex: 1, minHeight: 0, maxHeight: 440, overflowY: "auto" }}>
               {rankedCompanies.length < 12 ? (
                 <DataState loading={companiesLoading} label={`Rankings build as price history syncs — ${rankedCompanies.length} of ${companies.length} companies scored so far.`} height={80} />
               ) : (scrTab === "leaders" ? leaders : laggards).map(s => {
@@ -769,15 +772,28 @@ export function DashboardScreen() {
 
         {/* ── 9. Watchlist ── */}
         <div className="col-4">
-          <div className="card" style={{ height: "100%" }}>
+          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Watchlist</h3><VendorTag v="polygon" /></div>
-              <Link className="link" href="/menu/watchlist">View all →</Link>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {watchlists.length > 1 && (
+                  <select
+                    className="iq-select"
+                    value={activeWatchlist?.id ?? ""}
+                    onChange={e => setSelWatchId(e.target.value)}
+                    style={{ fontSize: ".68rem", padding: "2px 6px", maxWidth: 110, minWidth: 0 }}
+                    title="Switch watchlist"
+                  >
+                    {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                )}
+                <Link className="link" href="/menu/watchlist" style={{ whiteSpace: "nowrap", flexShrink: 0 }}>View all →</Link>
+              </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 8 }}>
+            <div className="card-b" style={{ paddingTop: 8, flex: 1, minHeight: 0, maxHeight: 440, overflowY: "auto" }}>
               {watchMini.length === 0 ? (
-                <DataState loading={watchlistLoading} label="No saved watchlist yet." height={80} />
-              ) : watchMini.slice(0, 5).map(w => (
+                <DataState loading={watchlistLoading} label={activeWatchlist ? `“${activeWatchlist.name}” has no names yet.` : "No saved watchlist yet."} height={80} />
+              ) : watchMini.map(w => (
                 <div key={w.ticker} className="minirow" style={{ cursor: "pointer" }}
                   onClick={() => openStock(w.ticker)}
                   {...mr(w.ticker, "watchlist")}
@@ -837,7 +853,7 @@ export function DashboardScreen() {
           <div className="card" style={{ height: "100%" }}>
             <div className="card-h">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Recaps</h3><VendorTag v="polygon" /></div>
-              <Link className="link" href="/menu/recap">All →</Link>
+              <Link className="link" href="/menu/recap">View all →</Link>
             </div>
             <div className="card-b">
               {latestRecap == null ? (
@@ -1079,7 +1095,13 @@ export function DashboardScreen() {
 /** Live Market Feed — real synced news only; honest empty state when none are synced. */
 function LiveFeedList() {
   const { data: news, loading } = useApiList<NewsArticleDoc>("/market-data/news");
-  const recent = [...news].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 4);
+  // Dedupe by article URL: Polygon tags one story to every ticker it mentions,
+  // so the same article arrives once per ticker — show each story once.
+  const seenUrl = new Set<string>();
+  const recent = [...news]
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .filter(n => { const k = n.url || n.id; if (seenUrl.has(k)) return false; seenUrl.add(k); return true; })
+    .slice(0, 4);
 
   // No mock fallback: when there's no live news, show an honest empty state
   // rather than fabricated headlines that read as real market events.

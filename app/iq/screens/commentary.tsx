@@ -195,6 +195,27 @@ export function CommentaryScreen() {
     return true;
   });
 
+  /* Collapse multi-ticker duplicates. Polygon tags one article to EVERY ticker
+     it mentions, so the same story arrives once per ticker (an Alphabet piece
+     gets tagged both GOOG and MSFT). In this aggregated feed we show it ONCE,
+     keeping the ticker whose company name actually appears in the headline
+     (so the Alphabet story keeps GOOG, not the incidental MSFT mention). */
+  const feed = (() => {
+    const byKey = new Map<string, NewsArticleDoc>();
+    const order: string[] = [];
+    const relevance = (n: NewsArticleDoc) => {
+      const nm = companyByTicker.get(n.ticker)?.name?.split(/[\s,.]/)[0]?.toLowerCase();
+      return nm && nm.length > 2 && (n.headline ?? "").toLowerCase().includes(nm) ? 1 : 0;
+    };
+    for (const n of displayFeed) {
+      const key = n.url || n.id;
+      const cur = byKey.get(key);
+      if (!cur) { byKey.set(key, n); order.push(key); }
+      else if (relevance(n) > relevance(cur)) byKey.set(key, n);
+    }
+    return order.map(k => byKey.get(k) as NewsArticleDoc);
+  })();
+
   const feedLabel = (() => {
     if (activeTab === 0) return { title: "Intraday commentary", badge: <span className="live"><span className="dot" />Live · streaming</span> };
     if (activeTab === 1) return { title: "Pre-market · before 9:30a ET", badge: <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>Pre-market</span> };
@@ -249,7 +270,7 @@ export function CommentaryScreen() {
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
             {search.trim() || effSec !== "All" || capFilter !== "All"
-              ? `Showing ${displayFeed.length} item${displayFeed.length === 1 ? "" : "s"}`
+              ? `Showing ${feed.length} item${feed.length === 1 ? "" : "s"}`
               : "Filter the feed — search text, sector or market cap"}
           </span>
         </div>
@@ -266,15 +287,15 @@ export function CommentaryScreen() {
                 {feedLabel.badge}
               </div>
               <div className="card-b" style={{ paddingTop: 2, flex: 1, minHeight: 0, overflowY: "auto" }}>
-                {displayFeed.length === 0 ? (
+                {feed.length === 0 ? (
                   <DataState loading={liveNewsLoading} label={
                     q
                       ? `No matches for “${search.trim()}” in this tab.`
                       : activeTab === 3
                         ? (uid ? "No live news matches your portfolio or watchlist names right now." : "Sign in and add names to your watchlist or portfolio to see this feed.")
                         : "No live news items in this category right now."} />
-                ) : displayFeed.map((item, i) => (
-                  <FeedItem key={item.id} item={item} i={i} total={displayFeed.length} onTicker={sym => setSearch(sym)} />
+                ) : feed.map((item, i) => (
+                  <FeedItem key={item.id} item={item} i={i} total={feed.length} onTicker={sym => setSearch(sym)} />
                 ))}
               </div>
             </div>

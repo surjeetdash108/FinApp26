@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { CandleChart, RsiPane, DataState, Spark, VendorTag, type EarnQ } from "./utils";
+import { CandleChart, ChartSelect, TF_OPTIONS, CHART_TYPE_OPTIONS, RsiPane, DataState, Spark, VendorTag, type EarnQ } from "./utils";
 import { ExpandBtn } from "./shell";
 import { useApiList } from "./hooks/useApiList";
 import { useApiResource } from "./hooks/useApiResource";
@@ -192,13 +192,8 @@ function ChartCardExpanded({
   return (
     <div>
       <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
-        {(["1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
-          <button key={r} className={`rng tfbtn${tf === r ? " on" : ""}`} onClick={() => setTf(r)}>{r}</button>
-        ))}
-        <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
-        {(["Candles","Hollow","Bars","Line","Area"] as const).map(ct => (
-          <button key={ct} className={`rng ctype-btn${chartType === ct ? " on" : ""}`} onClick={() => setChartType(ct)}>{ct}</button>
-        ))}
+        <ChartSelect value={tf} options={TF_OPTIONS} onChange={v => setTf(v as typeof tf)} title="Timeframe" />
+        <ChartSelect value={chartType} options={CHART_TYPE_OPTIONS} onChange={v => setChartType(v as typeof chartType)} title="Chart type" />
         <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
         <button className={`rng indbtn${maStep > 0 ? " on" : ""}`} onClick={() => setMaStep(s => (s + 1) % 5)}>
           MA {[9,21,50,200].map((v, i) => <span key={v} style={{ opacity: i < maStep ? 1 : 0.4, fontWeight: i < maStep ? 700 : undefined }}>{i > 0 ? "/" : ""}{v}</span>)}
@@ -262,13 +257,8 @@ export function ChartCard({
       {sym ? (
         <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
           <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
-            {(["1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
-              <button key={r} className={`rng tfbtn${tf === r ? " on" : ""}`} onClick={() => setTf(r)}>{r}</button>
-            ))}
-            <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
-            {(["Candles","Hollow","Bars","Line","Area"] as const).map(ct => (
-              <button key={ct} className={`rng ctype-btn${chartType === ct ? " on" : ""}`} onClick={() => setChartType(ct)}>{ct}</button>
-            ))}
+            <ChartSelect value={tf} options={TF_OPTIONS} onChange={v => setTf(v as typeof tf)} title="Timeframe" />
+            <ChartSelect value={chartType} options={CHART_TYPE_OPTIONS} onChange={v => setChartType(v as typeof chartType)} title="Chart type" />
             <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
             <button className={`rng indbtn${maStep > 0 ? " on" : ""}`} onClick={() => setMaStep(s => (s + 1) % 5)}>
               MA {[9,21,50,200].map((v, i) => (

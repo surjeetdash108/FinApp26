@@ -477,15 +477,15 @@ function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
                   >
                     {tts === "playing"
                       ? <><span style={{ fontSize: ".9em" }}>❚❚</span> Pause</>
-                      : <><span style={{ fontSize: ".9em" }}>▶</span> {tts === "paused" ? "Resume" : "Play"}</>}
+                      : <><span style={{ fontSize: ".9em" }}>▶</span> {tts === "paused" ? "Resume" : "Read aloud"}</>}
                   </button>
                 )}
                 <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>
                   live · FMP transcript
                 </span>
-                {tts === "playing" && (
-                  <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Reading aloud…</span>
-                )}
+                {tts === "playing"
+                  ? <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Reading aloud…</span>
+                  : ttsSupported && <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>text-to-speech narration of the transcript</span>}
               </div>
               <div style={{ fontSize: ".84rem", lineHeight: 1.6, color: "var(--text)" }}>
                 {paras.map((p, i) => (
@@ -507,14 +507,17 @@ type CalView = "eps" | "sales";
 // Max ticker logos/rows shown before an overflow "+N" — shared by the day
 // tables, the week columns, and the month cells so all three views cap alike.
 const MAX_CAL_LOGOS = 24;
+// The snapshot table shows fewer rows per session (per side) before its
+// "+N more" toggle than the dense icon grids do.
+const MAX_TABLE_ROWS = 10;
 
 function CalTable({
   title, rows, sel, onSelect, view,
 }: { title: string; rows: CalRow[]; sel: string; onSelect: (s: string) => void; view: CalView }) {
   const [expanded, setExpanded] = useState(false);
   if (rows.length === 0) return null;
-  const shown = expanded ? rows : rows.slice(0, MAX_CAL_LOGOS);
-  const canExpand = rows.length > MAX_CAL_LOGOS;
+  const shown = expanded ? rows : rows.slice(0, MAX_TABLE_ROWS);
+  const canExpand = rows.length > MAX_TABLE_ROWS;
   return (
     <div className="ecal-day" style={{ marginBottom: 12 }}>
       <div className="ecal-day-h">
@@ -573,7 +576,7 @@ function CalTable({
             fontSize: ".75rem", fontWeight: 600,
           }}
         >
-          {expanded ? "Show less" : `+${rows.length - MAX_CAL_LOGOS} more`}
+          {expanded ? "Show less" : `+${rows.length - MAX_TABLE_ROWS} more`}
         </button>
       )}
     </div>
@@ -595,6 +598,10 @@ export function EarningsScreen() {
 
   const [mode, setMode]     = useState<"day" | "week" | "month">("day");
   const [anchor, setAnchor] = useState<string>(() => isoDay(new Date()));
+  // Day view: icon Grid (click-through) vs snapshot Table (all reporters'
+  // estimate / actual / surprise at a glance, no one-by-one clicking).
+  const [dayLayout, setDayLayout] = useState<"grid" | "table">("grid");
+  const [calView, setCalView]     = useState<CalView>("eps");
   // The filter bar (session / cap / sort / min-move / view / news / auto-refresh)
   // was removed — the live earnings feed has no data to drive those — so these
   // stay at fixed defaults.
@@ -689,13 +696,38 @@ export function EarningsScreen() {
   let calNode: React.ReactNode;
 
   if (mode === "day") {
-    // Icon grid (same chips as a week-view day column) — clicking opens detail;
-    // no full horizontal table.
+    // Day layout toggle: Grid = icon chips (click to open detail); Table =
+    // snapshot of every reporter's estimate/actual/surprise, split by session.
+    const dayToolbar = (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <div className="ecal-seg">
+          <button className={`ecal-segbtn${dayLayout === "grid" ? " on" : ""}`} onClick={() => setDayLayout("grid")}>Grid</button>
+          <button className={`ecal-segbtn${dayLayout === "table" ? " on" : ""}`} onClick={() => setDayLayout("table")}>Table</button>
+        </div>
+        {dayLayout === "table" && (
+          <div className="ecal-seg">
+            <button className={`ecal-segbtn${calView === "eps" ? " on" : ""}`} onClick={() => setCalView("eps")}>EPS</button>
+            <button className={`ecal-segbtn${calView === "sales" ? " on" : ""}`} onClick={() => setCalView("sales")}>Sales</button>
+          </div>
+        )}
+      </div>
+    );
     calNode = visibleRows.length > 0 ? (
-      <div className="ec-sess" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-        {visibleRows.map(r => (
-          <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={s => openStockDetail(s, anchor)} />
-        ))}
+      <div>
+        {dayToolbar}
+        {dayLayout === "grid" ? (
+          <div className="ec-sess" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+            {visibleRows.map(r => (
+              <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={s => openStockDetail(s, anchor)} />
+            ))}
+          </div>
+        ) : (
+          <div>
+            <CalTable title="Before open" rows={bmoRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={calView} />
+            <CalTable title="After close" rows={amcRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={calView} />
+            <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={calView} />
+          </div>
+        )}
       </div>
     ) : (
       <div className="ecal-empty">
@@ -808,17 +840,30 @@ export function EarningsScreen() {
       .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""))
       .slice(0, 10);
   // Annual filings carry no per-quarter estimate, so beat/miss only applies to Q.
-  const hasEstimates = histPeriod === "Q" && histSource.some(q => (q as QuarterFinancials).epsEstimate != null);
+  // Beat/miss uses the FMP matched pair (epsActualReported + epsEstimateReported,
+  // same basis) — never Polygon GAAP actual vs a non-GAAP estimate.
+  const hasEstimates = histPeriod === "Q" && histSource.some(q => {
+    const qq = q as QuarterFinancials;
+    return qq.epsActualReported != null && qq.epsEstimateReported != null;
+  });
+  let pairedBeats = 0, pairedTotal = 0;
   const hist: EarnQ[] = histSource.map(q => {
-    const act = q.epsActual as number;
-    const est = (q as QuarterFinancials).epsEstimate ?? null;
-    const surp = est != null && est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
+    const qq = q as QuarterFinancials;
+    // Prefer FMP's consensus-basis actual/estimate (matches NASDAQ); Polygon
+    // GAAP is a display-only fallback. Surprise ONLY from the matched pair.
+    const repAct = histPeriod === "Q" ? (qq.epsActualReported ?? null) : null;
+    const repEst = histPeriod === "Q" ? (qq.epsEstimateReported ?? null) : null;
+    const act = repAct ?? (q.epsActual as number);
+    const est = repEst ?? ((qq.epsEstimate ?? null));
+    const paired = repAct != null && repEst != null && repEst !== 0;
+    const surp = paired ? ((repAct - repEst) / Math.abs(repEst)) * 100 : 0;
+    if (paired) { pairedTotal++; if (surp >= 0) pairedBeats++; }
     const label = q.endDate
       ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", histPeriod === "A" ? { year: "numeric" } : { month: "short", year: "2-digit" })
       : (histPeriod === "A" ? `${q.fiscalYear ?? ""}`.trim() : `${(q as QuarterFinancials).fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim());
     return { q: label, e: est ?? 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0 };
   });
-  const beats = hist.filter(h => h.surp >= 0).length;
+  const beats = pairedBeats;
   // "What street expects" — prefer the next (unreported) quarter's consensus EPS,
   // else the nearest forward fiscal-year estimate. Both come from the FMP feed.
   const upcomingRow = liveMatches.find(e => e.epsActual == null && e.epsEstimate != null);
@@ -940,7 +985,35 @@ export function EarningsScreen() {
                       {liveCompanySel.pctChange != null && <span className={cls(liveCompanySel.pctChange)} style={{ marginLeft: 6, fontSize: ".8rem" }}>{sign(liveCompanySel.pctChange)}</span>}
                     </span>
                   )}
-                  <span style={{ marginLeft: "auto" }}><VendorTag v="polygon" /></span>
+                  <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      title="Earnings-call transcript (Read aloud)"
+                      onClick={() => setSelectedCall(sel)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        background: "var(--surface-2)", border: "1px solid var(--border-soft)",
+                        borderRadius: 8, padding: "5px 10px", cursor: "pointer",
+                        color: "var(--text)", fontSize: ".75rem", fontWeight: 600,
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" width={12} height={12} fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>
+                      Earnings call
+                    </button>
+                    <button
+                      title="Analyst & earnings analysis (FMP)"
+                      onClick={() => setAiModalSym(sel)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        background: "var(--surface-2)", border: "1px solid var(--border-soft)",
+                        borderRadius: 8, padding: "5px 10px", cursor: "pointer",
+                        color: "var(--text)", fontSize: ".75rem", fontWeight: 600,
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19V5m0 14h16M8 15l3-4 3 3 4-6"/></svg>
+                      Analysis
+                    </button>
+                    <VendorTag v="polygon" />
+                  </span>
                 </div>
                 <div className="card-b">
                   {liveCompanySel?.description
@@ -1255,14 +1328,16 @@ export function EarningsScreen() {
         <CallDrawer sym={selectedCall} onClose={() => setSelectedCall(null)} />
       )}
 
-      {/* AI analysis modal — honest not-connected state */}
+      {/* Analysis modal — compiled from live analyst + earnings data (FMP),
+          not an AI/LLM narrative. Opens for `sel`, so it reuses the sel-scoped
+          consensus / price-target / beat-miss / estimate variables. */}
       {aiModalSym && (
         <>
           <div className="scrim" style={{ zIndex: 60 }} onClick={() => setAiModalSym(null)} />
           <div style={{
             position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
             background: "var(--surface-1)", border: "1px solid var(--border)",
-            borderRadius: "var(--r-lg)", zIndex: 61, width: "min(520px, 92vw)",
+            borderRadius: "var(--r-lg)", zIndex: 61, width: "min(540px, 92vw)",
             boxShadow: "0 20px 60px rgba(0,0,0,.5)",
           }}>
             {/* Modal header */}
@@ -1270,15 +1345,93 @@ export function EarningsScreen() {
               display: "flex", alignItems: "center", gap: 10,
               padding: "14px 16px", borderBottom: "1px solid var(--border-soft)",
             }}>
-              <span style={{ color: "var(--ai)", fontSize: "1rem", lineHeight: 1 }}>◆</span>
-              <span style={{ fontWeight: 700, fontSize: ".95rem", color: "var(--text-hi)", flex: 1 }}>
-                AI Analysis · {aiModalSym}
+              <span style={{ fontWeight: 700, fontSize: ".95rem", color: "var(--text-hi)", flex: 1, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                Analysis · {aiModalSym} <VendorTag v={["fmp", "polygon"]} />
               </span>
               <button className="closebtn" onClick={() => setAiModalSym(null)}>✕</button>
             </div>
             {/* Modal body */}
-            <div style={{ padding: "16px 18px 20px" }}>
-              <DataState label="AI earnings-call analysis isn't connected to a live transcript vendor yet." />
+            <div style={{ padding: "16px 18px 20px", maxHeight: "72vh", overflowY: "auto" }}>
+              {(() => {
+                const c = consensusForSel;
+                const px = liveCompanySel?.price ?? null;
+                const pt = c?.priceTargetConsensus ?? null;
+                const upside = pt != null && px != null && px > 0 ? ((pt - px) / px) * 100 : null;
+                const votes = c ? c.strongBuy + c.buy + c.hold + c.sell + c.strongSell : 0;
+                const buyPct = votes ? Math.round(((c!.strongBuy + c!.buy) / votes) * 100) : null;
+                const rc = c && /buy|outperform|overweight/i.test(c.consensus) ? "var(--up)"
+                  : c && /sell|underperform|underweight/i.test(c.consensus) ? "var(--down)" : "var(--text-hi)";
+                let streak = 0; for (const q of hist) { if (q.surp >= 0) streak++; else break; }
+                const lastSurp = hist.length ? hist[0].surp : null;
+                const ptTrend = c?.ptAvgLastMonth != null && c?.ptAvgLastQuarter != null ? c.ptAvgLastMonth - c.ptAvgLastQuarter : null;
+                const anyData = !!c || px != null || (hasEstimates && pairedTotal > 0) || !!streetExpects || annMatch?.reactionPct != null;
+                if (!anyData) return <DataState label={`No analyst or earnings data synced for ${sel} yet.`} />;
+                const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, fontSize: ".82rem", borderBottom: "1px solid var(--border-soft)", padding: "8px 0" }}>
+                    <span style={{ color: "var(--text-dim-solid)", whiteSpace: "nowrap" }}>{label}</span>
+                    <span style={{ textAlign: "right", color: "var(--text)" }}>{children}</span>
+                  </div>
+                );
+                return (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <p style={{ fontSize: ".86rem", lineHeight: 1.6, color: "var(--text)", margin: "0 0 8px" }}>{aiRead}</p>
+                    {c && votes > 0 && (
+                      <Row label="Analyst consensus">
+                        <b style={{ color: rc }}>{c.consensus}</b>
+                        <span style={{ color: "var(--text-dim-solid)" }}> · {votes} analysts · {buyPct}% buy</span>
+                      </Row>
+                    )}
+                    {pt != null && (
+                      <Row label="Price target (12-mo)">
+                        <b>${pt.toFixed(0)}</b>
+                        {upside != null && <span className={cls(upside)}> · {sign(upside)}{px != null ? ` vs $${px.toFixed(2)}` : ""}</span>}
+                        {c?.priceTargetLow != null && c?.priceTargetHigh != null && (
+                          <span style={{ color: "var(--text-dim-solid)" }}> · range ${c.priceTargetLow.toFixed(0)}–${c.priceTargetHigh.toFixed(0)}</span>
+                        )}
+                      </Row>
+                    )}
+                    {ptTrend != null && Math.abs(ptTrend) >= 0.01 && (
+                      <Row label="Target trend">
+                        <span className={cls(ptTrend)}>{ptTrend >= 0 ? "Rising" : "Falling"}</span>
+                        <span style={{ color: "var(--text-dim-solid)" }}> · 1-mo ${c!.ptAvgLastMonth!.toFixed(0)} vs 1-qtr ${c!.ptAvgLastQuarter!.toFixed(0)}</span>
+                      </Row>
+                    )}
+                    {hasEstimates && pairedTotal > 0 && (
+                      <Row label="EPS track record">
+                        <b>{beats}/{pairedTotal} beats</b>
+                        {streak > 0 && <span className="pill up" style={{ marginLeft: 6 }}>{streak}-qtr beat streak</span>}
+                        {lastSurp != null && <span style={{ color: "var(--text-dim-solid)" }}> · last {lastSurp >= 0 ? "beat" : "miss"} {Math.abs(lastSurp)}%</span>}
+                      </Row>
+                    )}
+                    {streetExpects && (
+                      <Row label="Street expects (next)"><b>{streetExpects}</b></Row>
+                    )}
+                    {annMatch?.reactionPct != null && (
+                      <Row label="Last post-earnings move">
+                        <span className={cls(annMatch.reactionPct)}>{sign(annMatch.reactionPct)}</span>
+                      </Row>
+                    )}
+                    {c?.recentGrades && c.recentGrades.length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-hi)", marginBottom: 6 }}>Recent rating changes</div>
+                        {c.recentGrades.slice(0, 5).map((g, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".76rem", padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                            <span style={{ color: "var(--text-dim-solid)", width: 74, flexShrink: 0 }}>{g.date ? String(g.date).slice(0, 10) : "—"}</span>
+                            <span style={{ flex: 1, color: "var(--text-hi)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.firm ?? "—"}</span>
+                            <span style={{ color: "var(--text-dim-solid)" }}>{g.previousGrade ? `${g.previousGrade} → ` : ""}{g.newGrade ?? "—"}</span>
+                            {g.action && (
+                              <span className={/upgrade|initiat/i.test(g.action) ? "pill up" : /downgrade/i.test(g.action) ? "pill dn" : "pill"} style={{ flexShrink: 0 }}>{g.action}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 12, lineHeight: 1.5 }}>
+                      Compiled from live analyst &amp; earnings data (FMP · Polygon) — not an AI/LLM narrative.
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </>

@@ -8,7 +8,17 @@ import { DataState, VendorTag } from "../utils";
 /** One reported quarter: report date (SEC filing date) + EPS actual/estimate.
  * Sourced from the financials doc's `quarters` (~10 quarters) rather than the
  * live earnings *calendar* feed, which only carries the most recent report. */
-export type PlaybookReport = { date: string; epsActual: number | null; epsEstimate: number | null };
+export type PlaybookReport = {
+  date: string;
+  epsActual: number | null;
+  epsEstimate: number | null;
+  /** FMP's reported (consensus-basis) EPS actual. Beat/miss = THIS vs
+   * epsEstimateReported — both from the same FMP surprise row, so identical
+   * basis. `epsActual` (Polygon GAAP) only marks a quarter as reported. */
+  epsReported?: number | null;
+  /** FMP estimate paired with epsReported (same surprise row). */
+  epsEstimateReported?: number | null;
+};
 
 // ── Earnings Playbook ────────────────────────────────────────────────────────
 // "How this stock trades when it reports." All figures are DERIVED from data
@@ -28,6 +38,8 @@ type Row = {
   label: string;
   beat: boolean | null;
   surprisePct: number | null;
+  epsAct: number | null;
+  epsEst: number | null;
   gap: number | null;
   day1: number | null;
   day3: number | null;
@@ -98,15 +110,23 @@ function buildModel(reports: PlaybookReport[], bars: OHLCBar[] | undefined, maxR
     const priorVols = sorted.slice(Math.max(0, d0 - 20), d0).map((b) => b.v).filter((v) => v > 0);
     const avgVol = priorVols.length ? priorVols.reduce((p, q) => p + q, 0) / priorVols.length : null;
     const volRatio = avgVol && b0.v > 0 ? b0.v / avgVol : null;
+    // Beat/miss uses the FMP matched pair ONLY (reported actual + the estimate
+    // from the same surprise row) so both share a basis — never Polygon GAAP,
+    // and never the patchwork epsEstimate whose old rows can be pre-split.
+    // Blank when FMP has no matched pair, rather than inventing a number.
+    const reported = e.epsReported;
+    const estReported = e.epsEstimateReported;
     const surprisePct =
-      e.epsEstimate != null && e.epsEstimate !== 0 && e.epsActual != null
-        ? ((e.epsActual - e.epsEstimate) / Math.abs(e.epsEstimate)) * 100
+      reported != null && estReported != null && estReported !== 0
+        ? ((reported - estReported) / Math.abs(estReported)) * 100
         : null;
     rows.push({
       date: e.date,
       label: fmtLabel(e.date),
       beat: surprisePct == null ? null : surprisePct >= 0,
       surprisePct,
+      epsAct: reported ?? null,
+      epsEst: estReported ?? null,
       gap,
       day1,
       day3,
@@ -247,6 +267,8 @@ export function EarningsPlaybook({ sym, reports }: { sym: string; reports: Playb
               <tr>
                 <th>Report</th>
                 {hasBeatMiss && <th>Result</th>}
+                {hasBeatMiss && <th className="num">EPS act</th>}
+                {hasBeatMiss && <th className="num">EPS est</th>}
                 <th className="num">Gap</th>
                 <th className="num">Day 1</th>
                 <th className="num">Day 3</th>
@@ -263,6 +285,8 @@ export function EarningsPlaybook({ sym, reports }: { sym: string; reports: Playb
                       {r.beat == null ? "—" : `${r.beat ? "Beat" : "Miss"} ${pct(r.surprisePct)}`}
                     </td>
                   )}
+                  {hasBeatMiss && <td className="num">{r.epsAct != null ? `$${r.epsAct.toFixed(2)}` : "—"}</td>}
+                  {hasBeatMiss && <td className="num" style={{ color: "var(--text-dim-solid)" }}>{r.epsEst != null ? `$${r.epsEst.toFixed(2)}` : "—"}</td>}
                   <td className="num" style={{ color: colorOf(r.gap) }}>{pct(r.gap)}</td>
                   <td className="num" style={{ color: colorOf(r.day1) }}>{pct(r.day1)}</td>
                   <td className="num" style={{ color: colorOf(r.day3) }}>{pct(r.day3)}</td>

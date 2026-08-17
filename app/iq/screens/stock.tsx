@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import { WatchlistPicker } from "../watchlist-picker";
-import { fmt, cls, arr, sign, CandleChart, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo, VendorTag } from "../utils";
+import { fmt, cls, arr, sign, CandleChart, ChartSelect, TF_OPTIONS, CHART_TYPE_OPTIONS, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo, VendorTag } from "../utils";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiResource } from "../hooks/useApiResource";
@@ -14,8 +14,9 @@ import { useLiveTick } from "../hooks/useLiveTick";
 import { EarningsPlaybook } from "./EarningsPlaybook";
 import type {
   CompanyDoc, AnalystConsensusDoc, InsiderTxDoc,
-  DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, NewsArticleDoc, LiveEarningsDoc, SectorApiDoc,
+  DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EpsHistoryRow, NewsArticleDoc, LiveEarningsDoc, SectorApiDoc,
 } from "../types";
+import { reportedQuarterEps, quarterEpsSurprisePct, reportedAnnualEps } from "../types";
 
 // Maps the numeric 1-99 tech rating onto the same string categories the
 // Screener/TrGauge use (Strong Buy / Buy / Neutral / Sell / Strong Sell).
@@ -182,16 +183,20 @@ type AnnualEpsSalesRow = { year: string; eps: number | null; epsChg: string; sal
 /** One row per real reported fiscal year (Polygon annual financials — actuals
  * only, no forward estimates exist for this in the current data pipeline),
  * oldest first, with EPS/Sales YoY %change vs the prior row. */
-function annualEpsSalesRows(annual: AnnualFinancials[]): AnnualEpsSalesRow[] {
+function annualEpsSalesRows(annual: AnnualFinancials[], epsHistory: EpsHistoryRow[]): AnnualEpsSalesRow[] {
   const asc = [...annual]
     .filter(r => r.fiscalYear)
     .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear));
   return asc.map((r, i) => {
     const prev = i > 0 ? asc[i - 1] : null;
+    // Non-GAAP annual EPS (summed reported quarters from the deep FMP history,
+    // matches IBD); GAAP fallback when a year isn't fully covered.
+    const eps = reportedAnnualEps(r.fiscalYear, epsHistory, r.epsActual);
+    const prevEps = prev ? reportedAnnualEps(prev.fiscalYear, epsHistory, prev.epsActual) : null;
     return {
       year: r.fiscalYear as string,
-      eps: r.epsActual,
-      epsChg: pctChangeStr(r.epsActual, prev?.epsActual),
+      eps,
+      epsChg: pctChangeStr(eps, prevEps),
       sales: r.revenue != null ? r.revenue / 1e6 : null,
       salesChg: pctChangeStr(r.revenue, prev?.revenue),
     };
@@ -213,11 +218,14 @@ function quarterlyEpsSalesRows(quarters: QuarterFinancials[]): QuarterlyEpsSales
     .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string));
   return asc.map((r, i) => {
     const yoy = i >= 4 ? asc[i - 4] : null;
+    // EPS + %CHG + %SURP on the FMP consensus (non-GAAP) basis — matches NASDAQ.
+    const eps = reportedQuarterEps(r);
+    const surp = quarterEpsSurprisePct(r);
     return {
       label: new Date(r.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-      eps: r.epsActual,
-      epsChg: pctChangeStr(r.epsActual, yoy?.epsActual),
-      epsSurp: pctChangeStr(r.epsActual, r.epsEstimate),
+      eps,
+      epsChg: pctChangeStr(eps, yoy ? reportedQuarterEps(yoy) : null),
+      epsSurp: surp == null ? "—" : `${surp >= 0 ? "+" : ""}${Math.round(surp)}%`,
       sales: r.revenue != null ? r.revenue / 1e6 : null,
       salesChg: pctChangeStr(r.revenue, yoy?.revenue),
       salesSurp: "—",
@@ -241,7 +249,7 @@ function epsSalesSeries(period: "Q" | "A", doc: FinancialsDoc | null): EpsSalesP
         label: new Date(r.endDate + "T00:00:00")
           .toLocaleDateString("en-US", { month: "short", year: "2-digit" })
           .replace(" ", "-"),
-        eps: r.epsActual,
+        eps: reportedQuarterEps(r),
         sales: r.revenue != null ? r.revenue / 1e6 : null,
       }));
   }
@@ -251,7 +259,7 @@ function epsSalesSeries(period: "Q" | "A", doc: FinancialsDoc | null): EpsSalesP
     .slice(-10)
     .map(r => ({
       label: r.fiscalYear as string,
-      eps: r.epsActual,
+      eps: reportedAnnualEps(r.fiscalYear, doc.epsHistory, r.epsActual),
       sales: r.revenue != null ? r.revenue / 1e6 : null,
     }));
 }
@@ -500,13 +508,8 @@ function StockChartExpanded({
   return (
     <div>
       <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
-        {(["1D","1W","1M","3M","6M","1Y","5Y"] as const).map(r => (
-          <button key={r} className={`rng tfbtn${tf === r ? " on" : ""}`} onClick={() => setTf(r)}>{r}</button>
-        ))}
-        <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
-        {(["Candles","Hollow","Bars","Line","Area"] as const).map(ct => (
-          <button key={ct} className={`rng ctype-btn${chartType === ct ? " on" : ""}`} onClick={() => setChartType(ct)}>{ct}</button>
-        ))}
+        <ChartSelect value={tf} options={TF_OPTIONS} onChange={v => setTf(v as typeof tf)} title="Timeframe" />
+        <ChartSelect value={chartType} options={CHART_TYPE_OPTIONS} onChange={v => setChartType(v as typeof chartType)} title="Chart type" />
         <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
         <button className={`rng indbtn${maStep > 0 ? " on" : ""}`} onClick={() => setMaStep(s => (s + 1) % 5)}>
           MA {[9,21,50,200].map((v, i) => <span key={v} style={{ opacity: i < maStep ? 1 : 0.4, fontWeight: i < maStep ? 700 : undefined }}>{i > 0 ? "/" : ""}{v}</span>)}
@@ -825,14 +828,20 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""))
     .slice(0, 10)
     .map(q => {
-      const act = q.epsActual as number;
-      const est = q.epsEstimate ?? null;
-      const surp = est != null && est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
+      // Beat/miss + the shown actual/estimate use the FMP matched pair
+      // (epsActualReported/epsEstimateReported — same basis, split-normalized),
+      // never Polygon GAAP actual vs a non-GAAP estimate. GAAP is a display-only
+      // fallback for the actual; e=0 (→ "—") when there's no matched pair.
+      const repAct = q.epsActualReported ?? null;
+      const repEst = q.epsEstimateReported ?? null;
+      const paired = repAct != null && repEst != null && repEst !== 0;
+      const act = repAct ?? (q.epsActual as number);
+      const surp = paired ? ((repAct - repEst) / Math.abs(repEst)) * 100 : 0;
       return {
         q: q.endDate
           ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" })
           : `${q.fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim(),
-        e: est ?? 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
+        e: paired ? repEst : 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
       };
     });
   const beatStreak = (() => {
@@ -1014,14 +1023,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           {/* Chart card */}
           <div className="card">
             <div className="chart-toolbar">
-              {["1D","1W","1M","3M","6M","1Y","5Y"].map(r => (
-                <button key={r} className={`rng tfbtn${tfActive === r ? " on" : ""}`} onClick={() => setTfActive(r)}>{r}</button>
-              ))}
-              <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
-              {(["Candles", "Hollow", "Bars", "Line", "Area"] as const).map(ct => (
-                <button key={ct} className={`rng ctype-btn${chartType === ct ? " on" : ""}`}
-                  onClick={() => setChartType(ct)}>{ct}</button>
-              ))}
+              <ChartSelect value={tfActive} options={TF_OPTIONS} onChange={setTfActive} title="Timeframe" />
+              <ChartSelect value={chartType} options={CHART_TYPE_OPTIONS} onChange={v => setChartType(v as typeof chartType)} title="Chart type" />
               <span style={{ width: 1, height: 16, background: "var(--border)", margin: "0 4px" }} />
               <button className={`rng indbtn${maStep > 0 ? " on" : ""}`}
                 onClick={() => setMaStep(s => (s + 1) % 5)}>
@@ -1292,7 +1295,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       sym={sym}
                       reports={(financialsDoc?.quarters ?? [])
                         .filter((q) => q.filingDate)
-                        .map((q) => ({ date: q.filingDate as string, epsActual: q.epsActual, epsEstimate: q.epsEstimate }))}
+                        .map((q) => ({ date: q.filingDate as string, epsActual: q.epsActual, epsEstimate: q.epsEstimate, epsReported: q.epsActualReported ?? null, epsEstimateReported: q.epsEstimateReported ?? null }))}
                     />
                   </div>
                 </div>
@@ -1416,19 +1419,43 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 </div>
               )}
               <div style={{ height: 1, background: "var(--border-soft)", margin: "12px 0 8px" }} />
-              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
-                Institutional
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <span style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                  Institutional
+                </span>
+                <VendorTag v="fmp" />
               </div>
-              {([
-                ["Inst. ownership", null],
-                ["Short interest", null],
-                ["13F funds holding", null],
-              ] as [string, string | null][]).map(x => (
-                <div key={x[0]} className="minirow">
-                  <span className="mid">{x[0]}</span>
-                  <span className="r">{x[1] ?? <NotAvailable />}</span>
+              {(() => {
+                const io = liveCompany?.instOwnershipPct;
+                const holders = liveCompany?.inst13FHolders;
+                const chg = liveCompany?.inst13FHoldersChange;
+                const rows: [string, ReactNode][] = [
+                  ["Inst. ownership", io != null ? `${io.toFixed(1)}%` : null],
+                  // Short interest has no Polygon (404) or FMP source — needs FINRA.
+                  ["Short interest", null],
+                  ["13F funds holding", holders != null ? (
+                    <>
+                      {holders.toLocaleString()}
+                      {chg != null && chg !== 0 && (
+                        <span className={chg > 0 ? "up" : "down"} style={{ marginLeft: 6, fontSize: ".7rem" }}>
+                          {chg > 0 ? "+" : ""}{chg} QoQ
+                        </span>
+                      )}
+                    </>
+                  ) : null],
+                ];
+                return rows.map(([label, val]) => (
+                  <div key={label} className="minirow">
+                    <span className="mid">{label}</span>
+                    <span className="r">{val ?? <NotAvailable />}</span>
+                  </div>
+                ));
+              })()}
+              {liveCompany?.instAsOf && (
+                <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 6 }}>
+                  13F rollup · {liveCompany.instAsOf}
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
@@ -1656,8 +1683,13 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   {hist10.slice(0, 5).map(q => (
                     <div key={q.q} className="minirow">
                       <span className="tkr" style={{ width: 60 }}>{q.q}</span>
-                      <span className="mid mono">${fmt(Math.abs(q.a), 2)} EPS</span>
-                      <span className={`r ${q.surp >= 0 ? "up" : "down"}`}>{q.surp >= 0 ? "beat" : "miss"} {Math.abs(q.surp)}%</span>
+                      <span className="mid mono">
+                        {q.e !== 0 && <span style={{ color: "var(--text-dim-solid)" }}>est ${fmt(q.e, 2)} → </span>}
+                        ${fmt(q.a, 2)} act
+                      </span>
+                      {q.e !== 0
+                        ? <span className={`r ${q.surp >= 0 ? "up" : "down"}`}>{q.surp >= 0 ? "beat" : "miss"} {Math.abs(q.surp)}%</span>
+                        : <span className="r" style={{ color: "var(--text-dim-solid)" }}>—</span>}
                     </div>
                   ))}
                 </>
@@ -2036,7 +2068,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             const inc = incRowsFromFinancials(finPeriod, financialsDoc, () => []);
             const fb = (v: number) => v >= 1 ? `$${v.toFixed(2)}B` : `$${(v * 1000).toFixed(0)}M`;
             const beats10 = hist10.filter(h => h.surp >= 0).length;
-            const annualRows = annualEpsSalesRows(financialsDoc?.annual ?? []);
+            const annualRows = annualEpsSalesRows(financialsDoc?.annual ?? [], financialsDoc?.epsHistory ?? []);
             const quarterlyRows = quarterlyEpsSalesRows(financialsDoc?.quarters ?? []);
             return (
               <div className="side-drawer" style={{ zIndex: 52 }}>

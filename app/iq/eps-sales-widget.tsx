@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { NotAvailable, VendorTag } from "./utils";
-import type { FinancialsDoc, AnnualFinancials, QuarterFinancials } from "./types";
+import type { FinancialsDoc, AnnualFinancials, QuarterFinancials, EpsHistoryRow } from "./types";
+import { reportedQuarterEps, quarterEpsSurprisePct, reportedAnnualEps, estimatedAnnualEps } from "./types";
 
 /** "+12%" / "-4%" / "—" — rounded YoY %change, blank when either side is missing. */
 function pctChangeStr(curr: number | null | undefined, prev: number | null | undefined): string {
@@ -12,9 +13,9 @@ function pctChangeStr(curr: number | null | undefined, prev: number | null | und
 }
 
 type EpsSalesPt = { label: string; eps: number | null; sales: number | null };
-type AnnualRow = { year: string; eps: number | null; epsChg: string; sales: number | null; salesChg: string };
+type AnnualRow = { year: string; eps: number | null; epsEst: number | null; epsChg: string; epsSurp: string; sales: number | null; salesChg: string };
 type QuarterRow = {
-  label: string; eps: number | null; epsChg: string; epsSurp: string;
+  label: string; eps: number | null; epsEst: number | null; epsChg: string; epsSurp: string;
   sales: number | null; salesChg: string; salesSurp: string;
 };
 
@@ -29,7 +30,7 @@ function epsSalesSeries(period: "Q" | "A", doc: FinancialsDoc | null): EpsSalesP
       .map(r => ({
         label: new Date(r.endDate + "T00:00:00")
           .toLocaleDateString("en-US", { month: "short", year: "2-digit" }).replace(" ", "-"),
-        eps: r.epsActual,
+        eps: reportedQuarterEps(r),
         sales: r.revenue != null ? r.revenue / 1e6 : null,
       }));
   }
@@ -37,18 +38,24 @@ function epsSalesSeries(period: "Q" | "A", doc: FinancialsDoc | null): EpsSalesP
     .filter(r => r.fiscalYear)
     .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear))
     .slice(-10)
-    .map(r => ({ label: r.fiscalYear as string, eps: r.epsActual, sales: r.revenue != null ? r.revenue / 1e6 : null }));
+    .map(r => ({ label: r.fiscalYear as string, eps: reportedAnnualEps(r.fiscalYear, doc.epsHistory, r.epsActual), sales: r.revenue != null ? r.revenue / 1e6 : null }));
 }
 
 /** One row per reported fiscal year, oldest first, with EPS/Sales YoY %change. */
-function annualEpsSalesRows(annual: AnnualFinancials[]): AnnualRow[] {
+function annualEpsSalesRows(annual: AnnualFinancials[], epsHistory: EpsHistoryRow[]): AnnualRow[] {
   const asc = [...annual].filter(r => r.fiscalYear).sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear));
   return asc.map((r, i) => {
     const prev = i > 0 ? asc[i - 1] : null;
+    const eps = reportedAnnualEps(r.fiscalYear, epsHistory, r.epsActual);
+    const prevEps = prev ? reportedAnnualEps(prev.fiscalYear, epsHistory, prev.epsActual) : null;
+    const epsEst = estimatedAnnualEps(r.fiscalYear, epsHistory);
+    const surp = eps != null && epsEst != null && epsEst !== 0 ? ((eps - epsEst) / Math.abs(epsEst)) * 100 : null;
     return {
       year: r.fiscalYear as string,
-      eps: r.epsActual,
-      epsChg: pctChangeStr(r.epsActual, prev?.epsActual),
+      eps,
+      epsEst,
+      epsChg: pctChangeStr(eps, prevEps),
+      epsSurp: surp == null ? "—" : `${surp >= 0 ? "+" : ""}${Math.round(surp)}%`,
       sales: r.revenue != null ? r.revenue / 1e6 : null,
       salesChg: pctChangeStr(r.revenue, prev?.revenue),
     };
@@ -67,9 +74,10 @@ function quarterlyEpsSalesRows(quarters: QuarterFinancials[]): QuarterRow[] {
       label: r.fiscalPeriod && r.fiscalYear
         ? `${r.fiscalPeriod} ${r.fiscalYear}`
         : new Date(r.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-      eps: r.epsActual,
-      epsChg: pctChangeStr(r.epsActual, yoy?.epsActual),
-      epsSurp: pctChangeStr(r.epsActual, r.epsEstimate),
+      eps: reportedQuarterEps(r),
+      epsEst: r.epsEstimateReported ?? null,
+      epsChg: pctChangeStr(reportedQuarterEps(r), yoy ? reportedQuarterEps(yoy) : null),
+      epsSurp: (() => { const s = quarterEpsSurprisePct(r); return s == null ? "—" : `${s >= 0 ? "+" : ""}${Math.round(s)}%`; })(),
       sales: r.revenue != null ? r.revenue / 1e6 : null,
       salesChg: pctChangeStr(r.revenue, yoy?.revenue),
       salesSurp: "—",
@@ -137,7 +145,7 @@ const chgCls = (s: string) => s.startsWith("+") ? " up" : s.startsWith("-") ? " 
 export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc | null }) {
   const [period, setPeriod] = useState<"Q" | "A">("Q");
   const series = epsSalesSeries(period, financialsDoc);
-  const annualRows = annualEpsSalesRows(financialsDoc?.annual ?? []);
+  const annualRows = annualEpsSalesRows(financialsDoc?.annual ?? [], financialsDoc?.epsHistory ?? []);
   const quarterlyRows = quarterlyEpsSalesRows(financialsDoc?.quarters ?? []);
 
   // Forward analyst estimates (the `*YYYY` rows) — only present when an estimate
@@ -150,13 +158,17 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
   const startEps = annualRows.length ? annualRows[annualRows.length - 1].eps : null;
   const startSales = annualRows.length ? annualRows[annualRows.length - 1].sales : null;
   const salesM = (v: number | null | undefined) => (v != null ? v / 1e6 : null);
-  const forwardRows = fwd.map((e, i) => {
+  const forwardRows: AnnualRow[] = fwd.map((e, i) => {
     const prevEps = i === 0 ? startEps : fwd[i - 1].epsEstimate;
     const prevSales = i === 0 ? startSales : salesM(fwd[i - 1].revenueEstimate);
     return {
       year: `*${e.fiscalYear}`,
+      // For a future year the reported "EPS" cell IS the consensus estimate, so
+      // the separate Est./%surp columns stay blank (there's no actual to compare).
       eps: e.epsEstimate,
+      epsEst: null,
       epsChg: pctChangeStr(e.epsEstimate, prevEps),
+      epsSurp: "—",
       sales: salesM(e.revenueEstimate),
       salesChg: pctChangeStr(salesM(e.revenueEstimate), prevSales),
     };
@@ -229,7 +241,7 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
             <div style={{ overflowX: "auto" }}>
               <table className="tbl">
                 <thead>
-                  <tr><th>Fiscal year</th><th className="num">EPS</th><th className="num">%chg</th><th className="num">Sales (M)</th><th className="num">%chg</th></tr>
+                  <tr><th>Fiscal year</th><th className="num">EPS</th><th className="num">Est.</th><th className="num">%chg</th><th className="num">%surp</th><th className="num">Sales (M)</th><th className="num">%chg</th></tr>
                 </thead>
                 <tbody>
                   {/* Newest first: forward `*YYYY` estimates (future) on top — dimmed,
@@ -238,7 +250,9 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
                     <tr key={r.year} style={{ opacity: 0.75, fontStyle: "italic" }}>
                       <td style={{ fontWeight: 700, color: "var(--brand-2)" }}>{r.year}</td>
                       <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
+                      <td className="num">{r.epsEst != null ? `$${r.epsEst.toFixed(2)}` : <NotAvailable />}</td>
                       <td className={`num${chgCls(r.epsChg)}`}>{r.epsChg}</td>
+                      <td className={`num${chgCls(r.epsSurp)}`}>{r.epsSurp}</td>
                       <td className="num">{r.sales != null ? r.sales.toFixed(1) : <NotAvailable />}</td>
                       <td className={`num${chgCls(r.salesChg)}`}>{r.salesChg}</td>
                     </tr>
@@ -247,7 +261,9 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
                     <tr key={r.year}>
                       <td style={{ fontWeight: 700, color: "var(--text-hi)" }}>{r.year}</td>
                       <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
+                      <td className="num" style={{ color: "var(--text-dim-solid)" }}>{r.epsEst != null ? `$${r.epsEst.toFixed(2)}` : <NotAvailable />}</td>
                       <td className={`num${chgCls(r.epsChg)}`}>{r.epsChg}</td>
+                      <td className={`num${chgCls(r.epsSurp)}`}>{r.epsSurp}</td>
                       <td className="num">{r.sales != null ? r.sales.toFixed(1) : <NotAvailable />}</td>
                       <td className={`num${chgCls(r.salesChg)}`}>{r.salesChg}</td>
                     </tr>
@@ -270,7 +286,7 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
             <div style={{ overflowX: "auto" }}>
               <table className="tbl">
                 <thead>
-                  <tr><th>Quarter</th><th className="num">EPS</th><th className="num">%chg</th><th className="num">%surp</th><th className="num">Sales (M)</th><th className="num">%chg</th><th className="num">%surp</th></tr>
+                  <tr><th>Quarter</th><th className="num">EPS act</th><th className="num">EPS est</th><th className="num">%chg</th><th className="num">%surp</th><th className="num">Sales (M)</th><th className="num">%chg</th><th className="num">%surp</th></tr>
                 </thead>
                 <tbody>
                   {/* Newest quarter first. */}
@@ -278,6 +294,7 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
                     <tr key={`${r.label}-${i}`}>
                       <td style={{ fontWeight: 700, color: "var(--text-hi)" }}>{r.label}</td>
                       <td className="num">{r.eps != null ? `$${r.eps.toFixed(2)}` : <NotAvailable />}</td>
+                      <td className="num">{r.epsEst != null ? `$${r.epsEst.toFixed(2)}` : <NotAvailable />}</td>
                       <td className={`num${chgCls(r.epsChg)}`}>{r.epsChg}</td>
                       <td className={`num${chgCls(r.epsSurp)}`}>{r.epsSurp}</td>
                       <td className="num">{r.sales != null ? r.sales.toFixed(1) : <NotAvailable />}</td>

@@ -378,7 +378,7 @@ export function SettingsScreen() {
             <h3>Font</h3>
           </div>
           <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {FONTS.map(f => (
+            {[...FONTS].sort((a, b) => a.rank - b.rank).map(f => (
               <label
                 key={f.key}
                 onClick={() => void applyFont(f.key)}
