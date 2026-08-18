@@ -782,10 +782,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // as-is — NOT reconstructed as price ÷ P/E (circular: the sync-time P/E was
   // itself derived from EPS, so live-price ÷ stale-P/E drifts). N/A when unstored
   // (BUG-DATA-006). `epsTtm`/`eps` are written by the /live/company backend
-  // (ondemand.service) but aren't declared on the shared CompanyDoc mirror yet,
-  // so read them via a narrow local view rather than widening that shared type.
-  const epsCo = liveCompany as (CompanyDoc & { epsTtm?: number | null; eps?: number | null }) | null;
-  const eps = epsCo?.epsTtm ?? epsCo?.eps ?? null;
+  // (ondemand.service) and are now declared on the shared CompanyDoc mirror.
+  const eps = liveCompany?.epsTtm ?? liveCompany?.eps ?? null;
   // Real RSI(14)/MACD from technical-indicators.job — "not available" (never
   // a seeded formula) until that job has run for this ticker.
   const rsi = liveCompany?.rsi14 ?? null;
@@ -1179,7 +1177,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 ["52W Range",      hi != null && lo != null ? "$" + nf(lo) + " – $" + nf(hi) : null],
                 ["Avg Vol (20d)",  avgVol20 != null ? nf(avgVol20 / 1e6) + "M" : null],
                 ["Sector",         data.sector],
-                ["Div Yield",      data.dividendYield != null ? data.dividendYield.toFixed(2) + "%" : null],
+                // Forward-annualized yield (latest declared rate × frequency ÷
+                // price), per the backend methodology change — the "(fwd)" tag
+                // tells users it's forward, not trailing-twelve-month.
+                ["Div Yield",      data.dividendYield != null ? data.dividendYield.toFixed(2) + "% (fwd)" : null],
               ] as [string, string | null][]).map(k => (
                 <div key={k[0]} className="kstat">
                   <div className="k">{k[0]}</div>
@@ -1386,7 +1387,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       {divRows.map(q => (
                         <div key={q.label} className="minirow">
                           <span className="tkr" style={{ width: 60 }}>{q.label}</span>
-                          <span className="mid mono">${q.perShare.toFixed(4)}/sh</span>
+                          <span className="mid mono">{q.perShare != null ? `$${q.perShare.toFixed(4)}/sh` : "—"}</span>
                           <span className="r" style={{ color: "var(--text-dim-solid)", fontSize: ".72rem" }}>{q.note}</span>
                         </div>
                       ))}
@@ -2293,7 +2294,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   amt: h.amount,
                 }))
               : [];
-            const maxAmt = barSource.length ? Math.max(...barSource.map(b => b.amt)) * 1.15 || 1 : 1;
+            const maxAmt = barSource.length ? Math.max(...barSource.map(b => b.amt ?? 0)) * 1.15 || 1 : 1;
             const W = 420, H = 110, PADB = 22, PADT = 14;
             const bw = barSource.length ? W / barSource.length * 0.55 : 0;
             const gap = barSource.length ? W / barSource.length : 0;
@@ -2331,7 +2332,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                           <div className="ai-sec"><div className="h">Dividend per share (recent payments)</div></div>
                           <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", margin: "10px 0 14px" }}>
                             {barSource.map((b, i) => {
-                              const bh = (b.amt / maxAmt) * (H - PADT - PADB);
+                              const bh = ((b.amt ?? 0) / maxAmt) * (H - PADT - PADB);
                               const bx = gap * i + (gap - bw) / 2;
                               const by = PADT + (H - PADT - PADB) - bh;
                               const isLast = i === barSource.length - 1;
@@ -2341,7 +2342,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                                     style={{ fill: isLast ? "var(--brand-2)" : "var(--surface-3)" }} />
                                   <text x={bx + bw / 2} y={by - 3} textAnchor="middle"
                                     style={{ fill: isLast ? "var(--brand-2)" : "var(--text-dim-solid)", fontSize: "0.4375rem" }}>
-                                    ${b.amt.toFixed(2)}
+                                    {b.amt != null ? `$${b.amt.toFixed(2)}` : "—"}
                                   </text>
                                   <text x={bx + bw / 2} y={H - 5} textAnchor="middle"
                                     style={{ fill: "var(--text-dim-solid)", fontSize: "0.5rem" }}>

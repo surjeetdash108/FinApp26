@@ -151,7 +151,7 @@ function DivHistoryChart({ data }: { data: { year: number; div: number }[] }) {
 // ── Dividend sliding drawer ──────────────────────────────────────────────────
 function DividendDrawer({ stock, onClose }: { stock: DivStock; onClose: () => void }) {
   const { data: dh, loading: dhLoading } = useApiResource<DividendHistoryDoc>(`/live/dividend-history?ticker=${encodeURIComponent(stock.sym)}`);
-  const hist = (dh?.annualTotals ?? []).map(a => ({ year: a.year, div: a.total })).sort((a, b) => a.year - b.year);
+  const hist = (dh?.annualTotals ?? []).map(a => ({ year: a.year, div: a.total ?? 0 })).sort((a, b) => a.year - b.year);
   return (
     <>
       <div className="scrim" onClick={onClose} />

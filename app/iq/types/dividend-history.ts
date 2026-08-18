@@ -6,11 +6,13 @@ export interface DividendHistoryDoc {
     paymentDate: string | null;
     declarationDate: string | null;
     recordDate: string | null;
-    amount: number;
+    // Nullable: the backend reads Polygon's cash_amount defensively and may
+    // emit null when a dividend record has no amount (guard renders).
+    amount: number | null;
     dividendType: string | null;
     frequency: number | null;
   }>;
-  annualTotals: Array<{ year: number; total: number; payments: number }>;
+  annualTotals: Array<{ year: number; total: number | null; payments: number }>;
   ttmTotal: number | null;
   ttmPayments: number;
   yieldPct: number | null;
