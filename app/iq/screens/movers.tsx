@@ -33,11 +33,23 @@ const CAP_ORDER = ["Mega", "Large", "Mid", "Small", "Micro"];
  * (technical-indicators.job), "—" until synced. (Catalyst was removed — Polygon
  * has no catalyst feed, so it only ever showed "—".)
  */
+// Leveraged / inverse ETF products (e.g. "T-REX 2X Long AXTI Daily ETF",
+// "ProShares UltraPro …") routinely top the raw grouped-daily gainers but aren't
+// stock movers. A normal operating company never carries both a multiplier
+// ("2X"/"3X") and an ETF/ETN/Shares suffix, nor "leveraged/inverse/ultrapro/
+// ultrashort", so the false-positive risk is negligible.
+function isLeveragedProduct(name: string | null | undefined): boolean {
+  const n = name ?? "";
+  if (/\b(leveraged?|inverse|ultrapro|ultrashort)\b/i.test(n)) return true;
+  if (/\b[1-9](?:\.\d)?x\b/i.test(n) && /\b(etf|etn|shares)\b/i.test(n)) return true;
+  return false;
+}
+
 function mergeMovers(
   live: LiveMoverDoc[],
   companyByTicker: Map<string, CompanyDoc>,
 ): Mover[] {
-  return live.map(l => {
+  return live.filter(l => !isLeveragedProduct(l.name)).map(l => {
     const c = companyByTicker.get(l.ticker);
     return {
       ticker: l.ticker,
@@ -199,7 +211,9 @@ export function MoversScreen() {
                   <td className="num">${fmt(price)}</td>
                   <td className="num" style={{ color: v == null ? undefined : v >= 0 ? "var(--up)" : "var(--down)", fontWeight: 600 }}>{v == null ? "—" : <>{arr(v)} {sign(v)}</>}</td>
                   <td className="num">
-                    <b style={{ color: m.rvolRatio > 3 ? "var(--warn)" : "var(--text)" }}>{m.rvolRatio.toFixed(1)}×</b>
+                    {m.rvolRatio > 0
+                      ? <b style={{ color: m.rvolRatio > 3 ? "var(--warn)" : "var(--text)" }}>{m.rvolRatio.toFixed(1)}×</b>
+                      : <span style={{ color: "var(--text-dim-solid)" }}>—</span>}
                   </td>
                   <td>
                     <span style={{ fontSize: ".74rem" }}>

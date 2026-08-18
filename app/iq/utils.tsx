@@ -280,7 +280,14 @@ export function EarningsGrowthChart({ hist }: { hist: EarnQ[] }) {
   }));
   const yoyMap: Record<string, number> = {};
   d.forEach((q, i) => {
-    if (i >= 4) yoyMap[q.q] = ((q.a - d[i - 4].a) / Math.abs(d[i - 4].a || 1)) * 100;
+    if (i < 4) return;
+    const base = d[i - 4].a;
+    // Skip an unreliable YoY when the year-ago base is ~0 (a spin-off / first
+    // reporting period) or the result is absurd — a near-zero denominator
+    // otherwise prints meaningless four-digit percentages (e.g. "+6227% YoY").
+    if (Math.abs(base) < 0.05) return;
+    const pct = ((q.a - base) / Math.abs(base)) * 100;
+    if (Math.abs(pct) <= 1000) yoyMap[q.q] = pct;
   });
   return (
     // No maxWidth: let the chart scale to the full width of its box (it was

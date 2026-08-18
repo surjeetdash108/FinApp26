@@ -85,7 +85,19 @@ export function IPOsScreen() {
       return true;
     });
   })();
-  const liveIposSorted = [...liveIpos].sort((a, b) => b.date.localeCompare(a.date));
+  // Sort newest-first, then collapse duplicate listings of the same ticker (the
+  // vendor sometimes reports one IPO on two adjacent dates — expected vs actual
+  // listing). Keep the newest row per symbol; rows without a symbol are kept.
+  const liveIposSorted = (() => {
+    const sorted = [...liveIpos].sort((a, b) => b.date.localeCompare(a.date));
+    const seen = new Set<string>();
+    return sorted.filter(e => {
+      if (!e.symbol) return true;
+      if (seen.has(e.symbol)) return false;
+      seen.add(e.symbol);
+      return true;
+    });
+  })();
   // Prefer the IPO doc's own (SIC-derived) sector; fall back to the companies
   // universe. The dropdown is built from the sectors actually present.
   const secForIpo = (e: IpoEventDoc): string => e.sector ?? sectorOf(e.symbol);

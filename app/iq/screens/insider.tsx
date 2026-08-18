@@ -114,7 +114,7 @@ function InsiderDrawer({ sym, liveTxns, loading, onClose, onOpenFull }: {
                       {x.shares.toLocaleString()} sh{x.pricePerShare ? ` @ $${x.pricePerShare.toFixed(2)}` : ""} · {x.transactionDate}
                     </div>
                   </span>
-                  {x.pricePerShare && (
+                  {(x.transactionCode === "P" || x.transactionCode === "S") && x.pricePerShare && (
                     <span className={`r ${x.acquiredOrDisposed === "A" ? "up" : "down"}`}>
                       {x.acquiredOrDisposed === "A" ? "+" : "−"}{fmtValue(x.shares * x.pricePerShare)}
                     </span>
@@ -204,7 +204,15 @@ export function InsiderScreen() {
   const [xfTab,      setXfTab]      = useState<0 | 1 | 2>(0);
   const [drawer,     setDrawer]     = useState<DrawerState>(null);
 
-  const { data: liveInsiderTx, loading: liveInsiderTxLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  const { data: liveInsiderTxRaw, loading: liveInsiderTxLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  // Discard implausible per-share prices (Form 4 garbage — e.g. $2.1M/sh) at the
+  // source so no fabricated dollar value reaches the feed, the drawer, or the
+  // "$ volume" leaderboard. No US equity trades near $1M/sh (BRK.A is well under).
+  const liveInsiderTx = liveInsiderTxRaw.map(x =>
+    x.pricePerShare != null && !(x.pricePerShare > 0 && x.pricePerShare <= 1_000_000)
+      ? { ...x, pricePerShare: null }
+      : x,
+  );
   const { data: liveFunds, loading: liveFundsLoading } = useApiList<FundHoldingDoc>("/market-data/fund-holdings");
   // Ticker-indexed institutional (13F) ownership from FMP — the per-ticker
   // rollup SEC 13F (CUSIP-keyed) cannot produce.
@@ -231,14 +239,29 @@ export function InsiderScreen() {
 
   const openIns  = (sym: string) => setDrawer({ kind: "insider", sym });
 
-  const FEED: Tx[] = liveInsiderTx.map(x => ({
-    s: x.ticker,
-    role: x.officerTitle ?? x.ownerName ?? "Filer",
-    det: `${x.acquiredOrDisposed === "A" ? "acquired" : "disposed"} ${x.shares.toLocaleString()} sh${x.pricePerShare ? ` @ $${x.pricePerShare.toFixed(2)}` : ""}`,
-    dir: x.acquiredOrDisposed === "A" ? "buy" : "sell",
-    valUsd: x.pricePerShare != null ? x.shares * x.pricePerShare : null,
-    date: x.transactionDate,
-  }));
+  // "Recent activity" window — a late/amended Form 4 can report a decade-old
+  // transaction (e.g. a 2010 date) that otherwise headlines the value-sorted feed.
+  const insCutoff = Date.now() - 730 * 86_400_000; // ~24 months
+  const FEED: Tx[] = liveInsiderTx
+    .filter(x => {
+      const t = Date.parse(x.transactionDate);
+      return !Number.isFinite(t) || t >= insCutoff;
+    })
+    .map(x => {
+      // Only OPEN-MARKET buys (P) / sales (S) carry a real dollar value. Option
+      // exercises (M), grants (A), gifts (G), tax withholding (F) etc. aren't
+      // market trades — a $ value on them fabricates the "$ volume" leaderboard
+      // (a $7B option exercise showing as an insider "BUY").
+      const openMarket = x.transactionCode === "P" || x.transactionCode === "S";
+      return {
+        s: x.ticker,
+        role: x.officerTitle ?? x.ownerName ?? "Filer",
+        det: `${x.acquiredOrDisposed === "A" ? "acquired" : "disposed"} ${x.shares.toLocaleString()} sh${x.pricePerShare ? ` @ $${x.pricePerShare.toFixed(2)}` : ""}`,
+        dir: x.acquiredOrDisposed === "A" ? "buy" : "sell",
+        valUsd: openMarket && x.pricePerShare != null ? x.shares * x.pricePerShare : null,
+        date: x.transactionDate,
+      };
+    });
 
   // Click a sort field: re-clicking the active field flips direction, a new
   // field activates it descending (largest value / most recent date first).

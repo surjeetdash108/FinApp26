@@ -281,6 +281,26 @@ export function CommentaryScreen() {
               grid row (which the right rail sizes), squaring off the layout
               instead of leaving an empty L below a short feed. */}
           <div className="col-8" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Quick lookup — tap a ticker to add it to the feed filter. Sits
+                at the TOP of the column; the feed card below flex-fills. */}
+            <div className="card" style={{ flexShrink: 0 }}>
+              <div className="card-h">
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{activeTab === 3 ? "Tracked names" : "Quick filter"}</h3><VendorTag v="polygon" /></div>
+                <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>tap to add to filter</span>
+              </div>
+              <div className="card-b" style={{ paddingTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(activeTab === 3 ? [...mySymbols] : topSymbols).length === 0 ? (
+                  <DataState loading={activeTab === 3 ? false : companiesLoading} label={activeTab === 3 ? "No tracked names yet." : "No live companies synced yet."} />
+                ) : (activeTab === 3 ? [...mySymbols] : topSymbols).map(sym => (
+                  <button
+                    key={sym}
+                    className={`chip${search.trim().toUpperCase() === sym.toUpperCase() ? " on" : ""}`}
+                    onClick={() => setSearch(search.trim().toUpperCase() === sym.toUpperCase() ? "" : sym)}
+                  >{sym}</button>
+                ))}
+              </div>
+            </div>
+
             <div className="card" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
               <div className="card-h">
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}><h3>{feedLabel.title}{q ? ` · “${search.trim()}”` : ""}</h3><VendorTag v={["polygon", "fmp"]} /></div>
@@ -296,25 +316,6 @@ export function CommentaryScreen() {
                         : "No live news items in this category right now."} />
                 ) : feed.map((item, i) => (
                   <FeedItem key={item.id} item={item} i={i} total={feed.length} onTicker={sym => setSearch(sym)} />
-                ))}
-              </div>
-            </div>
-
-            {/* Quick lookup — tap a ticker to add it to the feed filter */}
-            <div className="card" style={{ flexShrink: 0 }}>
-              <div className="card-h">
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{activeTab === 3 ? "Tracked names" : "Quick filter"}</h3><VendorTag v="polygon" /></div>
-                <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>tap to add to filter</span>
-              </div>
-              <div className="card-b" style={{ paddingTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(activeTab === 3 ? [...mySymbols] : topSymbols).length === 0 ? (
-                  <DataState loading={activeTab === 3 ? false : companiesLoading} label={activeTab === 3 ? "No tracked names yet." : "No live companies synced yet."} />
-                ) : (activeTab === 3 ? [...mySymbols] : topSymbols).map(sym => (
-                  <button
-                    key={sym}
-                    className={`chip${search.trim().toUpperCase() === sym.toUpperCase() ? " on" : ""}`}
-                    onClick={() => setSearch(search.trim().toUpperCase() === sym.toUpperCase() ? "" : sym)}
-                  >{sym}</button>
                 ))}
               </div>
             </div>

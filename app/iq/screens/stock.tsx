@@ -59,6 +59,31 @@ function priorWeekHLC(bars: { t: number; h: number; l: number; c: number }[]): {
   const w = weeks.get(keys[keys.length - 2])!;
   return { h: w.h, l: w.l, c: w.c };
 }
+// Drop a still-forming current-day bar from a daily series so client-side pivot
+// fallbacks use the last FULLY-COMPLETED session — mirrors the backend keyLevels
+// basis (technical-indicators.job `marketTimeEt`). A bar dated for today's ET
+// session is complete only once 16:00 ET (the regular-session close) has passed;
+// before that it is a partial intraday aggregate. Tradeoff: early-close half-days
+// read as open until 16:00 ET — conservative (falls back to the prior completed
+// session, never a partial bar).
+function completedSessions<T extends { t: number }>(bars: T[]): T[] {
+  if (!bars.length) return bars;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false,
+  }).formatToParts(new Date());
+  const g = (type: string) => parts.find(p => p.type === type)?.value ?? "";
+  const etDate = `${g("year")}-${g("month")}-${g("day")}`;
+  const regularSessionClosed = (Number(g("hour")) % 24) >= 16; // 16:00 ET close
+  const last = bars[bars.length - 1];
+  const lastDate = new Date(last.t).toISOString().slice(0, 10);
+  const lastIsCurrentOpenSession = lastDate === etDate && !regularSessionClosed;
+  return lastIsCurrentOpenSession ? bars.slice(0, -1) : bars;
+}
+function lastCompletedSessionBar<T extends { t: number }>(bars: T[]): T | null {
+  const done = completedSessions(bars);
+  return done.length ? done[done.length - 1] : null;
+}
 function ema(bars: { c: number }[], n: number): number | null {
   if (bars.length < n) return null;
   const k = 2 / (n + 1);
@@ -173,8 +198,11 @@ function incRowsFromFinancials(
 /** "+12%" / "-8%" YoY, or "—" when there's no prior-period value to compare against
  * or that value is too close to zero for a percentage to be meaningful. */
 function pctChangeStr(curr: number | null | undefined, prev: number | null | undefined): string {
-  if (curr == null || prev == null || Math.abs(prev) < 0.005) return "—";
+  if (curr == null || prev == null || Math.abs(prev) < 0.05) return "—";
   const pct = ((curr - prev) / Math.abs(prev)) * 100;
+  // A near-zero base (spin-off / first reporting period) yields meaningless
+  // four-digit percentages — suppress rather than print "+6227%".
+  if (Math.abs(pct) > 1000) return "—";
   return `${pct >= 0 ? "+" : ""}${Math.round(pct)}%`;
 }
 
@@ -698,14 +726,21 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
   // Real 52-week high/low and average volume from a year of daily bars.
   const yr = yearBars ?? [];
-  // Support/resistance pivots — client-side from the loaded bars (instant for any
-  // ticker), falling back to the backend technicals sweep when bars aren't loaded.
-  const lastBar = yr.length ? yr[yr.length - 1] : null;
-  const priorWk = priorWeekHLC(yr);
+  // Support/resistance pivots. PREFER the backend keyLevels (technical-indicators
+  // job) — the single corrected source of truth: it derives classic pivots from
+  // the last FULLY-COMPLETED session's finalized OHLC. The 1Y chart series (`yr`,
+  // from /live/bars) can trail the official close by a session and/or carry a
+  // partial current-day bar, so recomputing from it client-side is a FALLBACK only
+  // when keyLevels is absent — and even then we use the last COMPLETED session bar
+  // (never a still-forming current-day bar) to match the backend basis.
+  const basisBar = lastCompletedSessionBar(yr);
+  const priorWk = priorWeekHLC(completedSessions(yr));
   const klDaily: Pivots | { pivot: number | null; r1: number | null; r2: number | null; r3: number | null; s1: number | null; s2: number | null; s3: number | null } | null =
-    lastBar ? pivotsFrom(lastBar.h, lastBar.l, lastBar.c) : (liveCompany?.keyLevels?.daily ?? null);
+    (liveCompany?.keyLevels?.daily ?? null)
+    ?? (basisBar ? pivotsFrom(basisBar.h, basisBar.l, basisBar.c) : null);
   const klWeekly =
-    priorWk ? pivotsFrom(priorWk.h, priorWk.l, priorWk.c) : (liveCompany?.keyLevels?.weekly ?? null);
+    (liveCompany?.keyLevels?.weekly ?? null)
+    ?? (priorWk ? pivotsFrom(priorWk.h, priorWk.l, priorWk.c) : null);
   const week52 = yr.length > 1
     ? { high: Math.max(...yr.map(b => b.h)), low: Math.min(...yr.map(b => b.l)) }
     : null;
@@ -1226,7 +1261,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             const beatsOf = histEps.filter(h => h.surp >= 0).length;
             const latestA = histEps[0]?.a ?? 0;
             const prevA   = histEps[4]?.a;
-            const yoy     = prevA != null ? ((latestA - prevA) / Math.abs(prevA || 1)) * 100 : null;
+            // Suppress a YoY built on a ~0 base (spin-off / first period), which
+            // otherwise prints an absurd four-digit percentage.
+            const yoyRaw  = prevA != null && Math.abs(prevA) >= 0.05 ? ((latestA - prevA) / Math.abs(prevA)) * 100 : null;
+            const yoy     = yoyRaw != null && Math.abs(yoyRaw) <= 1000 ? yoyRaw : null;
             return (
               <div className="card">
                 <div className="card-h">
@@ -1416,8 +1454,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             );
           })()}
 
-          {/* Insider & institutional — moved into LEFT COLUMN, same reason as above. */}
-          <div className="card">
+          {/* Insider & institutional — LAST card in the LEFT column; flex-fills so
+              the left column reaches its base with no gap when the RIGHT column
+              is taller (mirror of Key levels on the right). */}
+          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <h3>Insider &amp; institutional</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1425,7 +1465,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <span className="link" onClick={() => setInnerDrawer("insider")}>View all →</span>
               </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 6 }}>
+            <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0 }}>
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
                 Recent insider transactions
               </div>
@@ -1598,8 +1638,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-          {/* Key levels (pivots) — content-sized, directly below Peers. */}
-          <div className="card">
+          {/* Key levels (pivots) — flex-fills the rest of the RIGHT column so it
+              reaches the column base (no empty gap under it when the LEFT column
+              is taller). This is the shared StockScreenEmbed, so the fill also
+              closes the gap on themes / screener / search. */}
+          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <h3>Key levels (pivots)</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1607,7 +1650,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
               </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 6 }}>
+            <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0 }}>
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
                 Weekly pivots
               </div>

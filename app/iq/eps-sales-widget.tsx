@@ -7,8 +7,10 @@ import { reportedQuarterEps, quarterEpsSurprisePct, reportedAnnualEps, estimated
 
 /** "+12%" / "-4%" / "—" — rounded YoY %change, blank when either side is missing. */
 function pctChangeStr(curr: number | null | undefined, prev: number | null | undefined): string {
-  if (curr == null || prev == null || Math.abs(prev) < 0.005) return "—";
+  if (curr == null || prev == null || Math.abs(prev) < 0.05) return "—";
   const pct = ((curr - prev) / Math.abs(prev)) * 100;
+  // Near-zero base (spin-off / first reporting period) → meaningless four-digit %.
+  if (Math.abs(pct) > 1000) return "—";
   return `${pct >= 0 ? "+" : ""}${Math.round(pct)}%`;
 }
 
