@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { type Mover, maPostureLabel } from "../data";
 import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag } from "../utils";
+import { apiGet } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { LiveMoverDoc, CompanyDoc, NewsArticleDoc } from "../types";
@@ -88,6 +89,26 @@ export function MoversScreen() {
     return m;
   })();
   const [newsHover, setNewsHover] = useState<{ sym: string; x: number; y: number } | null>(null);
+  // The bulk `news` collection only covers a handful of large caps, so for an
+  // arbitrary mover we fetch its news on demand (/live/news works for ANY
+  // ticker) and cache the latest article: NewsArticleDoc, or null when none.
+  const [newsCache, setNewsCache] = useState<Record<string, NewsArticleDoc | null>>({});
+  useEffect(() => {
+    const sym = newsHover?.sym;
+    if (!sym || newsByTicker.has(sym) || sym in newsCache) return;
+    // Debounce so sweeping the cursor across rows doesn't fire a burst of calls.
+    const id = setTimeout(() => {
+      apiGet<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`)
+        .then(articles => {
+          const latest = [...(articles ?? [])].sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))[0] ?? null;
+          setNewsCache(c => ({ ...c, [sym]: latest }));
+        })
+        .catch(() => setNewsCache(c => ({ ...c, [sym]: null })));
+    }, 200);
+    return () => clearTimeout(id);
+    // Only refetch when the hovered ticker changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newsHover?.sym]);
 
   const [tab,          setTab]          = useState<TabKey>("win");
   const [sector,       setSector]       = useState("All");
@@ -256,9 +277,12 @@ export function MoversScreen() {
         </div>
       )}
 
-      {/* Why-it-moved hover: the latest headline for the row under the cursor. */}
+      {/* Why-it-moved hover: latest headline for the row under the cursor. Bulk
+          news first (instant), else the on-demand fetch result, else loading. */}
       {newsHover && (() => {
-        const n = newsByTicker.get(newsHover.sym);
+        const bulk = newsByTicker.get(newsHover.sym);
+        const resolved = bulk != null || newsHover.sym in newsCache;
+        const n = bulk ?? newsCache[newsHover.sym] ?? null;
         const left = typeof window !== "undefined" ? Math.min(newsHover.x + 16, window.innerWidth - 336) : newsHover.x + 16;
         return (
           <div style={{
@@ -277,7 +301,7 @@ export function MoversScreen() {
                 </div>
               </>
             ) : (
-              <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>News not available.</div>
+              <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>{resolved ? "News not available." : "Loading news…"}</div>
             )}
           </div>
         );

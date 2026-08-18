@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { firebaseAuth } from "../../firebase";
+import { apiGet } from "../backend";
 import { useIQActions, ExpandBtn } from "../shell";
 import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem, maPostureLabel } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable, VendorTag } from "../utils";
@@ -127,16 +128,19 @@ function pctBorderColor(pct: number | null | undefined): string {
 }
 
 function DashPopContent({
-  sym, block, movers, earnings, watchlist, portfolio, companies, consensus, insiderMini, announcements, news,
+  sym, block, movers, earnings, watchlist, portfolio, companies, consensus, insiderMini, announcements, news, onDemandNews,
 }: {
   sym: string; block: PopBlock; movers: Mover[]; earnings: Earning[]; watchlist: WatchItem[]; portfolio: FolioItem[];
   companies: CompanyDoc[]; consensus: AnalystConsensusDoc[]; insiderMini: { key: string; s: string; role: string; dir: "buy" | "sell"; val: string }[];
-  announcements: EarningsAnnouncementDoc[]; news: NewsArticleDoc[];
+  announcements: EarningsAnnouncementDoc[]; news: NewsArticleDoc[]; onDemandNews: Record<string, NewsArticleDoc | null>;
 }) {
-  // Latest headline for this ticker, or null when nothing is synced.
-  const latestNews = news
+  // Latest headline: bulk news first (instant), else the on-demand fetch result
+  // (which covers ANY ticker), else still loading.
+  const bulkNews = news
     .filter(n => n.ticker === sym)
-    .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))[0] ?? null;
+    .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))[0] ?? undefined;
+  const newsResolved = bulkNews != null || sym in onDemandNews;
+  const latestNews = bulkNews ?? onDemandNews[sym] ?? null;
   const mv  = movers.find(x => x.ticker ===sym);
   const er  = earnings.find(x => x.ticker ===sym);
   const an  = consensus.find(x => x.ticker === sym);
@@ -175,7 +179,7 @@ function DashPopContent({
       <div className="dp-note">
         {latestNews
           ? <><b style={{ color: "var(--text-hi)" }}>Latest:</b> {latestNews.headline}{latestNews.source ? <span style={{ color: "var(--text-dim-solid)" }}> · {latestNews.source}</span> : null}</>
-          : "News not available."}
+          : newsResolved ? "News not available." : "Loading news…"}
       </div>
     </>;
   } else if (block === "analyst" && an) {
@@ -368,6 +372,23 @@ export function DashboardScreen() {
   // ---- Dash pop hover ----
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pop, setPop] = useState<PopState | null>(null);
+  // On-demand news for the hovered ticker (the bulk `news` collection only
+  // covers a few large caps). Cached: NewsArticleDoc, or null when none.
+  const [popNewsCache, setPopNewsCache] = useState<Record<string, NewsArticleDoc | null>>({});
+  useEffect(() => {
+    const sym = pop?.sym;
+    if (!sym || dashNews.some(n => n.ticker === sym) || sym in popNewsCache) return;
+    const id = setTimeout(() => {
+      apiGet<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`)
+        .then(articles => {
+          const latest = [...(articles ?? [])].sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))[0] ?? null;
+          setPopNewsCache(c => ({ ...c, [sym]: latest }));
+        })
+        .catch(() => setPopNewsCache(c => ({ ...c, [sym]: null })));
+    }, 200);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pop?.sym]);
 
   // ---- Heatmap hover popup ----
   type HeatPop = { sd: SectorRow; x: number; y: number };
@@ -1109,7 +1130,7 @@ export function DashboardScreen() {
             else openStock(pop.sym);
           }}
         >
-          <DashPopContent sym={pop.sym} block={pop.block} movers={movers} earnings={earnings} watchlist={watchMini} portfolio={folioMini} companies={companies} consensus={consensusLive} insiderMini={INSIDER_MINI} announcements={earningsAnnouncements} news={dashNews} />
+          <DashPopContent sym={pop.sym} block={pop.block} movers={movers} earnings={earnings} watchlist={watchMini} portfolio={folioMini} companies={companies} consensus={consensusLive} insiderMini={INSIDER_MINI} announcements={earningsAnnouncements} news={dashNews} onDemandNews={popNewsCache} />
         </div>
       )}
     </div>

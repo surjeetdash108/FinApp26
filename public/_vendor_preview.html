@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MarketCatalyst — Single-Vendor Consolidation Analysis</title>
+<style>
+  :root{
+    --ink:#1c2333; --ink-soft:#48546b; --ink-dim:#6b7688;
+    --line:#e4e8f0; --line-soft:#eef1f6;
+    --brand:#6c5ce7; --brand-deep:#4b3fb8; --brand-tint:#f1eefc;
+    --ok:#1f9d61; --ok-bg:#e8f7ef;
+    --warn:#b8860b; --warn-bg:#fbf3e0;
+    --bad:#d1435b; --bad-bg:#fdecef;
+    --paper:#ffffff; --panel:#f7f8fb;
+  }
+  @page{ size:A4; margin:16mm 14mm 16mm 14mm; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color:var(--ink); font-size:9.4pt; line-height:1.5;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+
+  /* ---- Masthead ---- */
+  .doc-header{ border-bottom:3px solid var(--brand); padding-bottom:10px; margin-bottom:18px; }
+  .doc-eyebrow{ font-size:7.6pt; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--brand-deep); font-weight:700; display:flex; justify-content:space-between; align-items:center; }
+  .doc-eyebrow .brand{ display:inline-flex; align-items:center; gap:7px; }
+  .doc-eyebrow .dot{ width:9px; height:9px; border-radius:3px;
+    background:linear-gradient(135deg,var(--brand),#37c7d4); display:inline-block; }
+  .doc-eyebrow .meta{ color:var(--ink-dim); font-weight:600; letter-spacing:.1em; }
+
+  /* ---- Headings ---- */
+  h1{ font-size:20pt; line-height:1.15; margin:6px 0 4px; color:var(--ink); letter-spacing:-.01em; }
+  h1 + p{ color:var(--ink-soft); font-size:10pt; }
+  h2{ font-size:13pt; margin:22px 0 8px; padding-top:6px; color:var(--brand-deep);
+    border-top:1px solid var(--line); padding-top:12px; break-after:avoid; letter-spacing:-.01em; }
+  h2:first-of-type{ border-top:none; }
+  h3{ font-size:10.6pt; margin:15px 0 5px; color:var(--ink); break-after:avoid; }
+  h1,h2,h3{ font-weight:700; }
+  p{ margin:7px 0; }
+  a{ color:var(--brand-deep); text-decoration:none; }
+  strong{ color:var(--ink); font-weight:700; }
+  ul,ol{ margin:7px 0 7px 0; padding-left:20px; }
+  li{ margin:3px 0; }
+  hr{ border:none; border-top:1px solid var(--line); margin:16px 0; }
+
+  code{ font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:8.2pt;
+    background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:.5px 4px; color:var(--brand-deep); }
+
+  /* ---- Tables ---- */
+  table{ width:100%; border-collapse:collapse; margin:12px 0; font-size:8.5pt; break-inside:auto; }
+  thead{ display:table-header-group; }
+  th{ background:var(--brand); color:#fff; text-align:left; font-weight:600;
+    padding:7px 9px; border:1px solid var(--brand); vertical-align:top; font-size:8.4pt; }
+  td{ padding:6px 9px; border:1px solid var(--line); vertical-align:top; color:var(--ink-soft); }
+  tbody tr{ break-inside:avoid; }
+  tbody tr:nth-child(even){ background:var(--panel); }
+  td strong{ color:var(--ink); }
+  td code{ font-size:7.6pt; }
+
+  /* Emoji status cells pop a touch */
+  td:first-child, th:first-child{ }
+
+  /* ---- Callout: the first table (bottom line) gets a frame ---- */
+  h2 + p + table, h2 + table{ }
+
+  /* Blockquote / appendix note */
+  blockquote{ margin:12px 0; padding:9px 14px; background:var(--brand-tint);
+    border-left:3px solid var(--brand); border-radius:0 6px 6px 0; color:var(--ink-soft); font-size:8.8pt; }
+  blockquote p{ margin:3px 0; }
+
+  /* Legend line under matrix */
+  em{ color:var(--ink-dim); }
+
+  /* Avoid ugly breaks */
+  h2, h3{ page-break-after:avoid; }
+  table, blockquote{ page-break-inside:auto; }
+</style>
+</head>
+<body>
+<div class="doc-header">
+  <div class="doc-eyebrow">
+    <span class="brand"><span class="dot"></span> MarketCatalyst · Data Strategy</span>
+    <span class="meta">Confidential · 2026-08-18</span>
+  </div>
+</div>
+<h1
+id="marketcatalyst--single-vendor-consolidation-analysis">MarketCatalyst
+— Single-Vendor Consolidation Analysis</h1>
+<p><strong>Question:</strong> If we wanted <strong>one</strong>
+market-data vendor to supply <strong>100%</strong> of what the
+MarketCatalyst app needs, what is missing / what would we have to ask
+that vendor to provide?</p>
+<p>Two scenarios are analysed:</p>
+<ul>
+<li><strong>Scenario A — Polygon only</strong></li>
+<li><strong>Scenario B — FMP only</strong></li>
+</ul>
+<p>This document is grounded in a full code inventory of the running app
+(every Polygon, FMP, FRED and SEC-EDGAR call), <strong>not</strong> on a
+generic vendor comparison. Date: 2026-08-18.</p>
+<hr />
+<h2 id="0-bottom-line-read-this-first">0. Bottom line (read this
+first)</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Polygon-only</th>
+<th>FMP-only</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Can it reach 100% as the app is designed
+today?</strong></td>
+<td><strong>No</strong> — even with every paid upgrade</td>
+<td><strong>Almost</strong> — ~95%+, one true blocker</td>
+</tr>
+<tr>
+<td><strong>Hard blockers (no product exists at the
+vendor)</strong></td>
+<td>Consensus/<strong>non-GAAP EPS &amp; estimates</strong>, analyst
+ratings &amp; price targets, institutional/13F rollup, earnings-call
+transcripts, forward earnings calendar</td>
+<td><strong>Short interest</strong> only</td>
+</tr>
+<tr>
+<td><strong>Solvable by paying/upgrading the same vendor</strong></td>
+<td>Real-time (drop 15-min delay), real index &amp; VIX levels, short
+interest, crypto, &gt;5yr history, non-experimental financials</td>
+<td>Real-time tick stream, deeper intraday history, options depth</td>
+</tr>
+<tr>
+<td><strong>Net verdict</strong></td>
+<td>Not viable without dropping ~4 feature areas (Analyst Actions,
+Earnings estimates, Institutional, Transcripts). Polygon does not sell
+that data.</td>
+<td>Viable. FMP is effectively a super-set of what we use; the work is
+<em>wiring</em> the price/quote/macro/commodity feeds we currently take
+from Polygon/FRED/SEC. Short interest stays unsolved (it's unsolved
+<strong>today</strong> too).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>One-line summary:</strong> <em>Polygon is a
+market-<strong>infrastructure</strong> vendor (prices, bars, corporate
+actions) and has no analyst/estimates/ownership products — so
+Polygon-only cannot power the fundamentals side of the app. FMP is a
+<strong>fundamentals + analyst + everything</strong> vendor that also
+carries prices, indices, commodities and macro — so FMP-only is
+achievable except for short interest.</em></p>
+<hr />
+<h2 id="1-current-architecture--who-supplies-what-today">1. Current
+architecture — who supplies what today</h2>
+<p>The app uses <strong>exactly four</strong> external sources.
+Everything else is computed in our own jobs.</p>
+<table>
+<thead>
+<tr>
+<th>Vendor</th>
+<th>Plan / access</th>
+<th>Supplies today</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Polygon.io</strong></td>
+<td>Stocks <strong>Starter</strong>, 15-min delayed, 5-yr rolling
+history</td>
+<td>Prices/quotes/bars/snapshots, Top Movers (grouped daily), dividends
+&amp; splits, related-companies (peers), market status &amp; holidays,
+treasury yields (<code>/fed/v1</code>), <strong>GAAP</strong> financials
+(<code>/vX/reference/financials</code>), IPO calendar, options
+contracts, news (+sentiment insights), ticker details
+(name/sector-via-SIC/market-cap/description/logo), full ticker universe
+&amp; search</td>
+</tr>
+<tr>
+<td><strong>FMP</strong></td>
+<td><code>/stable/</code> API (v3/v4 deprecated → 403)</td>
+<td><strong>Non-GAAP earnings</strong> (actual-vs-estimate, the
+beat/miss basis), forward EPS/revenue estimates, upcoming earnings
+calendar, analyst consensus / grades / price targets,
+<strong>institutional (13F) ownership rollup</strong>, earnings-call
+transcripts, forward economic calendar, cap-weighted sector performance,
+stock news</td>
+</tr>
+<tr>
+<td><strong>FRED</strong></td>
+<td>free key</td>
+<td>Header tape: <strong>WTI</strong> (<code>DCOILWTICO</code>),
+<strong>Bitcoin</strong> (<code>CBBTCUSD</code>); 12 macro series (CPI,
+Core CPI, unemployment, payrolls, fed funds, PPI, retail sales, jobless
+claims, GDP, industrial production, consumer sentiment, DGS10);
+macro-regime inputs (yield-curve spread, VIX, HY credit spread, S&amp;P
+level, unemployment)</td>
+</tr>
+<tr>
+<td><strong>SEC-EDGAR</strong></td>
+<td>free (public)</td>
+<td><strong>Form 4 insider transactions</strong>, <strong>13F fund
+holdings</strong> (fund-indexed, CUSIP-level), <strong>8-K filings
+wire</strong> + earnings announcements (item 2.02 → BMO/AMC + reaction),
+<strong>S-1/424B IPO registration pipeline</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Everything computed in-house (from Polygon bars):</strong> RS
+rating, technical rating, RSI/MACD/SMA/EMA/Stochastic/ADX, beta, 52-week
+hi/lo, realized vol, key-level pivots, relative volume, Fear &amp;
+Greed, market breadth/internals (advancers, decliners, TRIN, McClellan),
+recaps, sector ranks.</p>
+<h3 id="gaps-that-already-exist-today-no-vendor-supplies-them">Gaps that
+already exist today (no vendor supplies them)</h3>
+<p>These are missing <strong>regardless</strong> of consolidation — the
+honest baseline:</p>
+<ul>
+<li><strong>Short interest</strong> — no field anywhere (Polygon 404s,
+FMP has no product).</li>
+<li><strong>Guidance / implied move / post-earnings reaction</strong> —
+fields exist on the earnings calendar but are always null.</li>
+<li><strong>Revenue (sales) surprise</strong> — FMP
+<code>/stable/earnings</code> is EPS-only, so the Sales %surp column
+renders "—".</li>
+<li><strong>Real index levels</strong> (SPX/NDX/DJI/RUT), <strong>spot
+gold</strong>, <strong>spot VIX</strong>, <strong>DXY</strong> —
+approximated with ETF-proxy × multiplier because Polygon index snapshots
+are <code>NOT_AUTHORIZED</code> on Starter (gold specifically = GLD ×
+10.89).</li>
+</ul>
+<hr />
+<h2 id="2-scenario-a--polygon-only">2. Scenario A — Polygon only</h2>
+<h3 id="21-what-polygon-already-covers-no-change-needed">2.1 What
+Polygon already covers (no change needed)</h3>
+<p>Prices/quotes/bars, movers, dividends, splits, peers, market
+status/holidays, treasury yields, GAAP financials, IPO calendar
+(priced), options, news, company profile/sector/logo, ticker
+universe/search, and everything we compute from bars (technicals, RS,
+pivots, breadth, Fear &amp; Greed). This is the majority of the
+<em>screens</em>, but <strong>not</strong> the fundamentals depth.</p>
+<h3
+id="22-solvable-by-paying--upgrading-polygon-product-exists--just-entitle-it">2.2
+Solvable by paying / upgrading Polygon (product exists — just entitle
+it)</h3>
+<p>Ask Polygon to enable these; they exist in Polygon's catalog:</p>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Polygon product to request</th>
+<th>Removes today's hack</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Real-time</strong> (drop 15-min delay)</td>
+<td>Real-time Stocks plan + real-time WebSocket
+(<code>wss://socket.polygon.io</code>)</td>
+<td>Currently <code>NOT_AUTHORIZED</code>; uses
+<code>delayed.polygon.io</code></td>
+</tr>
+<tr>
+<td><strong>Real index levels + VIX</strong></td>
+<td><strong>Indices</strong> cluster / add-on (<code>I:SPX</code>,
+<code>I:NDX</code>, <code>I:DJI</code>, <code>I:RUT</code>,
+<code>I:VIX</code>)</td>
+<td>Removes SPY×10 / QQQ×36.3 / DIA×100 / IWM×10 ETF proxies and gives a
+real VIX</td>
+</tr>
+<tr>
+<td><strong>Short interest</strong></td>
+<td><strong>Short Interest / Short Volume</strong> endpoint
+(add-on)</td>
+<td>Fills the one field that's blank today — <em>Polygon can do this,
+FMP cannot</em></td>
+</tr>
+<tr>
+<td><strong>Bitcoin / crypto</strong></td>
+<td>Crypto cluster (<code>X:BTCUSD</code>)</td>
+<td>Removes FRED <code>CBBTCUSD</code> dependency</td>
+</tr>
+<tr>
+<td><strong>History &gt; 5 years</strong></td>
+<td>Higher history tier</td>
+<td>Removes <code>planHistoryFloor()</code> clamp</td>
+</tr>
+<tr>
+<td><strong>Stable financials</strong></td>
+<td><code>/stocks/financials/v1/*</code> — needs
+<strong>Advanced</strong> or <strong>Financials add-on</strong></td>
+<td>Off the experimental <code>/vX/</code> namespace (still GAAP, see
+blocker below)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-hard-blockers--polygon-has-no-product-for-these">2.3 Hard
+blockers — Polygon has <strong>no product</strong> for these</h3>
+<p>No amount of upgrading fixes these; Polygon simply does not sell this
+data. Each maps to a live feature:</p>
+<table>
+<thead>
+<tr>
+<th>Missing data</th>
+<th>Feature that breaks</th>
+<th>Why Polygon can't</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Consensus / non-GAAP EPS actual</strong> (the app's whole
+EPS/P/E/growth/beat-miss basis, matching NASDAQ/IBD)</td>
+<td>EPS everywhere, P/E, EPS growth, beat/miss, Earnings Playbook</td>
+<td>Polygon financials are <strong>GAAP from SEC filings</strong> only.
+It has no consensus/adjusted-EPS product. Using Polygon GAAP produces
+the spurious huge beats/misses we specifically moved <em>off</em> (PANW
+case).</td>
+</tr>
+<tr>
+<td><strong>Forward EPS/revenue estimates</strong> ("what street
+expects", <code>annualEstimates</code>, upcoming-calendar
+estimates)</td>
+<td>Earnings Hub estimates, forward <code>*YYYY</code> columns</td>
+<td>Polygon has no estimates/consensus feed at all.</td>
+</tr>
+<tr>
+<td><strong>Analyst ratings</strong> — consensus buy/hold/sell, grades,
+upgrades/downgrades</td>
+<td><strong>Analyst Actions</strong> screen, consensus card</td>
+<td>Polygon has no analyst product.</td>
+</tr>
+<tr>
+<td><strong>Price targets</strong> — consensus high/low/avg/median,
+per-firm targets, PT trend</td>
+<td>Price-target cards &amp; upside</td>
+<td>Polygon has no price-target product.</td>
+</tr>
+<tr>
+<td><strong>Institutional / 13F ownership rollup</strong>
+(ticker-indexed % owned, holder counts)</td>
+<td><strong>Institutional</strong> card &amp; screen</td>
+<td>Polygon has no ownership/13F product.</td>
+</tr>
+<tr>
+<td><strong>Earnings-call transcripts</strong></td>
+<td>Transcript viewer / "Earnings call"</td>
+<td>Polygon has no transcripts.</td>
+</tr>
+<tr>
+<td><strong>Forward earnings calendar</strong> (upcoming report dates
+for the whole market)</td>
+<td>Earnings Hub calendar (upcoming)</td>
+<td>Polygon only knows <em>past</em> report dates (via filing_date). No
+forward calendar.</td>
+</tr>
+<tr>
+<td><strong>Forward economic calendar w/ consensus estimates</strong> +
+broad macro series</td>
+<td>Macro screen "this/next week" + most macro tiles</td>
+<td>Polygon <code>/fed/v1</code> has only treasury yields &amp;
+inflation — not payrolls/GDP/PPI/retail/claims/sentiment, and no forward
+release schedule with estimates.</td>
+</tr>
+<tr>
+<td><strong>Commodities spot</strong> (WTI, gold)</td>
+<td>WTI &amp; Gold tape tiles</td>
+<td>Polygon has no commodities/futures product; only ETF proxies
+(USO/GLD).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Still-free fallbacks that are NOT Polygon</strong> (only
+relevant if "Polygon only" is taken literally): insider Form 4, 13F fund
+positions, 8-K wire, IPO registration pipeline all come from
+<strong>SEC-EDGAR</strong> (free/public). Broad macro comes from
+<strong>FRED</strong> (free). If "Polygon only" means "drop FRED &amp;
+SEC too," add insider, 13F drill-down, filings wire, IPO pipeline and
+macro to the blocker list. SEC/FRED can <em>partially</em> substitute
+(insider, 13F, GAAP financials, macro history) but
+<strong>cannot</strong> supply estimates, analyst ratings, transcripts,
+or non-GAAP EPS.</p>
+<h3 id="24-polygon-ask-list-what-to-request-from-polygon">2.4 Polygon
+"ask list" (what to request from Polygon)</h3>
+<ol type="1">
+<li>Real-time entitlement (stocks) + real-time WebSocket.</li>
+<li><strong>Indices</strong> add-on (SPX/NDX/DJI/RUT +
+<strong>VIX</strong>).</li>
+<li><strong>Short Interest / Short Volume</strong> endpoint.</li>
+<li>Crypto cluster (BTC).</li>
+<li>History beyond 5 years.</li>
+<li><code>/stocks/financials/v1/*</code> (Advanced/Financials
+add-on).</li>
+<li><strong>Ask whether Polygon has any roadmap for: analyst
+estimates/ratings, price targets, institutional/13F, transcripts,
+forward earnings &amp; economic calendars, commodities.</strong>
+<em>(Expected answer: no — these are outside Polygon's product
+line.)</em></li>
+</ol>
+<h3 id="25-verdict--polygon-only">2.5 Verdict — Polygon only</h3>
+<p><strong>Not viable for the app as designed.</strong> Polygon can be
+made excellent for <em>price/market-structure</em> data (and can
+uniquely add short interest and real index/VIX levels), but it
+fundamentally cannot power <strong>Analyst Actions, forward Earnings
+estimates, Institutional ownership, or Transcripts</strong>, and cannot
+supply the <strong>non-GAAP EPS</strong> basis the whole fundamentals
+layer is built on. Going Polygon-only means deleting those features or
+bolting on SEC/FRED (which still can't cover estimates, ratings, or
+transcripts).</p>
+<hr />
+<h2 id="3-scenario-b--fmp-only">3. Scenario B — FMP only</h2>
+<p>FMP is a full-stack financial-data API: it already gives us the
+hardest parts (estimates, analyst, ownership, transcripts). To go
+FMP-only we mostly need to <strong>move the price/market/macro feeds we
+currently take from Polygon/FRED/SEC onto FMP endpoints that already
+exist</strong>.</p>
+<h3 id="31-what-fmp-already-covers-live-in-the-app-today">3.1 What FMP
+already covers (live in the app today)</h3>
+<p>Non-GAAP earnings &amp; surprises, forward estimates, upcoming
+earnings calendar, analyst consensus/grades/price-targets, institutional
+13F rollup, transcripts, forward economic calendar, sector performance,
+news. This is the entire fundamentals + analyst + ownership layer — the
+part Polygon can't do.</p>
+<h3
+id="32-what-must-be-wired-onto-fmp-fmp-has-the-product-app-just-doesnt-call-it-yet">3.2
+What must be <em>wired</em> onto FMP (FMP has the product; app just
+doesn't call it yet)</h3>
+<p>These are currently Polygon/FRED/SEC. FMP has equivalents — this is
+integration work, not a vendor gap:</p>
+<table>
+<thead>
+<tr>
+<th>Need (currently)</th>
+<th>FMP endpoint(s) to add</th>
+<th>Notes / upside</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Quotes &amp; prices (Polygon snapshot)</td>
+<td><code>/stable/quote</code>, <code>/stable/batch-quote</code></td>
+<td>Delayed/EOD on lower tiers; real-time needs a higher plan</td>
+</tr>
+<tr>
+<td>Daily &amp; intraday bars (Polygon aggs)</td>
+<td><code>/stable/historical-price-eod/*</code>,
+<code>/stable/historical-chart/{interval}</code></td>
+<td>Intraday history depth is plan-limited</td>
+</tr>
+<tr>
+<td><strong>Real index levels + VIX</strong> (proxies today)</td>
+<td><code>/stable/quote?symbol=^GSPC,^IXIC,^DJI,^RUT,^VIX</code></td>
+<td><strong>Solves the ETF-proxy hack for free</strong> — real
+S&amp;P/Nasdaq/Dow/Russell/VIX</td>
+</tr>
+<tr>
+<td><strong>Commodities spot</strong> WTI, gold (FRED/GLD proxy)</td>
+<td><code>/stable/quote</code> for commodity symbols (WTI, gold)</td>
+<td><strong>Real spot</strong> — removes the GLD × 10.89 workaround</td>
+</tr>
+<tr>
+<td>Bitcoin/crypto (FRED)</td>
+<td><code>/stable/quote</code> crypto (<code>BTCUSD</code>)</td>
+<td>Removes FRED <code>CBBTCUSD</code></td>
+</tr>
+<tr>
+<td>Treasury yields (Polygon <code>/fed/v1</code>)</td>
+<td><code>/stable/treasury-rates</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Macro series (FRED, 12 series)</td>
+<td><code>/stable/economic-indicators</code> (GDP, CPI, unemployment,
+etc.)</td>
+<td>Replaces FRED observations; verify each series is offered</td>
+</tr>
+<tr>
+<td>Movers (Polygon grouped daily)</td>
+<td><code>/stable/biggest-gainers</code>, <code>/biggest-losers</code>,
+<code>/most-actives</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Market hours / holidays (Polygon)</td>
+<td><code>/stable/exchange-market-hours</code>, holidays</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Dividends &amp; splits (Polygon)</td>
+<td><code>/stable/dividends</code>, <code>/stable/splits</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Company profile/sector/logo (Polygon)</td>
+<td><code>/stable/profile</code> (has description, sector, industry,
+beta, image)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Peers (Polygon related-companies)</td>
+<td><code>/stable/stock-peers</code></td>
+<td>Curated list vs Polygon's algorithmic — quality differs</td>
+</tr>
+<tr>
+<td>Insider Form 4 (SEC)</td>
+<td><code>/stable/insider-trading/*</code></td>
+<td>Replaces SEC Form 4 parsing</td>
+</tr>
+<tr>
+<td>IPO calendar + pipeline (Polygon + SEC)</td>
+<td><code>/stable/ipos-calendar</code>, IPO prospectus/disclosure
+feeds</td>
+<td>Verify pipeline (S-1/424B) coverage vs SEC</td>
+</tr>
+<tr>
+<td>Ticker universe &amp; search (Polygon)</td>
+<td><code>/stable/stock-list</code>,
+<code>/stable/search-symbol</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>GAAP statements (Polygon <code>/vX/</code>)</td>
+<td><code>/stable/income-statement</code>,
+<code>/balance-sheet-statement</code>,
+<code>/cash-flow-statement</code></td>
+<td>FMP already gives us the non-GAAP EPS too</td>
+</tr>
+<tr>
+<td>Technicals (computed from Polygon bars)</td>
+<td>keep computing from <strong>FMP</strong> bars, or
+<code>/stable/technical-indicators/*</code></td>
+<td>No change to logic if we just swap the bar source</td>
+</tr>
+<tr>
+<td>Breadth / Fear &amp; Greed / recaps (computed)</td>
+<td>compute from <strong>FMP</strong> EOD/index series</td>
+<td>Heavier (needs full-market EOD) but feasible</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33-hard-gaps--caveats-with-fmp-only">3.3 Hard gaps / caveats
+with FMP-only</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Severity</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Short interest</strong></td>
+<td><strong>Hard blocker</strong></td>
+<td>FMP has no short-interest product on <code>/stable</code>. Unsolved
+today too. Would still need FINRA (or Polygon's short-interest add-on,
+ironically).</td>
+</tr>
+<tr>
+<td><strong>True real-time tick / NBBO</strong></td>
+<td>Medium</td>
+<td>FMP is not a tick-data/market-infrastructure provider. Real-time
+quotes need FMP's paid WebSocket; there is no full trade/quote tick feed
+like Polygon's. Fine for the current 15-min-delayed design; a limitation
+if we ever want true real-time depth.</td>
+</tr>
+<tr>
+<td><strong>Options depth</strong></td>
+<td>Low</td>
+<td>The app's options chain (8 curated tickers) comes from Polygon
+contracts. FMP options coverage is thin — may not fully replace it.</td>
+</tr>
+<tr>
+<td><strong>8-K filings wire + item-2.02 earnings-announcement
+classification &amp; reaction</strong></td>
+<td>Medium</td>
+<td>Uses SEC acceptance-time → BMO/AMC logic. FMP has
+SEC-filings/press-release RSS but not the same item-level 2.02
+classification; would need re-implementation or approximation.</td>
+</tr>
+<tr>
+<td><strong>Per-firm price targets</strong></td>
+<td>Quality</td>
+<td>Already flaky on FMP (<code>price-target-news</code> drops ~30% on
+name mismatch, errors swallowed to <code>[]</code>). Not a missing
+product — a completeness issue.</td>
+</tr>
+<tr>
+<td><strong>News sentiment</strong></td>
+<td>Quality</td>
+<td>FMP article sentiment is frequently null (vs Polygon's per-ticker
+insights).</td>
+</tr>
+<tr>
+<td><strong>Silent empty 200s</strong></td>
+<td>Reliability</td>
+<td>FMP returns empty 200 (not 429) under burst; we already pace
+requests and preserve prior values. Consolidating <em>more</em> load
+onto FMP raises the importance of that pacing/caching.</td>
+</tr>
+<tr>
+<td><strong>News redistribution licensing</strong></td>
+<td>Commercial</td>
+<td>Already accepted for FMP news; confirm it covers broader
+redistribution if FMP becomes the sole feed.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="34-fmp-ask-list-what-to-request--confirm-with-fmp">3.4 FMP "ask
+list" (what to request / confirm with FMP)</h3>
+<ol type="1">
+<li><strong>Short interest</strong> data — do they have any product or
+roadmap? <em>(Likely no.)</em></li>
+<li>Plan tier that includes: <strong>real-time (or acceptable delayed)
+quotes + WebSocket</strong>, adequate <strong>intraday history
+depth</strong>, and <strong>full-market EOD</strong> (for
+breadth/movers/recaps).</li>
+<li>Confirm coverage &amp; symbols for: <strong>index quotes
+(^GSPC/^IXIC/^DJI/^RUT/^VIX)</strong>, <strong>commodities spot (WTI,
+gold)</strong>, <strong>crypto (BTC)</strong>, <strong>treasury
+rates</strong>, and each <strong>economic indicator</strong> we show
+(CPI, Core CPI, unemployment, payrolls, fed funds, PPI, retail sales,
+jobless claims, GDP, industrial production, consumer sentiment).</li>
+<li><strong>IPO registration pipeline</strong> (S-1/424B) coverage vs
+our SEC pipeline.</li>
+<li><strong>Options</strong> coverage for our 8-ticker chain (or accept
+dropping it).</li>
+<li><strong>8-K / filings feed</strong> granularity (item 2.02) — or
+accept computing earnings-announcement sessions/reactions ourselves from
+price + calendar.</li>
+<li>Rate limits / burst behaviour for a single-vendor load;
+redistribution licensing for sole-feed use.</li>
+</ol>
+<h3 id="35-verdict--fmp-only">3.5 Verdict — FMP only</h3>
+<p><strong>Viable (~95%+).</strong> FMP already owns the hard half
+(estimates, analyst, ownership, transcripts, earnings/econ calendars).
+The remaining work is integration: repoint prices, indices, commodities,
+crypto, treasury, macro, insider, movers, market-hours, IPO and universe
+onto FMP endpoints that already exist — and this actually
+<strong>removes</strong> several of today's hacks (real index &amp; VIX
+levels, real spot gold, real BTC). The single unavoidable hole is
+<strong>short interest</strong>, which is a gap <strong>today</strong>
+anyway. Real-time tick data and options depth are the quality trade-offs
+to accept.</p>
+<hr />
+<h2 id="4-side-by-side-gap-matrix">4. Side-by-side gap matrix</h2>
+<p>Legend: ✅ native / already used · 🟡 needs wiring or paid upgrade
+(product exists) · ❌ hard gap (no product)</p>
+<table>
+<thead>
+<tr>
+<th>Data area</th>
+<th>Polygon-only</th>
+<th>FMP-only</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Real-time/delayed quotes &amp; bars</td>
+<td>✅ (🟡 real-time = upgrade)</td>
+<td>🟡 wire (🟡 real-time = upgrade)</td>
+</tr>
+<tr>
+<td>Movers / grouped market</td>
+<td>✅</td>
+<td>🟡 wire (<code>biggest-gainers</code>…)</td>
+</tr>
+<tr>
+<td>Dividends &amp; splits</td>
+<td>✅</td>
+<td>🟡 wire</td>
+</tr>
+<tr>
+<td>Company profile / sector / logo</td>
+<td>✅</td>
+<td>🟡 wire (<code>profile</code>)</td>
+</tr>
+<tr>
+<td>Peers / related companies</td>
+<td>✅</td>
+<td>🟡 wire (<code>stock-peers</code>)</td>
+</tr>
+<tr>
+<td>Technicals / RS / pivots (computed)</td>
+<td>✅</td>
+<td>🟡 recompute from FMP bars</td>
+</tr>
+<tr>
+<td><strong>Index levels + VIX</strong></td>
+<td>🟡 Indices add-on</td>
+<td>🟡 wire (<code>^GSPC…^VIX</code>) — real levels</td>
+</tr>
+<tr>
+<td><strong>Commodities spot (WTI, gold)</strong></td>
+<td>❌ (proxy only)</td>
+<td>🟡 wire (real spot)</td>
+</tr>
+<tr>
+<td><strong>Bitcoin / crypto</strong></td>
+<td>🟡 crypto cluster</td>
+<td>🟡 wire</td>
+</tr>
+<tr>
+<td>Treasury yields</td>
+<td>✅ (<code>/fed/v1</code>)</td>
+<td>🟡 wire (<code>treasury-rates</code>)</td>
+</tr>
+<tr>
+<td><strong>Broad macro series</strong></td>
+<td>❌ (only treasury/inflation)</td>
+<td>🟡 wire (<code>economic-indicators</code>)</td>
+</tr>
+<tr>
+<td><strong>Forward economic calendar + estimates</strong></td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>News (+sentiment)</td>
+<td>✅ (sentiment ✅)</td>
+<td>✅ (sentiment 🟡 often null)</td>
+</tr>
+<tr>
+<td><strong>GAAP financial statements</strong></td>
+<td>✅ (🟡 stable API = add-on)</td>
+<td>🟡 wire</td>
+</tr>
+<tr>
+<td><strong>Non-GAAP / consensus EPS</strong></td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Forward EPS/revenue estimates</strong></td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Earnings surprises (beat/miss)</strong></td>
+<td>❌ (GAAP only → wrong)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Forward earnings calendar</strong></td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Analyst ratings / grades</strong></td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Price targets (consensus + per-firm)</strong></td>
+<td>❌</td>
+<td>✅ (per-firm 🟡 ~30% gaps)</td>
+</tr>
+<tr>
+<td><strong>Earnings-call transcripts</strong></td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Institutional / 13F rollup</strong></td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Insider (Form 4)</td>
+<td>❌ (SEC today)</td>
+<td>🟡 wire (<code>insider-trading</code>)</td>
+</tr>
+<tr>
+<td>13F fund positions (CUSIP drill-down)</td>
+<td>❌ (SEC today)</td>
+<td>🟡 verify FMP fund-level 13F</td>
+</tr>
+<tr>
+<td>8-K filings wire / earnings announcements</td>
+<td>❌ (SEC today)</td>
+<td>🟡 approximate / recompute</td>
+</tr>
+<tr>
+<td>IPO calendar (priced)</td>
+<td>✅</td>
+<td>🟡 wire</td>
+</tr>
+<tr>
+<td>IPO registration pipeline (S-1/424B)</td>
+<td>❌ (SEC today)</td>
+<td>🟡 verify FMP coverage</td>
+</tr>
+<tr>
+<td>Market status / holidays</td>
+<td>✅</td>
+<td>🟡 wire</td>
+</tr>
+<tr>
+<td><strong>Short interest</strong></td>
+<td>🟡 add-on (Polygon <em>can</em>)</td>
+<td>❌ (no product)</td>
+</tr>
+<tr>
+<td>Options chains</td>
+<td>✅</td>
+<td>🟡 thin coverage</td>
+</tr>
+<tr>
+<td>Ticker universe &amp; search</td>
+<td>✅</td>
+<td>🟡 wire</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Reading the matrix:</strong> Polygon-only has <strong>many ❌
+in the fundamentals/analyst rows that cannot be resolved</strong>.
+FMP-only has <strong>mostly 🟡 (integration work on existing
+endpoints)</strong> and only <strong>one ❌ (short
+interest)</strong>.</p>
+<hr />
+<h2 id="5-recommendation">5. Recommendation</h2>
+<ul>
+<li><strong>A single-vendor Polygon build is not achievable</strong> for
+MarketCatalyst as designed. Polygon should remain the
+<strong>market-data/price/technical backbone</strong> (and is the
+<em>only</em> one of the two that can add real index/VIX levels and
+short interest), but it cannot supply estimates, analyst data, ownership
+or transcripts.</li>
+<li><strong>A single-vendor FMP build is achievable (~95%+).</strong> It
+would consolidate the hard fundamentals we already depend on and let us
+retire several proxy hacks, at the cost of (a) losing <strong>short
+interest</strong> entirely, (b) accepting FMP's non-tick real-time and
+thinner options, and (c) re-implementing the 8-K earnings-announcement
+logic. If true real-time and short interest matter, a <strong>Polygon
+(prices + short interest + indices) + FMP (fundamentals + analyst +
+ownership)</strong> split — essentially today's model, tightened —
+remains the most complete option.</li>
+<li><strong>The lone data point neither vendor solves is short
+interest</strong> — that needs FINRA (or Polygon's short-interest add-on
+specifically).</li>
+</ul>
+<hr />
+<h3 id="appendix--source-of-every-claim">Appendix — source of every
+claim</h3>
+<p>This analysis was built from a line-level inventory of the
+codebase:</p>
+<ul>
+<li><strong>Polygon:</strong> 17 REST endpoints + 1 WebSocket via
+<code>src/vendors/polygon/polygon.service.ts</code> (Starter plan,
+15-min delay, 5-yr history; <code>NOT_AUTHORIZED</code> on real-time,
+indices, short interest, &gt;5yr, stable financials).</li>
+<li><strong>FMP:</strong> 14 <code>/stable/</code> endpoints via
+<code>src/vendors/fmp/fmp.service.ts</code> (v3/v4 deprecated → 403; no
+short interest; EPS-only surprises; per-firm PT ~30% drop).</li>
+<li><strong>FRED:</strong> <code>src/vendors/fred/fred.service.ts</code>
++ <code>src/common/macro-series.ts</code> (WTI, BTC, 12 macro series,
+regime inputs; gold = GLD × 10.89, not FRED).</li>
+<li><strong>SEC-EDGAR:</strong>
+<code>src/vendors/sec-edgar/sec-edgar.service.ts</code> +
+<code>src/sync/{sec-form4,sec-13f,edgar-8k,edgar-ipo-pipeline}.job.ts</code>
+(Form 4, 13F, 8-K/2.02, IPO pipeline).</li>
+<li><strong>Data-point catalog:</strong>
+<code>MarketCatalystUI/app/iq/types/*.ts</code> +
+<code>app/iq/screens/*.tsx</code>.</li>
+</ul>
+<blockquote>
+<p>Vendor-catalog capabilities (what each vendor <em>could</em> provide
+beyond what we call today) reflect Polygon.io and FMP published API
+product lines; the specific FMP <code>/stable</code> paths in §3.2 and
+the Polygon add-ons in §2.2 should be confirmed against current vendor
+docs and your plan entitlements before commercial commitment.</p>
+</blockquote>
+
+</body>
+</html>
