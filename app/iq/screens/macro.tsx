@@ -433,7 +433,7 @@ export function MacroScreen() {
                 value={vixQuery}
                 onChange={e => setVixQuery(e.target.value.toUpperCase())}
                 placeholder="Search ticker…"
-                style={{ width: 130, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
+                style={{ width: 230, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
               />
             </div>
             <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>{vixQ ? `Matches for “${vixQuery}”` : "Highest-beta names — most sensitive to volatility spikes · hover for details"}</span>

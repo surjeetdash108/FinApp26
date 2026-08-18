@@ -127,12 +127,16 @@ function pctBorderColor(pct: number | null | undefined): string {
 }
 
 function DashPopContent({
-  sym, block, movers, earnings, watchlist, portfolio, companies, consensus, insiderMini, announcements,
+  sym, block, movers, earnings, watchlist, portfolio, companies, consensus, insiderMini, announcements, news,
 }: {
   sym: string; block: PopBlock; movers: Mover[]; earnings: Earning[]; watchlist: WatchItem[]; portfolio: FolioItem[];
   companies: CompanyDoc[]; consensus: AnalystConsensusDoc[]; insiderMini: { key: string; s: string; role: string; dir: "buy" | "sell"; val: string }[];
-  announcements: EarningsAnnouncementDoc[];
+  announcements: EarningsAnnouncementDoc[]; news: NewsArticleDoc[];
 }) {
+  // Latest headline for this ticker, or null when nothing is synced.
+  const latestNews = news
+    .filter(n => n.ticker === sym)
+    .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))[0] ?? null;
   const mv  = movers.find(x => x.ticker ===sym);
   const er  = earnings.find(x => x.ticker ===sym);
   const an  = consensus.find(x => x.ticker === sym);
@@ -167,7 +171,12 @@ function DashPopContent({
       <DpRow label="Today"><span className={cls(mv.pctChange)}>{sign(mv.pctChange)}</span></DpRow>
       <DpRow label="Rel. volume">{c?.rvol != null ? `${c.rvol.toFixed(1)}×` : <NotAvailable />}</DpRow>
       <DpRow label="RS rank">{c?.rsRating != null ? `${c.rsRating}/99` : <NotAvailable />}</DpRow>
-      <div className="dp-note">Why it&apos;s moving: trading with its sector and the broad tape.</div>
+      {/* Why it moved: the latest headline, or an honest empty state. */}
+      <div className="dp-note">
+        {latestNews
+          ? <><b style={{ color: "var(--text-hi)" }}>Latest:</b> {latestNews.headline}{latestNews.source ? <span style={{ color: "var(--text-dim-solid)" }}> · {latestNews.source}</span> : null}</>
+          : "News not available."}
+      </div>
     </>;
   } else if (block === "analyst" && an) {
     const grades = an.recentGrades ?? [];
@@ -249,6 +258,8 @@ export function DashboardScreen() {
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
   const { data: liveInsiderTx, loading: insiderLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
+  // Per-ticker news — powers the "why it moved" line in the hover popup.
+  const { data: dashNews } = useApiList<NewsArticleDoc>("/market-data/news");
   // Live Fear & Greed (fear-greed.job → market_sentiment/fear_greed). No mock
   // fallback: fgVal/fgLabel are null until the job has actually run.
   const { data: marketSentiment, loading: marketSentimentLoading } = useApiList<MarketSentimentDoc>("/market-data/market-sentiment");
@@ -1098,7 +1109,7 @@ export function DashboardScreen() {
             else openStock(pop.sym);
           }}
         >
-          <DashPopContent sym={pop.sym} block={pop.block} movers={movers} earnings={earnings} watchlist={watchMini} portfolio={folioMini} companies={companies} consensus={consensusLive} insiderMini={INSIDER_MINI} announcements={earningsAnnouncements} />
+          <DashPopContent sym={pop.sym} block={pop.block} movers={movers} earnings={earnings} watchlist={watchMini} portfolio={folioMini} companies={companies} consensus={consensusLive} insiderMini={INSIDER_MINI} announcements={earningsAnnouncements} news={dashNews} />
         </div>
       )}
     </div>

@@ -64,6 +64,8 @@ interface EarnCalItem {
   weekDay: number; // 0=Mon … 4=Fri
   epsE: number | null; epsA: number | null; implied: number | null;
   revE: number | null; revA: number | null; // reported revenue (Polygon actuals)
+  epsAYearAgo: number | null; revYearAgo: number | null; // same fiscal quarter, prior year
+  date: string; // ISO report date — used to group the snapshot across a week/month
   guide: "Raised" | "In-line" | "Lowered" | null;
   react: number | null;
 }
@@ -84,6 +86,9 @@ function toEarnCalItem(d: LiveEarningsDoc): EarnCalItem {
     implied: null,
     revE: d.revenueEstimate ?? null,
     revA: d.revenueActual ?? null,
+    epsAYearAgo: d.epsActualYearAgo ?? null,
+    revYearAgo: d.revenueYearAgo ?? null,
+    date: d.date,
     guide: null,
     react: null,
   };
@@ -502,65 +507,71 @@ function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
 
 // ── Day-view table (Before Open / After Close) ────────────────────────────────
 
-type CalView = "eps" | "sales";
-
 // Max ticker logos/rows shown before an overflow "+N" — shared by the day
 // tables, the week columns, and the month cells so all three views cap alike.
 const MAX_CAL_LOGOS = 24;
-// The snapshot table shows fewer rows per session (per side) before its
-// "+N more" toggle than the dense icon grids do.
-const MAX_TABLE_ROWS = 10;
+// The at-a-glance snapshot shows this many rows per session (per side) before
+// its "+N more" toggle.
+const GLANCE_MAX = 25;
 
-function CalTable({
-  title, rows, sel, onSelect, view,
-}: { title: string; rows: CalRow[]; sel: string; onSelect: (s: string) => void; view: CalView }) {
-  const [expanded, setExpanded] = useState(false);
-  if (rows.length === 0) return null;
-  const shown = expanded ? rows : rows.slice(0, MAX_TABLE_ROWS);
-  const canExpand = rows.length > MAX_TABLE_ROWS;
+/** One row of the at-a-glance snapshot — the Earnings-Hub "results" layout:
+ *  actual vs consensus EPS + surprise, revenue actual/consensus, and the
+ *  same-quarter-a-year-ago comparables. Everything comes from Polygon + FMP;
+ *  Guidance is intentionally absent (no vendor feed for it). */
+function GlanceRow({ it, showDate, onSelect }: { it: EarnCalItem; showDate: boolean; onSelect: (s: string, date: string) => void }) {
+  const epsSurp = surprise(it.epsE, it.epsA);
+  const yoyRev = surprise(it.revYearAgo, it.revA); // (rev - yearAgo)/|yearAgo|
   return (
-    <div className="ecal-day" style={{ marginBottom: 12 }}>
+    <tr onClick={() => onSelect(it.s, it.date)} style={{ cursor: "pointer" }}>
+      <td>
+        <div className="ecal-symcell">
+          <StockLogo sym={it.s} size={28} />
+          <div>
+            <div className="ecal-sym">{it.s}</div>
+            {it.n !== it.s && <div className="ecal-name">{it.n}</div>}
+          </div>
+        </div>
+      </td>
+      {showDate && <td className="r ecal-num" style={{ whiteSpace: "nowrap", color: "var(--text-dim-solid)" }}>{it.date ? it.date.slice(5) : "—"}</td>}
+      <td className={`r ecal-num ${fmtUpDn(epsSurp)}`}>{fmtPctSigned(epsSurp)}</td>
+      <td className="r ecal-num">{it.epsA != null ? `$${it.epsA.toFixed(2)}` : "—"}</td>
+      <td className="r ecal-num">{it.epsE != null ? `$${it.epsE.toFixed(2)}` : "—"}</td>
+      <td className="r ecal-num" style={{ color: "var(--text-dim-solid)" }}>{it.epsAYearAgo != null ? `$${it.epsAYearAgo.toFixed(2)}` : "—"}</td>
+      <td className="r ecal-num">{fmtRev(it.revA)}</td>
+      <td className="r ecal-num">{fmtRev(it.revE)}</td>
+      <td className={`r ecal-num ${fmtUpDn(yoyRev)}`}>{fmtPctSigned(yoyRev)}</td>
+    </tr>
+  );
+}
+
+function GlanceTable({ title, items, showDate, onSelect }: { title: string; items: EarnCalItem[]; showDate: boolean; onSelect: (s: string, date: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  if (items.length === 0) return null;
+  const shown = expanded ? items : items.slice(0, GLANCE_MAX);
+  const canExpand = items.length > GLANCE_MAX;
+  return (
+    <div className="ecal-day" style={{ marginBottom: 14 }}>
       <div className="ecal-day-h">
         <span className="ecal-day-t">{title}</span>
-        <span className="ecal-day-n">{rows.length}</span>
+        <span className="ecal-day-n">{items.length}</span>
       </div>
-      <div className="ecal-tablewrap">
+      <div className="ecal-tablewrap" style={{ overflowX: "auto" }}>
         <table className="ecal-table">
           <thead>
             <tr>
-              <th>Symbol</th>
-              <th className="r">{view === "eps" ? "Est EPS" : "Est Sales"}</th>
-              <th className="r">{view === "eps" ? "EPS" : "Sales"}</th>
-              <th className="r">{view === "eps" ? "EPS Surp" : "Sales Surp"}</th>
+              <th>Company</th>
+              {showDate && <th className="r">Date</th>}
+              <th className="r">Surprise</th>
+              <th className="r">Actual</th>
+              <th className="r">Consensus</th>
+              <th className="r">1 Yr Ago</th>
+              <th className="r">Actual Rev</th>
+              <th className="r">Cons. Rev</th>
+              <th className="r">Yr/Yr Rev</th>
             </tr>
           </thead>
           <tbody>
-            {shown.map(r => (
-              <tr key={r.s} className={sel === r.s ? "on" : ""} onClick={() => onSelect(r.s)}>
-                <td>
-                  <div className="ecal-symcell">
-                    <StockLogo sym={r.s} size={33} />
-                    <div>
-                      <div className="ecal-sym">{r.s}</div>
-                      {r.n !== r.s && <div className="ecal-name">{r.n}</div>}
-                    </div>
-                  </div>
-                </td>
-                {view === "eps" ? (
-                  <>
-                    <td className="r ecal-num">{r.epsE != null ? `$${r.epsE.toFixed(2)}` : "—"}</td>
-                    <td className="r ecal-num">{r.epsA != null ? `$${r.epsA.toFixed(2)}` : "—"}</td>
-                    <td className={`r ecal-num ${fmtUpDn(r.epsSurp)}`}>{fmtPctSigned(r.epsSurp)}</td>
-                  </>
-                ) : (
-                  <>
-                    <td className="r ecal-num">{fmtRev(r.revE)}</td>
-                    <td className="r ecal-num">{fmtRev(r.revA)}</td>
-                    <td className={`r ecal-num ${fmtUpDn(r.revSurp)}`}>{fmtPctSigned(r.revSurp)}</td>
-                  </>
-                )}
-              </tr>
-            ))}
+            {shown.map((it, i) => <GlanceRow key={`${it.s}-${it.date}-${i}`} it={it} showDate={showDate} onSelect={onSelect} />)}
           </tbody>
         </table>
       </div>
@@ -576,7 +587,7 @@ function CalTable({
             fontSize: ".75rem", fontWeight: 600,
           }}
         >
-          {expanded ? "Show less" : `+${rows.length - MAX_TABLE_ROWS} more`}
+          {expanded ? "Show less" : `+${items.length - GLANCE_MAX} more`}
         </button>
       )}
     </div>
@@ -598,15 +609,14 @@ export function EarningsScreen() {
 
   const [mode, setMode]     = useState<"day" | "week" | "month">("day");
   const [anchor, setAnchor] = useState<string>(() => isoDay(new Date()));
-  // Day view: icon Grid (click-through) vs snapshot Table (all reporters'
-  // estimate / actual / surprise at a glance, no one-by-one clicking).
-  const [dayLayout, setDayLayout] = useState<"grid" | "table">("grid");
-  const [calView, setCalView]     = useState<CalView>("eps");
+  // At-a-glance snapshot: a Nasdaq-style results table (actual vs consensus,
+  // surprise, revenue, year-ago) for the selected day/week/month, toggled from
+  // the calendar header. Off = the normal icon calendar.
+  const [atGlance, setAtGlance] = useState(false);
   // The filter bar (session / cap / sort / min-move / view / news / auto-refresh)
   // was removed — the live earnings feed has no data to drive those — so these
   // stay at fixed defaults.
   const sort: SortKey = "symbol";
-  const view: CalView = "eps";
   // Pre-market (Before open) / after-market (After close) filter for the calendar.
   const [session, setSession] = useState<SessionKey>("both");
   const [pickerOpen, setPickerOpen]   = useState(false);
@@ -619,6 +629,11 @@ export function EarningsScreen() {
   // that replaces the calendar; the ✕ in the weekly panel closes back to it.
   const [detailOpen, setDetailOpen] = useState(false);
   const [chartOpen, setChartOpen] = useState(true);
+  // The two legacy inline company-detail blocks that used to render at the bottom
+  // of the calendar view (a duplicate header + EPS metrics, and an earnings-
+  // history / income-statement / AI-read stack) are superseded by the full detail
+  // mode. Keep the code but keep them out of the UI.
+  const SHOW_LEGACY_EARNINGS_DETAIL = false;
 
   // No company is selected by default — the detail panels appear only after the
   // user clicks a reporting company in the calendar.
@@ -651,13 +666,23 @@ export function EarningsScreen() {
       annSessionByKey.set(`${a.ticker}|${a.announceDate}`, a.session);
     }
   }
-  const withSess = (rows: CalRow[], iso: string): CalRow[] =>
-    rows.map(r => (r.sess ? r : { ...r, sess: annSessionByKey.get(`${r.s}|${iso}`) ?? null }));
-
-  const daySessRows = withSess(visibleRows, anchor);
-  const bmoRows = daySessRows.filter(r => r.sess === "BMO");
-  const amcRows = daySessRows.filter(r => r.sess === "AMC");
-  const tbdRows = daySessRows.filter(r => r.sess !== "BMO" && r.sess !== "AMC");
+  // ── At-a-glance snapshot rows ──────────────────────────────────────────────
+  // Reporters for the current mode (day = the anchor day; week = its 5 weekdays;
+  // month = the whole month), each with its Before-Open / After-Close session
+  // resolved from the EDGAR 8-K feed (ticker|date), then filtered by the session
+  // chip and ordered largest-cap first — the same ordering as the calendar.
+  const glanceRaw: EarnCalItem[] =
+    mode === "month"
+      ? liveEarningsData.filter(d => d.date.slice(0, 7) === anchor.slice(0, 7)).map(toEarnCalItem)
+      : (mode === "week" ? weekDays5 : [anchor]).flatMap(iso => rowsForDate(iso, liveEarningsData));
+  const glanceItems: EarnCalItem[] = glanceRaw
+    .map(it => (it.sess ? it : { ...it, sess: annSessionByKey.get(`${it.s}|${it.date}`) ?? null }))
+    .filter(it => session === "both" || it.sess === session)
+    .sort((a, b) => (mcapByTicker.get(b.s) ?? 0) - (mcapByTicker.get(a.s) ?? 0) || a.s.localeCompare(b.s));
+  const glanceBmo = glanceItems.filter(it => it.sess === "BMO");
+  const glanceAmc = glanceItems.filter(it => it.sess === "AMC");
+  const glanceTbd = glanceItems.filter(it => it.sess !== "BMO" && it.sess !== "AMC");
+  const glanceShowDate = mode !== "day";
 
   const anchorDate = new Date(`${anchor}T00:00:00Z`);
   const DOW3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -696,38 +721,13 @@ export function EarningsScreen() {
   let calNode: React.ReactNode;
 
   if (mode === "day") {
-    // Day layout toggle: Grid = icon chips (click to open detail); Table =
-    // snapshot of every reporter's estimate/actual/surprise, split by session.
-    const dayToolbar = (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-        <div className="ecal-seg">
-          <button className={`ecal-segbtn${dayLayout === "grid" ? " on" : ""}`} onClick={() => setDayLayout("grid")}>Grid</button>
-          <button className={`ecal-segbtn${dayLayout === "table" ? " on" : ""}`} onClick={() => setDayLayout("table")}>Table</button>
-        </div>
-        {dayLayout === "table" && (
-          <div className="ecal-seg">
-            <button className={`ecal-segbtn${calView === "eps" ? " on" : ""}`} onClick={() => setCalView("eps")}>EPS</button>
-            <button className={`ecal-segbtn${calView === "sales" ? " on" : ""}`} onClick={() => setCalView("sales")}>Sales</button>
-          </div>
-        )}
-      </div>
-    );
+    // Icon grid (same chips as a week-view day column) — clicking opens detail.
+    // The snapshot/results view is the separate "At a glance" toggle.
     calNode = visibleRows.length > 0 ? (
-      <div>
-        {dayToolbar}
-        {dayLayout === "grid" ? (
-          <div className="ec-sess" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-            {visibleRows.map(r => (
-              <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={s => openStockDetail(s, anchor)} />
-            ))}
-          </div>
-        ) : (
-          <div>
-            <CalTable title="Before open" rows={bmoRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={calView} />
-            <CalTable title="After close" rows={amcRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={calView} />
-            <CalTable title="Time not specified" rows={tbdRows} sel={sel} onSelect={s => openStockDetail(s, anchor)} view={calView} />
-          </div>
-        )}
+      <div className="ec-sess" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+        {visibleRows.map(r => (
+          <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={s => openStockDetail(s, anchor)} />
+        ))}
       </div>
     ) : (
       <div className="ecal-empty">
@@ -922,13 +922,35 @@ export function EarningsScreen() {
             <button className={`ecal-segbtn${session === "BMO" ? " on" : ""}`} onClick={() => setSession("BMO")}>Pre-market</button>
             <button className={`ecal-segbtn${session === "AMC" ? " on" : ""}`} onClick={() => setSession("AMC")}>After-market</button>
           </div>
-          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center" }}>
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <button
+              className={`ecal-segbtn ecal-glancebtn${atGlance ? " on" : ""}`}
+              onClick={() => setAtGlance(v => !v)}
+              title="At-a-glance results: actual vs consensus, surprise, revenue and year-ago for every reporter in the selected day/week/month"
+              style={{ border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 12px", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+            >
+              <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
+              At a glance
+            </button>
             <VendorTag v={["fmp", "polygon"]} />
           </span>
         </div>
 
-        {/* ── Calendar ─────────────────────────────────────────────────── */}
-        {calNode}
+        {/* ── Calendar / At-a-glance snapshot ──────────────────────────── */}
+        {atGlance ? (
+          glanceItems.length > 0 ? (
+            <div>
+              <GlanceTable title="Before open" items={glanceBmo} showDate={glanceShowDate} onSelect={(s, d) => openStockDetail(s, d)} />
+              <GlanceTable title="After close" items={glanceAmc} showDate={glanceShowDate} onSelect={(s, d) => openStockDetail(s, d)} />
+              <GlanceTable title="Time not specified" items={glanceTbd} showDate={glanceShowDate} onSelect={(s, d) => openStockDetail(s, d)} />
+            </div>
+          ) : (
+            <div className="ecal-empty">
+              <div className="ecal-empty-h">No companies reporting</div>
+              <div>Nothing scheduled for {headerLabel} in the synced calendar.</div>
+            </div>
+          )
+        ) : calNode}
       </div>
       )}
 
@@ -1074,7 +1096,7 @@ export function EarningsScreen() {
       )}
 
       {/* ── Legacy inline detail — superseded by detail mode; kept gated ── */}
-      {!detailOpen && sel && (
+      {SHOW_LEGACY_EARNINGS_DETAIL && !detailOpen && sel && (
         <div className="card" style={{ marginTop: 14 }}>
           <div className="card-h">
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1155,7 +1177,7 @@ export function EarningsScreen() {
       )}
 
       {/* ── Legacy detail (EPS history + Income statement) — gated off ── */}
-      {!detailOpen && sel && (
+      {SHOW_LEGACY_EARNINGS_DETAIL && !detailOpen && sel && (
       <>
       <div className="dash" style={{ marginTop: 16 }}>
         {/* col-6: 10-quarter EPS history */}

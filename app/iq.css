@@ -1519,9 +1519,11 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 
 /* ---- Recap heatmap ---- */
 .heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
-.heat .s { border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: filter .12s; }
+.heat .s { border-radius: 8px; padding: 10px 6px; text-align: center; cursor: pointer; transition: filter .12s; min-width: 0; }
 .heat .s:hover { filter: brightness(1.15); }
-.heat .s .nm { font-size: .7rem; font-weight: 600; color: #fff; opacity: .9; }
+/* Long sector names (e.g. "Communication Services") must stay inside the tile —
+   trim the name font a touch and let long single words wrap/hyphenate. */
+.heat .s .nm { font-size: .62rem; font-weight: 600; color: #fff; opacity: .9; overflow-wrap: break-word; hyphens: auto; line-height: 1.25; }
 .heat .s .v { font-family: var(--f-mono); font-size: .82rem; font-weight: 700; color: #fff; margin-top: 3px; }
 
 /* ---- Fundcard updates (av/nm/mgr) ---- */
@@ -1764,6 +1766,9 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
   transition: background .13s, color .13s;
 }
 .ecal-segbtn.on { background: var(--surface-3); color: var(--text-hi); }
+/* "At a glance" is a toggle — make its on/off state an obvious colour change:
+   solid brand fill + white text/icon when ON, plain/dim when OFF. */
+.ecal-glancebtn.on { background: var(--brand); color: #fff; border-color: var(--brand) !important; box-shadow: 0 4px 14px -6px var(--brand); }
 
 /* Filter bar */
 .ecal-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -2701,9 +2706,22 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 }
 .iq-root .btn.ai:hover{ transform:translateY(-1px); filter:brightness(1.06); box-shadow:0 12px 26px -10px var(--brand); }
 
-/* Nav — active item gets a brand-lit accent. */
+/* Nav — the CURRENT screen is unmistakable at a glance: the whole item flips to
+   a SOLID brand-colour fill with white text, so it's an obvious colour change
+   from the plain/transparent inactive items. Binary on/off "you are here" cue. */
 .iq-root .navitem{ transition:background .16s, color .16s, box-shadow .16s; }
-.iq-root .navitem.active{ box-shadow:inset 2px 0 0 var(--brand), 0 0 20px -12px var(--brand); }
+.iq-root .navitem.active,
+.iq-root .navitem.active:hover{
+  background:var(--brand);
+  color:#fff;
+  box-shadow:0 6px 18px -8px var(--brand);
+}
+.iq-root .navitem.active .nav-label{ color:#fff; font-weight:700; }
+/* Icon tile: translucent white so it stays visible on the solid brand row. */
+.iq-root .navitem.active .nicon{ background:rgba(255,255,255,.20); color:#fff; }
+/* Collapsed (icon-only) rail: the solid brand icon tile carries the cue. */
+.iq-root .app.nav-collapsed .navitem.active{ background:transparent; box-shadow:none; }
+.iq-root .app.nav-collapsed .navitem.active .nicon{ background:var(--brand); color:#fff; box-shadow:0 6px 16px -8px var(--brand); }
 
 /* Scrollbar — thin gradient thumb. */
 .iq-root ::-webkit-scrollbar-thumb{ background:linear-gradient(180deg,var(--brand),var(--ai)); border-radius:99px; }

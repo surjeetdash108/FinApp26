@@ -658,6 +658,57 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const [wlPicker, setWlPicker] = useState<{ sym: string; x: number; y: number } | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
 
+  // Cross-column height match (generic — works for any stock, any peer count):
+  // pin the RIGHT column to the LEFT column's natural height and let the Peers
+  // card scroll inside it, so Key levels always lands at the base of the right
+  // column, aligned with the bottom of Financials. Measuring is the only robust
+  // way — a long Peers list (e.g. 89 peers) would otherwise balloon the grid row
+  // and push Key levels far below Financials. Disabled below 901px, where
+  // .sd-grid collapses to a single stacked column.
+  const leftColRef = useRef<HTMLDivElement>(null);
+  const [rightColH, setRightColH] = useState<number | undefined>(undefined);
+  // Read the left column's height synchronously (offsetHeight forces a fresh
+  // layout) and pin the right column to it. Called from useEffects (which run
+  // after the DOM is committed) so charts / earnings tables that render when data
+  // arrives are already measured — no requestAnimationFrame, which the browser
+  // throttles when the tab isn't painting. The <2px guard prevents redundant
+  // updates and any ResizeObserver feedback loop.
+  const measureCols = useCallback(() => {
+    const el = leftColRef.current;
+    if (!el || typeof window === "undefined") return;
+    const next = window.matchMedia("(min-width: 901px)").matches ? el.offsetHeight : undefined;
+    setRightColH(prev => (prev != null && next != null && Math.abs(prev - next) < 2 ? prev : next));
+  }, []);
+  useEffect(() => {
+    const el = leftColRef.current;
+    if (!el || typeof window === "undefined") return;
+    const ro = new ResizeObserver(() => measureCols());
+    ro.observe(el);
+    window.addEventListener("resize", measureCols);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measureCols);
+    };
+  }, [measureCols]);
+  // The LEFT column keeps growing after mount as async content lands (financials
+  // charts, the earnings table, web-font reflow) — and a single measure or even
+  // the ResizeObserver can miss the final jump. Poll briefly whenever the stock
+  // (or Q↔A toggle) changes and stop once the height has settled. Generic: works
+  // for any stock and any peer count. Re-keyed on sym/finPeriod.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let last = -1, stable = 0, n = 0;
+    measureCols();
+    const id = window.setInterval(() => {
+      const el = leftColRef.current;
+      const h = el ? el.offsetHeight : -1;
+      measureCols();
+      if (h === last) stable++; else { stable = 0; last = h; }
+      if (stable >= 3 || ++n >= 24) window.clearInterval(id); // settled ~750ms, hard cap ~6s
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [measureCols, sym, finPeriod]);
+
   const refreshNotes = useCallback(async () => {
     setNotes(await loadNotes(sym));
   }, [sym]);
@@ -786,10 +837,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // genuinely-missing price shows a dash rather than $0.00 (BUG-DATA-007).
   const p = data.price ?? 0;
 
-  // Cross-column height match: cap the RIGHT column's Peers card so its bottom
-  // lines up with the LEFT column's Financials card, then Key levels (below
-  // Peers) flex-fills the rest down to the column base (Insider & institutional).
-  // Both live in separate grid columns, so this can only be done by measuring.
+  // Cross-column height match: the LEFT column ends at Financials (Dividend &
+  // Insider moved to a full-width row below the two-column section). The RIGHT
+  // column is pinned to leftColRef's measured height (see measureCols above) so
+  // Peers scrolls inside it and Key levels sits at the base, level with
+  // Financials' bottom border — regardless of peer count.
 
   const rating = ratingLabel(liveCompany?.techRating ?? null);
   const rs = liveCompany?.rsRating ?? null;
@@ -976,7 +1028,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               placeholder="Search symbol or company…"
               style={{
                 background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)",
-                padding: "5px 10px", fontSize: "0.7812rem", color: "var(--text-hi)", outline: "none", width: "13.125rem",
+                padding: "5px 10px", fontSize: "0.7812rem", color: "var(--text-hi)", outline: "none", width: "18rem",
                 fontFamily: "var(--f-mono)",
               }}
             />
@@ -1197,8 +1249,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           </div>
         </div>}
 
-        {/* LEFT COLUMN */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, alignSelf: "stretch" }}>
+        {/* LEFT COLUMN — natural height (no stretch) so leftColRef measures the
+            true content bottom (Financials); the right column is pinned to it. */}
+        <div ref={leftColRef} style={{ display: "flex", flexDirection: "column", gap: 14, alignSelf: "start" }}>
 
           {/* Keystats */}
           <div className="card">
@@ -1372,168 +1425,13 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             );
           })()}
 
-          {/* Dividend & split history — moved into LEFT COLUMN's own flex
-              stack (see note by RIGHT COLUMN's Earnings history/Key levels
-              for why: keeps each column's total height matched to its own
-              real content, no trailing blank gap). */}
-          {(() => {
-            const dh = dividendHistory;
-            const hasReal = !!dh && dh.isPayer;
-            const yieldPct = hasReal ? dh!.yieldPct : null;
-            const annualDiv = hasReal ? (dh!.ttmTotal ?? 0) : 0;
-            const payoutRatio = eps != null && eps > 0 && yieldPct != null && yieldPct > 0
-              ? Math.min(99, Math.round((annualDiv / eps) * 100)) : null;
-            const growthLabel = hasReal && dh!.cagr5yPct != null
-              ? `${dh!.cagr5yPct >= 0 ? "+" : ""}${dh!.cagr5yPct.toFixed(1)}% / yr`
-              : null;
-            const streakLabel = hasReal && dh!.increaseStreakYears > 0 ? ` · ${dh!.increaseStreakYears}-yr streak` : "";
-            const divRows = hasReal
-              ? dh!.history.slice(0, 5).map(h => ({
-                  label: h.exDividendDate ?? "—",
-                  perShare: h.amount,
-                  note: h.exDividendDate ? `ex ${h.exDividendDate.slice(5)}` : "",
-                }))
-              : [];
-            return (
-              <div className="card">
-                <div className="card-h">
-                  <h3>Dividend &amp; split history</h3>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <VendorTag v="polygon" />
-                    {dh && (yieldPct != null
-                      ? <span className="pill up">{yieldPct.toFixed(2)}% yield</span>
-                      : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>No dividend</span>)}
-                    {hasReal && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>}
-                    <span className="link" onClick={() => setInnerDrawer("dividend")}>View all →</span>
-                  </div>
-                </div>
-                <div className="card-b" style={{ paddingTop: 6 }}>
-                  {!dh ? (
-                    <DataState loading={dividendLoading} label={`Dividend data not synced for ${sym} yet.`} />
-                  ) : !hasReal ? (
-                    <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "8px 0" }}>{sym} does not currently pay a dividend.</div>
-                  ) : (
-                    <>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                        <div>
-                          <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginBottom: 4 }}>5-yr dividend growth</div>
-                          <div style={{ fontSize: ".78rem", color: "var(--text-hi)" }}>
-                            {growthLabel ?? "—"}{payoutRatio != null ? ` · payout ${payoutRatio}%` : ""}{streakLabel}
-                          </div>
-                        </div>
-                      </div>
-                      {divRows.map(q => (
-                        <div key={q.label} className="minirow">
-                          <span className="tkr" style={{ width: 60 }}>{q.label}</span>
-                          <span className="mid mono">{q.perShare != null ? `$${q.perShare.toFixed(4)}/sh` : "—"}</span>
-                          <span className="r" style={{ color: "var(--text-dim-solid)", fontSize: ".72rem" }}>{q.note}</span>
-                        </div>
-                      ))}
-                      <div className="minirow" style={{ marginTop: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 6 }}>
-                        <span className="mid">Annual ({dh!.ttmPayments} payments)</span>
-                        <span className="r" style={{ color: "var(--text-hi)" }}>${annualDiv.toFixed(2)}/sh</span>
-                      </div>
-                    </>
-                  )}
-
-                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border-soft)" }}>
-                    <div style={{ fontSize: ".66rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>
-                      Stock splits
-                    </div>
-                    {splitsDoc && splitsDoc.splits.length > 0 ? splitsDoc.splits.slice(0, 3).map(s => (
-                      <div key={s.executionDate} className="minirow">
-                        <span className="mid">{s.executionDate}</span>
-                        <span className="r" style={{ color: "var(--text-hi)" }}>{s.splitFrom}:{s.splitTo}</span>
-                      </div>
-                    )) : (
-                      <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>No splits on record.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Insider & institutional — LAST card in the LEFT column; flex-fills so
-              the left column reaches its base with no gap when the RIGHT column
-              is taller (mirror of Key levels on the right). */}
-          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <div className="card-h">
-              <h3>Insider &amp; institutional</h3>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <VendorTag v="sec" />
-                <span className="link" onClick={() => setInnerDrawer("insider")}>View all →</span>
-              </div>
-            </div>
-            <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0 }}>
-              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
-                Recent insider transactions
-              </div>
-              {data.insiderActivity.length > 0 ? (
-                data.insiderActivity.map((n, idx) => {
-                  const isSell = /sale|sold|exercis/i.test(n.action);
-                  return (
-                    <div key={idx} className="minirow" style={{ cursor: "pointer", alignItems: "flex-start", gap: 10 }}>
-                      <span className="tkr" style={{ flex: "none" }}>{sym}</span>
-                      <span className="mid" style={{ whiteSpace: "normal", lineHeight: 1.45 }}>
-                        {n.name} {n.action} <span style={{ color: "var(--text-dim-solid)" }}>({n.date})</span>
-                      </span>
-                      <span className={`r ${isSell ? "down" : "up"}`} style={{ flex: "none" }}>
-                        {n.valueUsd != null ? `${isSell ? "−" : "+"}$${(n.valueUsd / 1e6).toFixed(1)}M` : <NotAvailable />}
-                      </span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "4px 0 8px" }}>
-                  No recent Form 4 activity.
-                </div>
-              )}
-              <div style={{ height: 1, background: "var(--border-soft)", margin: "12px 0 8px" }} />
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                <span style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em" }}>
-                  Institutional
-                </span>
-                <VendorTag v="fmp" />
-              </div>
-              {(() => {
-                const io = liveCompany?.instOwnershipPct;
-                const holders = liveCompany?.inst13FHolders;
-                const chg = liveCompany?.inst13FHoldersChange;
-                const rows: [string, ReactNode][] = [
-                  ["Inst. ownership", io != null ? `${io.toFixed(1)}%` : null],
-                  // Short interest has no Polygon (404) or FMP source — needs FINRA.
-                  ["Short interest", null],
-                  ["13F funds holding", holders != null ? (
-                    <>
-                      {holders.toLocaleString()}
-                      {chg != null && chg !== 0 && (
-                        <span className={chg > 0 ? "up" : "down"} style={{ marginLeft: 6, fontSize: ".7rem" }}>
-                          {chg > 0 ? "+" : ""}{chg} QoQ
-                        </span>
-                      )}
-                    </>
-                  ) : null],
-                ];
-                return rows.map(([label, val]) => (
-                  <div key={label} className="minirow">
-                    <span className="mid">{label}</span>
-                    <span className="r">{val ?? <NotAvailable />}</span>
-                  </div>
-                ));
-              })()}
-              {liveCompany?.instAsOf && (
-                <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 6 }}>
-                  13F rollup · {liveCompany.instAsOf}
-                </div>
-              )}
-            </div>
-          </div>
-
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, alignSelf: "stretch" }}>
+        {/* RIGHT COLUMN — pinned to the LEFT column's height (rightColH) with
+            overflow hidden, so Peers flex-fills/scrolls and Key levels sits at
+            the base, level with Financials' bottom. Falls back to natural height
+            (undefined) when stacked on narrow screens. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, alignSelf: "start", height: rightColH, minHeight: 0, overflow: rightColH ? "hidden" : undefined }}>
 
           {/* Technical Rating */}
           <div className="card">
@@ -1608,8 +1506,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-          {/* Peers — content-sized; a long list scrolls inside the capped body. */}
-          <div className="card">
+          {/* Peers — flex-grows to fill the RIGHT column (the prominent card
+              here); a long list scrolls inside it. minHeight:0 lets it shrink
+              within the pinned column so Key levels below stays visible. */}
+          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
             <div className="card-h">
               <h3>Peers · who&apos;s leading{peersTotal > 0 ? ` · ${peersTotal}` : ""}</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1617,7 +1517,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 {peersTotal > peers.length && <span className="link" onClick={() => setInnerDrawer("peers")}>View all →</span>}
               </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 6, overflowY: "auto", maxHeight: 420 }}>
+            <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0, overflowY: "auto" }}>
               {peers.length ? peers.map(peer => {
                 const tag = peer.c === pmx ? "Leader" : peer.c === pmn ? "Laggard" : "";
                 return (
@@ -1638,11 +1538,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
-          {/* Key levels (pivots) — flex-fills the rest of the RIGHT column so it
-              reaches the column base (no empty gap under it when the LEFT column
-              is taller). This is the shared StockScreenEmbed, so the fill also
-              closes the gap on themes / screener / search. */}
-          <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {/* Key levels (pivots) — content-sized, sits at the base of the RIGHT
+              column below the flex-grown Peers. */}
+          <div className="card">
             <div className="card-h">
               <h3>Key levels (pivots)</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1650,7 +1548,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <span className="link" onClick={() => setInnerDrawer("keylevels")}>View all →</span>
               </div>
             </div>
-            <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0 }}>
+            <div className="card-b" style={{ paddingTop: 6 }}>
               <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
                 Weekly pivots
               </div>
@@ -1691,6 +1589,164 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
           </div>
 
+        </div>
+
+        {/* Dividend & split history + Insider & institutional — full-width row
+            BELOW the two-column section, so the left column ends at Financials
+            and Key levels (base of the right column) aligns with Financials'
+            bottom border. Side-by-side pair, each with its own scroll. */}
+        <div style={{ gridColumn: "1 / -1", display: "flex", gap: 14, alignItems: "stretch" }}>
+          {(() => {
+            const dh = dividendHistory;
+            const hasReal = !!dh && dh.isPayer;
+            const yieldPct = hasReal ? dh!.yieldPct : null;
+            const annualDiv = hasReal ? (dh!.ttmTotal ?? 0) : 0;
+            const payoutRatio = eps != null && eps > 0 && yieldPct != null && yieldPct > 0
+              ? Math.min(99, Math.round((annualDiv / eps) * 100)) : null;
+            const growthLabel = hasReal && dh!.cagr5yPct != null
+              ? `${dh!.cagr5yPct >= 0 ? "+" : ""}${dh!.cagr5yPct.toFixed(1)}% / yr`
+              : null;
+            const streakLabel = hasReal && dh!.increaseStreakYears > 0 ? ` · ${dh!.increaseStreakYears}-yr streak` : "";
+            const divRows = hasReal
+              ? dh!.history.slice(0, 5).map(h => ({
+                  label: h.exDividendDate ?? "—",
+                  perShare: h.amount,
+                  note: h.exDividendDate ? `ex ${h.exDividendDate.slice(5)}` : "",
+                }))
+              : [];
+            return (
+              <div className="card" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <div className="card-h">
+                  <h3>Dividend &amp; split history</h3>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <VendorTag v="polygon" />
+                    {dh && (yieldPct != null
+                      ? <span className="pill up">{yieldPct.toFixed(2)}% yield</span>
+                      : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>No dividend</span>)}
+                    {hasReal && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>live · Polygon</span>}
+                    <span className="link" onClick={() => setInnerDrawer("dividend")}>View all →</span>
+                  </div>
+                </div>
+                <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0, overflowY: "auto" }}>
+                  {!dh ? (
+                    <DataState loading={dividendLoading} label={`Dividend data not synced for ${sym} yet.`} />
+                  ) : !hasReal ? (
+                    <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "8px 0" }}>{sym} does not currently pay a dividend.</div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginBottom: 4 }}>5-yr dividend growth</div>
+                          <div style={{ fontSize: ".78rem", color: "var(--text-hi)" }}>
+                            {growthLabel ?? "—"}{payoutRatio != null ? ` · payout ${payoutRatio}%` : ""}{streakLabel}
+                          </div>
+                        </div>
+                      </div>
+                      {divRows.map(q => (
+                        <div key={q.label} className="minirow">
+                          <span className="tkr" style={{ width: 82, flexShrink: 0, whiteSpace: "nowrap" }}>{q.label}</span>
+                          <span className="mid mono">{q.perShare != null ? `$${q.perShare.toFixed(4)}/sh` : "—"}</span>
+                          <span className="r" style={{ color: "var(--text-dim-solid)", fontSize: ".72rem" }}>{q.note}</span>
+                        </div>
+                      ))}
+                      <div className="minirow" style={{ marginTop: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 6 }}>
+                        <span className="mid">Annual ({dh!.ttmPayments} payments)</span>
+                        <span className="r" style={{ color: "var(--text-hi)" }}>${annualDiv.toFixed(2)}/sh</span>
+                      </div>
+                    </>
+                  )}
+
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border-soft)" }}>
+                    <div style={{ fontSize: ".66rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>
+                      Stock splits
+                    </div>
+                    {splitsDoc && splitsDoc.splits.length > 0 ? splitsDoc.splits.slice(0, 3).map(s => (
+                      <div key={s.executionDate} className="minirow">
+                        <span className="mid">{s.executionDate}</span>
+                        <span className="r" style={{ color: "var(--text-hi)" }}>{s.splitFrom}:{s.splitTo}</span>
+                      </div>
+                    )) : (
+                      <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>No splits on record.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Insider & institutional — right half of the side-by-side pair; own scroll. */}
+          <div className="card" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+            <div className="card-h">
+              <h3>Insider &amp; institutional</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <VendorTag v="sec" />
+                <span className="link" onClick={() => setInnerDrawer("insider")}>View all →</span>
+              </div>
+            </div>
+            <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+                Recent insider transactions
+              </div>
+              {data.insiderActivity.length > 0 ? (
+                data.insiderActivity.map((n, idx) => {
+                  const isSell = /sale|sold|exercis/i.test(n.action);
+                  return (
+                    <div key={idx} className="minirow" style={{ cursor: "pointer", alignItems: "flex-start", gap: 10 }}>
+                      <span className="tkr" style={{ flex: "none" }}>{sym}</span>
+                      <span className="mid" style={{ whiteSpace: "normal", lineHeight: 1.45 }}>
+                        {n.name} {n.action} <span style={{ color: "var(--text-dim-solid)" }}>({n.date})</span>
+                      </span>
+                      <span className={`r ${isSell ? "down" : "up"}`} style={{ flex: "none" }}>
+                        {n.valueUsd != null ? `${isSell ? "−" : "+"}$${(n.valueUsd / 1e6).toFixed(1)}M` : <NotAvailable />}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ fontSize: ".8rem", color: "var(--text-dim-solid)", padding: "4px 0 8px" }}>
+                  No recent Form 4 activity.
+                </div>
+              )}
+              <div style={{ height: 1, background: "var(--border-soft)", margin: "12px 0 8px" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <span style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                  Institutional
+                </span>
+                <VendorTag v="fmp" />
+              </div>
+              {(() => {
+                const io = liveCompany?.instOwnershipPct;
+                const holders = liveCompany?.inst13FHolders;
+                const chg = liveCompany?.inst13FHoldersChange;
+                const rows: [string, ReactNode][] = [
+                  ["Inst. ownership", io != null ? `${io.toFixed(1)}%` : null],
+                  // Short interest has no Polygon (404) or FMP source — needs FINRA.
+                  ["Short interest", null],
+                  ["13F funds holding", holders != null ? (
+                    <>
+                      {holders.toLocaleString()}
+                      {chg != null && chg !== 0 && (
+                        <span className={chg > 0 ? "up" : "down"} style={{ marginLeft: 6, fontSize: ".7rem" }}>
+                          {chg > 0 ? "+" : ""}{chg} QoQ
+                        </span>
+                      )}
+                    </>
+                  ) : null],
+                ];
+                return rows.map(([label, val]) => (
+                  <div key={label} className="minirow">
+                    <span className="mid">{label}</span>
+                    <span className="r">{val ?? <NotAvailable />}</span>
+                  </div>
+                ));
+              })()}
+              {liveCompany?.instAsOf && (
+                <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 6 }}>
+                  13F rollup · {liveCompany.instAsOf}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Industry Group rank + Earnings history — full-width row, 50/50, equal

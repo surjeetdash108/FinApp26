@@ -370,7 +370,7 @@ export function InsiderScreen() {
               value={insQuery}
               onChange={e => setInsQuery(e.target.value.toUpperCase())}
               placeholder="Search ticker…"
-              style={{ width: 150, boxSizing: "border-box", alignSelf: "center", marginLeft: 4, background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", fontSize: ".76rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)" }}
+              style={{ width: 230, boxSizing: "border-box", alignSelf: "center", marginLeft: 4, background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", fontSize: ".76rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)" }}
             />
           </div>
 

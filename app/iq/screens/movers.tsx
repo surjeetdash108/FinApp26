@@ -6,7 +6,7 @@ import { type Mover, maPostureLabel } from "../data";
 import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import type { LiveMoverDoc, CompanyDoc } from "../types";
+import type { LiveMoverDoc, CompanyDoc, NewsArticleDoc } from "../types";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
 
 const StockScreenEmbed = dynamic<{ initialSym?: string }>(
@@ -76,6 +76,18 @@ export function MoversScreen() {
   const companyByTicker = new Map(rvolCompanies.map(c => [c.ticker, c]));
   const movers = mergeMovers(liveMovers, companyByTicker);
   const liveCount = movers.length;
+
+  // Per-ticker news → the "why it moved" headline shown on row hover. Keep the
+  // most recent article per ticker.
+  const { data: moverNews } = useApiList<NewsArticleDoc>("/market-data/news");
+  const newsByTicker = (() => {
+    const m = new Map<string, NewsArticleDoc>();
+    for (const n of [...moverNews].sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))) {
+      if (n.ticker && !m.has(n.ticker)) m.set(n.ticker, n);
+    }
+    return m;
+  })();
+  const [newsHover, setNewsHover] = useState<{ sym: string; x: number; y: number } | null>(null);
 
   const [tab,          setTab]          = useState<TabKey>("win");
   const [sector,       setSector]       = useState("All");
@@ -156,7 +168,7 @@ export function MoversScreen() {
           value={query}
           onChange={e => { setQuery(e.target.value.toUpperCase()); setPage(0); }}
           placeholder="Search ticker…"
-          style={{ marginLeft: 10, width: 140, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
+          style={{ marginLeft: 10, width: 230, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
         />
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{filtered.length} stocks</span>
@@ -194,6 +206,8 @@ export function MoversScreen() {
                   key={m.ticker}
                   className={m.owned ? "owned" : ""}
                   onClick={() => setSelectedSym(m.ticker)}
+                  onMouseEnter={e => setNewsHover({ sym: m.ticker, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setNewsHover(h => (h?.sym === m.ticker ? null : h))}
                   style={{ cursor: "pointer" }}
                 >
                   <td>
@@ -241,6 +255,33 @@ export function MoversScreen() {
           <button className="chip" disabled={curPage >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} style={{ opacity: curPage >= totalPages - 1 ? 0.4 : 1, cursor: curPage >= totalPages - 1 ? "default" : "pointer" }}>Next →</button>
         </div>
       )}
+
+      {/* Why-it-moved hover: the latest headline for the row under the cursor. */}
+      {newsHover && (() => {
+        const n = newsByTicker.get(newsHover.sym);
+        const left = typeof window !== "undefined" ? Math.min(newsHover.x + 16, window.innerWidth - 336) : newsHover.x + 16;
+        return (
+          <div style={{
+            position: "fixed", left, top: newsHover.y + 16, zIndex: 60, width: 320,
+            background: "var(--surface-1)", border: "1px solid var(--border)", borderRadius: 10,
+            padding: "10px 12px", boxShadow: "0 10px 34px rgba(0,0,0,.45)", pointerEvents: "none",
+          }}>
+            <div style={{ fontSize: ".66rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-dim-solid)", marginBottom: 5 }}>
+              {newsHover.sym} · why it moved
+            </div>
+            {n ? (
+              <>
+                <div style={{ fontSize: ".82rem", color: "var(--text-hi)", lineHeight: 1.4 }}>{n.headline}</div>
+                <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 5 }}>
+                  {n.source}{n.publishedAt ? ` · ${new Date(n.publishedAt).toLocaleDateString()}` : ""}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>News not available.</div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Sliding stock detail drawer */}
       {selectedSym && (

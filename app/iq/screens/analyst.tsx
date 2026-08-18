@@ -239,7 +239,7 @@ export function AnalystScreen() {
               value={consQuery}
               onChange={e => setConsQuery(e.target.value.toUpperCase())}
               placeholder="Search ticker…"
-              style={{ width: 130, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
+              style={{ width: 230, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
             />
           </div>
           {consensusRows.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live</span>}
@@ -290,7 +290,7 @@ export function AnalystScreen() {
               value={actQuery}
               onChange={e => { setActQuery(e.target.value.toUpperCase()); setShown(40); }}
               placeholder="Search ticker…"
-              style={{ width: 130, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
+              style={{ width: 230, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
             />
           </div>
           {filteredActions.length > 0 && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{feedRows.length} / {filteredActions.length}</span>}
@@ -348,7 +348,7 @@ export function AnalystScreen() {
             value={analystQuery}
             onChange={e => setAnalystQuery(e.target.value)}
             placeholder="Search analyst…"
-            style={{ width: 200, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", fontSize: ".78rem", color: "var(--text-hi)", outline: "none" }}
+            style={{ width: 260, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "6px 10px", fontSize: ".78rem", color: "var(--text-hi)", outline: "none" }}
           />
         </div>
         {actionFilterBar(false)}
