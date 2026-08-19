@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { type Mover, maPostureLabel } from "../data";
 import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag } from "../utils";
 import { apiGet } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import type { LiveMoverDoc, CompanyDoc, NewsArticleDoc } from "../types";
+import { useWatchlistsContext } from "../hooks/useWatchlists";
+import type { LiveMoverDoc, CompanyDoc, NewsArticleDoc, AnalystConsensusDoc, AnalystRatingChange } from "../types";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
 
 const StockScreenEmbed = dynamic<{ initialSym?: string }>(
@@ -89,6 +90,20 @@ export function MoversScreen() {
     return m;
   })();
   const [newsHover, setNewsHover] = useState<{ sym: string; x: number; y: number } | null>(null);
+
+  // Fallback "why it moved" when there's no article: a RECENT analyst rating
+  // change (upgrade/downgrade). Only the last few days count — an old grade
+  // isn't why the stock moved today.
+  const { data: moverAnalyst } = useApiList<AnalystConsensusDoc>("/market-data/analyst-actions");
+  const recentGradeByTicker = (() => {
+    const cutoff = new Date(Date.now() - 4 * 86_400_000).toISOString().slice(0, 10);
+    const m = new Map<string, AnalystRatingChange>();
+    for (const c of moverAnalyst) {
+      const latest = [...(c.recentGrades ?? [])].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0];
+      if (latest?.date && latest.date.slice(0, 10) >= cutoff && c.ticker) m.set(c.ticker, latest);
+    }
+    return m;
+  })();
   // The bulk `news` collection only covers a handful of large caps, so for an
   // arbitrary mover we fetch its news on demand (/live/news works for ANY
   // ticker) and cache the latest article: NewsArticleDoc, or null when none.
@@ -118,6 +133,28 @@ export function MoversScreen() {
   const [selectedSym,  setSelectedSym]  = useState<string | null>(null);
   const PAGE_SIZE = 25;
   const q = query.trim().toUpperCase();
+
+  // Watchlist: the drawer header's "Add to watchlist" button. A ticker is
+  // "watched" if it's in ANY of the user's lists; adding drops it into the first
+  // list (creating a default one if the user has none). A small toast confirms
+  // the action WITHOUT closing the drawer.
+  const { watchlists, addTicker, createList } = useWatchlistsContext();
+  const watchedSet = useMemo(() => new Set(watchlists.flatMap(w => w.tickers)), [watchlists]);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const addToWatchlist = useCallback(async (sym: string) => {
+    const s = sym.toUpperCase();
+    if (watchedSet.has(s)) { setToast(`${s} is already in your watchlist`); return; }
+    let listId: string | undefined = watchlists[0]?.id;
+    if (!listId) listId = (await createList("My Watchlist"))?.id;
+    if (!listId) { setToast("Couldn't add — please sign in first"); return; }
+    await addTicker(listId, s);
+    setToast(`${s} added to watchlist`);
+  }, [watchedSet, watchlists, addTicker, createList]);
 
   const sectors = sectorFilterOptions(rvolCompanies);
 
@@ -300,9 +337,23 @@ export function MoversScreen() {
                   {n.source}{n.publishedAt ? ` · ${new Date(n.publishedAt).toLocaleDateString()}` : ""}
                 </div>
               </>
-            ) : (
-              <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>{resolved ? "News not available." : "Loading news…"}</div>
-            )}
+            ) : !resolved ? (
+              <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>Loading news…</div>
+            ) : (() => {
+              // No article → fall back to a recent analyst rating change, else honest empty.
+              const g = recentGradeByTicker.get(newsHover.sym);
+              return g ? (
+                <>
+                  <div style={{ fontSize: ".82rem", color: "var(--text-hi)", lineHeight: 1.4 }}>
+                    {g.firm ?? "Analyst"}: {g.previousGrade ?? "—"} → <b>{g.newGrade ?? "—"}</b>
+                    {g.action ? <span style={{ color: /down/i.test(g.action) ? "var(--down)" : /up/i.test(g.action) ? "var(--up)" : "var(--text-dim-solid)", textTransform: "capitalize" }}> · {g.action}</span> : null}
+                  </div>
+                  <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 5 }}>Analyst rating change{g.date ? ` · ${new Date(g.date).toLocaleDateString()}` : ""}</div>
+                </>
+              ) : (
+                <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>News not available.</div>
+              );
+            })()}
           </div>
         );
       })()}
@@ -322,6 +373,27 @@ export function MoversScreen() {
                   Full analysis · chart · technicals · peers
                 </div>
               </div>
+              {(() => {
+                const sym = selectedSym!;
+                const inList = watchedSet.has(sym);
+                return (
+                  <button
+                    onClick={() => addToWatchlist(sym)}
+                    title={inList ? "Already in your watchlist" : "Add this stock to your watchlist"}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+                      background: inList ? "var(--brand-dim)" : "var(--surface-2)",
+                      border: `1px solid ${inList ? "var(--brand)" : "var(--border-soft)"}`,
+                      color: inList ? "var(--brand)" : "var(--text-hi)",
+                      borderRadius: 8, padding: "7px 13px", cursor: "pointer",
+                      fontSize: ".8rem", fontWeight: 600, fontFamily: "var(--f-body)",
+                    }}
+                  >
+                    <span style={{ fontSize: ".95rem", lineHeight: 1 }}>{inList ? "★" : "☆"}</span>
+                    {inList ? "In watchlist" : "Add to watchlist"}
+                  </button>
+                );
+              })()}
               <button className="closebtn" onClick={() => setSelectedSym(null)}>✕</button>
             </div>
             <div className="drawer-b">
@@ -329,6 +401,26 @@ export function MoversScreen() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Watchlist confirmation toast — floats above the drawer (z-index 999 vs
+          the drawer's 51), auto-dismisses after 2.6s; the drawer stays open. */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed", top: 22, left: "50%", transform: "translateX(-50%)",
+            zIndex: 999, background: "var(--surface-1)", border: "1px solid var(--brand)",
+            color: "var(--text-hi)", borderRadius: 10, padding: "11px 20px",
+            fontSize: ".85rem", fontWeight: 600, whiteSpace: "nowrap",
+            boxShadow: "0 14px 40px -10px rgba(0,0,0,.6)",
+            display: "inline-flex", alignItems: "center", gap: 9,
+          }}
+        >
+          <span style={{ color: "var(--brand)", fontSize: "1rem" }}>★</span>
+          {toast}
+        </div>
       )}
     </>
   );
