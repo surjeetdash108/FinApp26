@@ -350,9 +350,23 @@ export function MoversScreen() {
                   </div>
                   <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 5 }}>Analyst rating change{g.date ? ` · ${new Date(g.date).toLocaleDateString()}` : ""}</div>
                 </>
-              ) : (
-                <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>News not available.</div>
-              );
+              ) : (() => {
+                // No news and no analyst change → surface the volume signal so the
+                // hover is still informative (these are usually momentum/low-float
+                // moves with no catalyst). Fall back to plain empty when RVOL is
+                // unavailable/normal.
+                const rvol = movers.find(x => x.ticker === newsHover.sym)?.rvolRatio ?? 0;
+                return rvol > 1.5 ? (
+                  <>
+                    <div style={{ fontSize: ".82rem", color: "var(--text-hi)", lineHeight: 1.4 }}>No news catalyst found.</div>
+                    <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 5 }}>
+                      <b style={{ color: rvol > 3 ? "var(--warn)" : "var(--text)" }}>{rvol.toFixed(1)}×</b> relative volume — likely a momentum / low-float move.
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: ".82rem", color: "var(--text-dim-solid)" }}>News not available.</div>
+                );
+              })();
             })()}
           </div>
         );
