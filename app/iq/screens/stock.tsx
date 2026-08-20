@@ -1717,7 +1717,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   ["Inst. ownership", io != null ? `${io.toFixed(1)}%` : null],
                   // Short interest has no Polygon (404) or FMP source — needs FINRA.
                   ["Short interest", null],
-                  ["13F funds holding", holders != null ? (
+                  // "filers", NOT "funds": FMP's investorsHolding counts 13F
+                  // FILERS, and one filer (BlackRock Inc.) files a single report
+                  // covering hundreds of individual funds. Labelling it "funds"
+                  // invited comparison with fund-count screens that report ~10.9K
+                  // for MSFT where we report ~6.4K — different populations.
+                  ["13F filers holding", holders != null ? (
                     <>
                       {holders.toLocaleString()}
                       {chg != null && chg !== 0 && (
@@ -2035,7 +2040,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <div className="metric-grid" style={{ marginBottom: 14 }}>
                   <div className="m"><div className="k">Inst. ownership</div><div className="v"><NotAvailable /></div></div>
                   <div className="m"><div className="k">Short interest</div><div className="v"><NotAvailable /></div></div>
-                  <div className="m"><div className="k">13F funds</div><div className="v"><NotAvailable /></div></div>
+                  <div className="m"><div className="k">13F filers</div><div className="v"><NotAvailable /></div></div>
                 </div>
                 <div className="ai-sec"><div className="h">Recent insider transactions (Form 4)</div></div>
                 {data.insiderActivity.length > 0 ? data.insiderActivity.map((n, i) => {

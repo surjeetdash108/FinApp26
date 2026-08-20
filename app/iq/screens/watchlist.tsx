@@ -9,6 +9,7 @@ import { arr, sign, DataState, VendorTag } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 import { TickerSearchField } from "../ticker-search-field";
 import { AiSummaryCard } from "../ai-summary-card";
+import { AiAggregateBlock } from "../ai-aggregate-block";
 
 export function WatchlistScreen() {
   const { uid, watchlists, loading: wlLoading, createList, renameList, deleteList, addTicker, removeTicker } = useWatchlistsContext();
@@ -30,6 +31,15 @@ export function WatchlistScreen() {
   }, [watchlists]);
 
   const active = watchlists.find(w => w.id === activeId) ?? null;
+
+  // Cumulative AI read for the list currently on screen. Deferred until the
+  // summary card is expanded (it starts collapsed), and keyed per list so each
+  // one caches — and is cleaned up — independently.
+  const [aiOpen, setAiOpen] = useState(false);
+  const aiPath =
+    aiOpen && activeId
+      ? `/api/ai/watchlist?listId=${encodeURIComponent(activeId)}`
+      : null;
   const items = active?.tickers ?? [];
 
   // Live quotes for the active list (polls /live/quotes every 30s), overlaid on
@@ -165,7 +175,7 @@ export function WatchlistScreen() {
           <DataState label="Sign in to create and sync watchlists." />
         ) : (
         <>
-        <AiSummaryCard title="◆ AI watchlist summary" pill={<span className="pill ai">leaders · laggards · alerts</span>}>
+        <AiSummaryCard title="◆ AI watchlist summary" pill={<span className="pill ai">leaders · laggards · alerts</span>} onOpenChange={(o) => o && setAiOpen(true)} fullHeight>
           {sumTxt == null ? (
             <DataState loading={companiesLoading || wlLoading} label="No live price data for any watched ticker yet." />
           ) : (
@@ -177,6 +187,7 @@ export function WatchlistScreen() {
               </div>
             </>
           )}
+          <AiAggregateBlock path={aiPath} label="watchlist" />
         </AiSummaryCard>
 
         <StockPanelLayout

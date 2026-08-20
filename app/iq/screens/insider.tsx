@@ -57,6 +57,25 @@ function fmtDelta(v: number | null): string {
   if (v == null) return "—";
   return (v > 0 ? "+" : "") + fmtCompact(v);
 }
+/**
+ * Exact integer with thousands separators — for HOLDER counts.
+ *
+ * Do NOT use fmtCompact here: holder counts sit in the low thousands, where its
+ * single decimal collapses genuinely different values into the same string
+ * (6,423 / 6,404 / 6,390 all render "6.4K"). In a table sorted by that column
+ * the result reads as duplicated data and a broken sort. Share counts, which
+ * run to millions/billions, stay compact.
+ */
+function fmtCount(v: number | null): string {
+  if (v == null) return "—";
+  return Math.round(v).toLocaleString("en-US");
+}
+/** Signed exact integer, for holder-count QoQ deltas. */
+function fmtCountDelta(v: number | null): string {
+  if (v == null) return "—";
+  const s = v > 0 ? "+" : v < 0 ? "−" : "";
+  return s + Math.abs(Math.round(v)).toLocaleString("en-US");
+}
 async function fetchPositions(cik: string, accessionNumber: string): Promise<PositionDoc[]> {
   return apiGet<PositionDoc[]>(
     `/market-data/fund-holdings/positions?cik=${encodeURIComponent(cik)}&accession=${encodeURIComponent(accessionNumber)}`,
@@ -459,7 +478,7 @@ export function InsiderScreen() {
                       <StockLogo sym={o.ticker} size={18} />
                       <span className="tr-tk">{o.ticker}</span>
                       <span className="tr-mt">
-                        {fmtCompact(o.investorsHolding)} owners
+                        {fmtCount(o.investorsHolding)} filers
                         {o.ownershipPercent != null ? ` · ${o.ownershipPercent.toFixed(1)}%` : ""}
                       </span>
                     </button>
@@ -495,8 +514,8 @@ export function InsiderScreen() {
                 <table className="tbl">
                   <thead>
                     <tr>
-                      <th>Ticker</th><th className="num">Inst. owners</th><th className="num">Inst. %</th>
-                      <th className="num">Owners QoQ</th><th className="num">Shares QoQ</th>
+                      <th>Ticker</th><th className="num">13F filers</th><th className="num">Inst. %</th>
+                      <th className="num">Filers QoQ</th><th className="num">Shares QoQ</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -505,12 +524,12 @@ export function InsiderScreen() {
                         <td>
                           <div className="co"><span className="s"><StockLogo sym={d.ticker} size={20} />{d.ticker}</span></div>
                         </td>
-                        <td className="num">{fmtCompact(d.investorsHolding)}</td>
+                        <td className="num">{fmtCount(d.investorsHolding)}</td>
                         <td className="num">{d.ownershipPercent != null ? `${d.ownershipPercent.toFixed(1)}%` : <NotAvailable />}</td>
                         <td className="num">
                           {d.investorsHoldingChange == null ? <NotAvailable /> : (
                             <b className={d.investorsHoldingChange > 0 ? "up" : d.investorsHoldingChange < 0 ? "down" : ""}>
-                              {fmtDelta(d.investorsHoldingChange)}
+                              {fmtCountDelta(d.investorsHoldingChange)}
                             </b>
                           )}
                         </td>
@@ -525,6 +544,15 @@ export function InsiderScreen() {
                     ))}
                   </tbody>
                 </table>
+              )}
+              {instSorted.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: ".68rem", color: "var(--text-dim-solid)" }}>
+                  A 13F filer is an institutional manager, not a single fund — one
+                  filer (e.g. BlackRock) files once for many funds, so this count
+                  runs lower than a &ldquo;number of funds&rdquo; figure. Inst. %
+                  is all 13F shares over shares outstanding, so it runs higher
+                  than a fund-only ownership figure.
+                </div>
               )}
             </div>
           </div>
@@ -591,7 +619,7 @@ export function InsiderScreen() {
                     ) : mostBought.map(d => (
                       <div key={d.ticker} className="minirow" onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
                         <span className="mid"><b style={{ color: "var(--text-hi)" }}>{d.ticker}</b></span>
-                        <span className="r up">{fmtDelta(d.investorsHoldingChange)} owners</span>
+                        <span className="r up">{fmtCountDelta(d.investorsHoldingChange)} filers</span>
                       </div>
                     ))}
                   </>)}
@@ -605,7 +633,7 @@ export function InsiderScreen() {
                     ) : mostSold.map(d => (
                       <div key={d.ticker} className="minirow" onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
                         <span className="mid"><b style={{ color: "var(--text-hi)" }}>{d.ticker}</b></span>
-                        <span className="r down">{fmtDelta(d.investorsHoldingChange)} owners</span>
+                        <span className="r down">{fmtCountDelta(d.investorsHoldingChange)} filers</span>
                       </div>
                     ))}
                   </>)}

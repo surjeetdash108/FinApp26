@@ -10,6 +10,7 @@ import { cls, arr, sign, DataState, VendorTag } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
 import { TickerSearchField } from "../ticker-search-field";
 import { AiSummaryCard } from "../ai-summary-card";
+import { AiAggregateBlock } from "../ai-aggregate-block";
 
 interface Holding {
   ticker: string; shares: number;
@@ -53,6 +54,13 @@ export function PortfolioScreen() {
   const quoteTickers = holdings.map(h => h.ticker).slice(0, 25);
   const quotesPath = quoteTickers.length ? `/live/quotes?tickers=${encodeURIComponent(quoteTickers.join(","))}` : null;
   const { data: liveQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(quotesPath, 30000);
+
+  // Cumulative AI read over the whole portfolio. Deferred until the summary
+  // card is expanded: it is collapsed by default, and generating for a card
+  // nobody opens wastes a scarce free-tier call. Cached 30 min server-side and
+  // re-generated whenever the holdings change.
+  const [aiOpen, setAiOpen] = useState(false);
+  const aiPath = aiOpen ? "/api/ai/portfolio" : null;
   const quoteByTicker = new Map((liveQuotes ?? []).map(q => [q.ticker, q]));
 
   // Every field beyond ticker/shares/positionSize/conviction comes from the
@@ -73,7 +81,11 @@ export function PortfolioScreen() {
       ...h,
       name: live?.name ?? h.ticker,
       price,
-      pctChange: hasLive ? (live!.pctChange ?? 0) : null,
+      // `live` may be undefined while `price` came from the quote alone, so the
+      // old `live!.pctChange` threw and took the whole screen down for any
+      // holding missing from the companies collection. Same precedence as
+      // `price` above: quote first, companies doc as fallback.
+      pctChange: hasLive ? (q?.pctChange ?? live?.pctChange ?? 0) : null,
       live: hasLive,
       unrealized,
       unrealizedPct,
@@ -157,7 +169,7 @@ export function PortfolioScreen() {
       <div style={{ padding: "0 18px 18px" }}>
 
         {/* AI portfolio summary */}
-        <AiSummaryCard title="◆ AI portfolio summary" pill={<span className="pill ai">drivers · leaders · laggards</span>}>
+        <AiSummaryCard title="◆ AI portfolio summary" pill={<span className="pill ai">drivers · leaders · laggards</span>} onOpenChange={(o) => o && setAiOpen(true)} fullHeight>
             {priced.length === 0 ? (
               <DataState loading={companiesLoading} label="No live price data for any current holding yet." />
             ) : (
@@ -189,6 +201,7 @@ export function PortfolioScreen() {
                 </li>
               </ul>
             )}
+            <AiAggregateBlock path={aiPath} label="portfolio" />
         </AiSummaryCard>
 
         <StockPanelLayout

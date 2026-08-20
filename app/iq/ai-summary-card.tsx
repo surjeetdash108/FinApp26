@@ -17,11 +17,20 @@ export function AiSummaryCard({
   pill,
   children,
   defaultOpen = false,
+  onOpenChange,
+  fullHeight = false,
 }: {
   title: ReactNode;
   pill?: ReactNode;
   children: ReactNode;
   defaultOpen?: boolean;
+  /** Notified whenever the card expands/collapses. Lets a caller defer
+   *  expensive work (an on-demand AI generation) until it is actually seen. */
+  onOpenChange?: (open: boolean) => void;
+  /** Drop the `.ai-block .card-b` 128px cap (see iq.css) so taller content —
+   *  e.g. an appended AI insight — is fully visible instead of hidden behind
+   *  the body's inner scrollbar. Opt-in, so existing callers are unaffected. */
+  fullHeight?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -30,7 +39,12 @@ export function AiSummaryCard({
         type="button"
         className="card-h collapse-h"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() =>
+          setOpen((o) => {
+            onOpenChange?.(!o);
+            return !o;
+          })
+        }
       >
         <h3 className="ai-c">{title}</h3>
         <span className="collapse-h-right">
@@ -49,7 +63,9 @@ export function AiSummaryCard({
       </button>
       <div className="collapse-region">
         <div className="collapse-region-inner">
-          <div className="card-b">{children}</div>
+          <div className="card-b" style={fullHeight ? { maxHeight: "none" } : undefined}>
+            {children}
+          </div>
         </div>
       </div>
     </div>
