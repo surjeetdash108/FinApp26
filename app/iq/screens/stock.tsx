@@ -803,6 +803,13 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const macdBuy = macd != null ? macd >= (liveCompany?.macdSignal ?? 0) : null;
   const stochKv = liveCompany?.stochK ?? null;
   const adx14 = liveCompany?.adx14 ?? null;
+  // technical-indicators.job also writes these; they were being rendered as
+  // "N/A" in the Technical Rating drawer even though the values were present.
+  const vwapV = liveCompany?.vwap ?? null;
+  const offHigh52 = liveCompany?.pctFromHigh52 ?? null;
+  const offLow52 = liveCompany?.pctFromLow52 ?? null;
+  const rsiSeries = liveCompany?.rsi14Series ?? null;
+  const divPerShare = liveCompany?.dividendPerShare ?? null;
   const dollar = data.pctChange != null ? Math.abs((data.pctChange / 100) * p) : null;
 
   // Live overlay values for the header. Kept separate from `p`/`dollar` so the
@@ -1213,6 +1220,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 ["EPS (TTM)",      eps != null ? "$" + eps.toFixed(2) : null],
                 ["Next ER",        erDate],
                 ["52W Range",      hi != null && lo != null ? "$" + nf(lo) + " – $" + nf(hi) : null],
+                // Distance from the 52-week extremes. Both are computed nightly
+                // and were sitting unused while the range they refer to was
+                // already on screen. "% off high" is the IBD-style read.
+                ["Off 52W High",   offHigh52 != null ? offHigh52.toFixed(1) + "%" : null],
+                ["Off 52W Low",    offLow52 != null ? "+" + offLow52.toFixed(1) + "%" : null],
                 ["Avg Vol (20d)",  avgVol20 != null ? nf(avgVol20 / 1e6) + "M" : null],
                 ["Sector",         data.sector],
                 ["Industry",       titleCaseIndustry(data.industry)],
@@ -1220,6 +1232,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 // price), per the backend methodology change — the "(fwd)" tag
                 // tells users it's forward, not trailing-twelve-month.
                 ["Div Yield",      data.dividendYield != null ? data.dividendYield.toFixed(2) + "% (fwd)" : null],
+                ["Div / Share",    divPerShare != null ? "$" + divPerShare.toFixed(2) + " (fwd)" : null],
               ] as [string, string | null][]).map(k => (
                 <div key={k[0]} className="kstat">
                   <div className="k">{k[0]}</div>
@@ -1488,7 +1501,27 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <tbody>
                   {indRows.map(r => (
                     <tr key={r[0]}>
-                      <td>{r[0]}</td>
+                      <td>
+                        {r[0]}
+                        {/* RSI(14) history is already computed nightly and shipped
+                            on the company doc; it was unused. Drawn inline on a
+                            fixed 0-100 scale with the 30/70 bands marked, so the
+                            number reads in context instead of as a bare value. */}
+                        {r[0] === "RSI (14)" && rsiSeries && rsiSeries.length > 1 && (() => {
+                          const pts = rsiSeries.slice(-40);
+                          const W = 62, H = 16;
+                          const d = pts
+                            .map((v, i) => `${(i / (pts.length - 1)) * W},${H - (Math.min(100, Math.max(0, v)) / 100) * H}`)
+                            .join(" ");
+                          return (
+                            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ marginLeft: 8, verticalAlign: "middle", overflow: "visible" }} aria-hidden="true">
+                              <line x1="0" y1={H - 0.7 * H} x2={W} y2={H - 0.7 * H} stroke="var(--border-soft)" strokeWidth="1" />
+                              <line x1="0" y1={H - 0.3 * H} x2={W} y2={H - 0.3 * H} stroke="var(--border-soft)" strokeWidth="1" />
+                              <polyline points={d} fill="none" stroke="var(--ai)" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round" />
+                            </svg>
+                          );
+                        })()}
+                      </td>
                       <td className="v">{r[1] ?? <NotAvailable />}</td>
                       <td className="a" style={{ color: ac(r[2]) }}>{r[2]}</td>
                     </tr>
@@ -1496,7 +1529,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 </tbody>
               </table>
               <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
-                RSI/MACD from technical-indicators.job · EMA/SMA computed from a year of daily bars. Indicators only — not investment advice.
+                RSI/MACD/Stoch %K/ADX from technical-indicators.job · RSI sparkline is the last 40 sessions on a 0-100 scale with the 30/70 bands marked · EMA/SMA computed from a year of daily bars. Indicators only — not investment advice.
               </div>
             </div>
           </div>
@@ -1906,12 +1939,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   <tbody>
                     {([
                       ["RSI (14)", rsi != null ? rsi.toFixed(2) : null, rsi == null ? "" : rsi > 70 ? "Sell" : rsi < 40 ? "Buy" : "Neutral"],
-                      ["Stoch %K", null, ""],
+                      ["Stoch %K", stochKv != null ? stochKv.toFixed(1) : null, stochKv == null ? "" : stochKv > 80 ? "Sell" : stochKv < 20 ? "Buy" : "Neutral"],
                       ["CCI (14)", null, ""],
                       ["MACD (12,26)", macd != null ? macd.toFixed(1) : null, macdBuy == null ? "" : macdBuy ? "Buy" : "Sell"],
                       ["Williams %R", null, ""],
                       ["Bull/Bear Power", null, ""],
-                      ["ADX (14)", null, ""],
+                      ["ADX (14)", adx14 != null ? adx14.toFixed(1) : null, adx14 == null ? "" : adx14 > 25 ? "Strong" : adx14 < 20 ? "Weak" : "Neutral"],
                       ["Ultimate Osc.", null, ""],
                       ["ROC", null, ""],
                       ["Stoch RSI", null, ""],
@@ -1941,7 +1974,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       ["EMA 100", ema(yr, 100)],
                       ["EMA 200", ema(yr, 200)],
                       ["Ichimoku Base", ichimokuBase(yr, 26)],
-                      ["VWAP", null],
+                      ["VWAP", vwapV],
                       ["Hull MA (9)", null],
                     ] as [string, number | null][]).map(([label, v]) => (
                       <tr key={label}>
@@ -1952,7 +1985,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   </tbody>
                 </table>
                 <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
-                  RSI/MACD from technical-indicators.job · SMA/EMA/Ichimoku computed from a year of daily bars — real. Stoch/CCI/Williams %R/Bull-Bear/ADX/Ultimate Osc/ROC/Stoch RSI/ATR/VWAP/Hull MA need a fuller technicals vendor and aren&apos;t wired up yet. Not investment advice.
+                  RSI/MACD/Stoch %K/ADX/VWAP from technical-indicators.job · SMA/EMA/Ichimoku computed from a year of daily bars — real. CCI/Williams %R/Bull-Bear/Ultimate Osc/ROC/Stoch RSI/ATR/Hull MA need a fuller technicals vendor and aren&apos;t wired up yet. Not investment advice.
                 </div>
               </div>
             </div>

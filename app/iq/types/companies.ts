@@ -77,6 +77,16 @@ export interface CompanyDoc {
   adx14?: number | null;
   /** Annualized 30-day realized volatility (%) — the Macro "30d Vol" column. */
   realizedVol30?: number | null;
+  /** Session VWAP from technical-indicators.job (Technical Rating drawer). */
+  vwap?: number | null;
+  /** Distance from the 52-week high, negative (e.g. -7.89 = 7.89% below it). */
+  pctFromHigh52?: number | null;
+  /** Distance above the 52-week low, positive. */
+  pctFromLow52?: number | null;
+  /** Forward-annualized dividend per share (pairs with dividendYield). */
+  dividendPerShare?: number | null;
+  /** Trailing RSI(14) history, oldest→newest — powers the RSI sparkline. */
+  rsi14Series?: number[] | null;
   // FMP 13F institutional-ownership rollup (stock-detail Institutional card).
   /** % of shares outstanding held by 13F institutions (0-100). */
   instOwnershipPct?: number | null;
