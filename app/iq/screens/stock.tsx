@@ -1255,37 +1255,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 Source: rs-rating.job, technical-indicators.job, a year of daily bars · informational purposes only, not investment advice.
               </div>
 
-              {/* Latest news — the 4 most recent headlines for THIS ticker,
-                  deduped by URL, newest first; each opens the source article. */}
-              {(() => {
-                const seen = new Set<string>();
-                const latest = [...(tickerNews ?? [])]
-                  .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-                  .filter(n => { const k = n.url || n.id; if (seen.has(k)) return false; seen.add(k); return true; })
-                  .slice(0, 4);
-                if (latest.length === 0) return null;
-                return (
-                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
-                    <div style={{ fontSize: ".66rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                      Latest news · {sym} <VendorTag v={["polygon", "fmp"]} />
-                    </div>
-                    {latest.map((n, i) => (
-                      <a key={n.id} href={n.url} target="_blank" rel="noreferrer"
-                        style={{ display: "block", textDecoration: "none", cursor: "pointer",
-                          padding: "7px 0", borderBottom: i < latest.length - 1 ? "1px solid var(--border-soft)" : undefined }}>
-                        <div style={{ fontSize: ".78rem", color: "var(--text)", lineHeight: 1.4 }}>{n.headline}</div>
-                        <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span>{n.source} · {new Date(n.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                          {n.sentiment && <span className="pill" style={{ fontSize: ".54rem", textTransform: "capitalize", background: "var(--surface-3)", color: n.sentiment === "positive" ? "var(--up)" : n.sentiment === "negative" ? "var(--down)" : "var(--text-dim-solid)" }}>{n.sentiment}</span>}
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                );
-              })()}
-
               {/* ── AI read — technicals + news synthesised by OpenRouter,
-                  appended below the deterministic rows + Latest-news list. AI
+                  appended below the deterministic rows. The raw headline list
+                  that used to sit here was removed: this read already covers the
+                  news, and the full list lives in the News card further down. AI
                   output is rendered as PLAIN TEXT (never dangerouslySetInnerHTML)
                   since it's model-generated / untrusted. ── */}
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
