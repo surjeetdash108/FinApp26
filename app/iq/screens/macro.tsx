@@ -284,7 +284,6 @@ export function MacroScreen() {
   }
   const ecoWeekLabel = `${fmtMonthDay(ecoWeekDays[0])} – ${fmtMonthDay(ecoWeekDays[4])}, ${ecoWeekDays[4].slice(0, 4)}`;
   const ecoWeekCount = ecoWeekDays.reduce((n, iso) => n + (ecoByDate.get(iso)?.length ?? 0), 0);
-  const [selStock,  setSelStock]  = useState<DivStock | null>(null);
   const [vixSel,    setVixSel]    = useState<DivStock | null>(null);
   const vixTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [vixPop, setVixPop] = useState<{ s: CompanyDoc & { beta: number }; x: number; y: number } | null>(null);
@@ -485,11 +484,6 @@ export function MacroScreen() {
           </div>
         </div>
       </div>
-
-      {/* ── Dividend drawer from chip click ── */}
-      {selStock && (
-        <DividendDrawer stock={selStock} onClose={() => setSelStock(null)} />
-      )}
 
       {/* ── Dividend drawer from high-beta row click ── */}
       {vixSel && (

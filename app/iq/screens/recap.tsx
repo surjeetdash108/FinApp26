@@ -8,6 +8,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useTapeStream } from "../hooks/useTapeStream";
 import { tapeItemsToIndexDocs } from "../live-market-indices";
 import type { SectorApiDoc, LiveEarningsDoc, NewsArticleDoc, MacroEventDoc, RecapDoc, CompanyDoc, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
+import { surprisePct } from "../types";
 
 const SEC_PAGE = 10;
 const MAJOR_INDEX_LABELS = ["S&P 500", "Nasdaq", "Dow", "Russell 2000"];
@@ -73,7 +74,7 @@ function earnSurprises(events: LiveEarningsDoc[]): EarnSurprise[] {
     .filter((e): e is LiveEarningsDoc & { epsEstimate: number; epsActual: number } => e.epsEstimate != null && e.epsActual != null)
     .map(e => ({
       ticker: e.ticker, date: e.date, epsEstimate: e.epsEstimate, epsActual: e.epsActual,
-      surp: e.epsEstimate !== 0 ? ((e.epsActual - e.epsEstimate) / Math.abs(e.epsEstimate)) * 100 : 0,
+      surp: surprisePct(e.epsActual, e.epsEstimate) ?? 0,
     }))
     .sort((a, b) => Math.abs(b.surp) - Math.abs(a.surp));
 }

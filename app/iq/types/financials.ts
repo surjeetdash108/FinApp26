@@ -7,12 +7,30 @@ export function reportedQuarterEps(q: QuarterFinancials): number | null {
   return q.epsActualReported ?? q.epsActual ?? null;
 }
 
+/**
+ * THE surprise-% derivation — `(actual − estimate) / |estimate| × 100`.
+ *
+ * This was hand-written at half a dozen call sites with three different
+ * near-zero guards (`!== 0`, `< 0.005`, `< 0.05`), so the same quarter could
+ * render a number on one screen and "—" on another. One definition now.
+ *
+ * The guard is `|estimate| < 0.005`: EPS is displayed to 2 decimals, so an
+ * estimate below half a cent shows as "$0.00" and a percentage against it is
+ * meaningless (it yields absurd four-digit surprises). Returns null there —
+ * callers that need a number substitute their own fallback.
+ */
+export function surprisePct(
+  actual: number | null | undefined,
+  estimate: number | null | undefined,
+): number | null {
+  if (actual == null || estimate == null || Math.abs(estimate) < 0.005) return null;
+  return ((actual - estimate) / Math.abs(estimate)) * 100;
+}
+
 /** Matched-pair EPS surprise % (FMP reported actual vs the estimate from the same
  * surprise row, split-normalized). null when there's no matched pair. */
 export function quarterEpsSurprisePct(q: QuarterFinancials): number | null {
-  const a = q.epsActualReported;
-  const e = q.epsEstimateReported;
-  return a != null && e != null && e !== 0 ? ((a - e) / Math.abs(e)) * 100 : null;
+  return surprisePct(q.epsActualReported, q.epsEstimateReported);
 }
 
 /** One quarter of the deep FMP reported-EPS history (non-GAAP, split-normalized,

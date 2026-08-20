@@ -20,18 +20,30 @@ export function buildSectorList(
   const livePctByName = new Map(sectorsLive.map((s) => [s.sector, s.pctChange]));
   const gics = sectorsLive.map((s) => s.sector);
   const gicsSet = new Set(gics);
+  // Canonical sectors that have NO SPDR benchmark row (so they never appear in
+  // `sectorsLive`) but are still valid buckets — e.g. crypto miners. Without
+  // this they'd be filtered out as "not a clean GICS name" and vanish from the
+  // treemap. Their tile %change is the average of their own live constituents.
+  const EXTRA_SECTORS = ["Crypto / Blockchain"];
+  const validSet = new Set([...gics, ...EXTRA_SECTORS]);
 
   const bySector = new Map<string, [string, number, number][]>();
   for (const c of companies) {
     const sec = c.sector;
-    if (!sec || !gicsSet.has(sec) || c.marketCap == null || c.pctChange == null) continue;
+    if (!sec || !validSet.has(sec) || c.marketCap == null || c.pctChange == null) continue;
     let bucket = bySector.get(sec);
     if (!bucket) { bucket = []; bySector.set(sec, bucket); }
     bucket.push([c.ticker, c.marketCap / 1e9, c.pctChange]);
   }
 
+  // 11 SPDR sectors in their live order, then any canonical extra sectors that
+  // actually have constituents (so an empty crypto bucket adds no tile).
+  const orderedNames = [
+    ...gics,
+    ...EXTRA_SECTORS.filter((s) => !gicsSet.has(s) && (bySector.get(s)?.length ?? 0) > 0),
+  ];
   const rows: SectorRow[] = [];
-  gics.forEach((name, i) => {
+  orderedNames.forEach((name, i) => {
     const items = bySector.get(name);
     if (!items || items.length === 0) return;
     const pctChange =

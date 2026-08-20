@@ -8,6 +8,7 @@ import { useApiList } from "./hooks/useApiList";
 import { useApiResource } from "./hooks/useApiResource";
 import { useBackendBars } from "./hooks/useBackendBars";
 import type { LiveEarningsDoc, CompanyDoc } from "./types";
+import { surprisePct } from "./types";
 
 /* ── Shared dynamic embed — one definition for all screens ── */
 export const StockScreenEmbed = dynamic<{ initialSym?: string; hideHeader?: boolean; hideChart?: boolean }>(
@@ -161,7 +162,7 @@ function useLiveEarningsForSym(sym: string): { hist: EarnQ[]; erDate: string; lo
     .reverse()
     .map(e => {
       const est = e.epsEstimate as number, act = e.epsActual as number;
-      const surp = est !== 0 ? ((act - est) / Math.abs(est)) * 100 : 0;
+      const surp = surprisePct(act, est) ?? 0;
       return {
         q: new Date(e.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
         e: est, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,

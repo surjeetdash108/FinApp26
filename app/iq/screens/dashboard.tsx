@@ -262,8 +262,9 @@ export function DashboardScreen() {
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
   const { data: sectorsLive } = useApiList<SectorApiDoc>("/market-data/sectors");
   const { data: liveInsiderTx, loading: insiderLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
-  // Per-ticker news — powers the "why it moved" line in the hover popup.
-  const { data: dashNews } = useApiList<NewsArticleDoc>("/market-data/news");
+  // Per-ticker news — powers the "why it moved" line in the hover popup AND the
+  // latest-headlines list inside the "What Matters Now" card.
+  const { data: dashNews, loading: dashNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
   // Live Fear & Greed (fear-greed.job → market_sentiment/fear_greed). No mock
   // fallback: fgVal/fgLabel are null until the job has actually run.
   const { data: marketSentiment, loading: marketSentimentLoading } = useApiList<MarketSentimentDoc>("/market-data/market-sentiment");
@@ -367,7 +368,7 @@ export function DashboardScreen() {
   const [drawer, setDrawer] = useState<DrawerKey>(null);
   const [moversTab, setMoversTab] = useState<0 | 1 | 2>(0);
   const [scrTab, setScrTab] = useState<"leaders" | "laggards">("leaders");
-  const [wmnOpen, setWmnOpen] = useState(false);
+  const [wmnOpen, setWmnOpen] = useState(true);
 
   // ---- Dash pop hover ----
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -460,7 +461,7 @@ export function DashboardScreen() {
                 </div>
                 <div>
                   <h2>What Matters Now</h2>
-                  <div className="meta">AI-curated market briefing</div>
+                  <div className="meta">Latest market-moving headlines</div>
                 </div>
               </div>
               <svg className="wmn-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -468,8 +469,45 @@ export function DashboardScreen() {
               </svg>
             </button>
             <div className="wmn-collapse">
-              <div className="wmn-collapse-inner">
-                <DataState label="AI features aren't wired yet — Coming soon...." />
+              <div className="wmn-collapse-inner" style={{ padding: "2px 18px 16px" }}>
+                {(() => {
+                  // 8 latest headlines in a 2-column grid, newest first, deduped
+                  // by URL (Polygon tags one story to every ticker it mentions).
+                  // Click → open the stock detail for that ticker.
+                  const seen = new Set<string>();
+                  const latest = [...dashNews]
+                    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+                    .filter(n => { const k = n.url || n.id; if (seen.has(k)) return false; seen.add(k); return true; })
+                    .slice(0, 8);
+                  if (latest.length === 0) {
+                    return <DataState loading={dashNewsLoading} label="No market-moving news right now." />;
+                  }
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 24, alignItems: "start" }}>
+                      {latest.map((f, i) => (
+                        <div key={f.id}
+                          onClick={() => openStock(f.ticker)}
+                          style={{
+                            display: "flex", gap: 11, padding: "10px 0", alignItems: "flex-start", cursor: "pointer",
+                            // no bottom border on the last row (last two items)
+                            borderBottom: i < latest.length - 2 ? "1px solid var(--border-soft)" : undefined,
+                          }}>
+                          <StockLogo sym={f.ticker} size={30} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: ".82rem", color: "var(--text)", lineHeight: 1.45 }}>
+                              <b style={{ color: "var(--text-hi)" }}>{f.ticker}</b> · {f.headline}
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontSize: ".66rem", color: "var(--text-dim-solid)", flexWrap: "wrap" }}>
+                              {f.category && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{f.category}</span>}
+                              <span className="mono">{new Date(f.publishedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+                              {f.source && <span>· {f.source}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

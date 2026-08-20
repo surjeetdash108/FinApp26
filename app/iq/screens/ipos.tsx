@@ -22,6 +22,9 @@ function formatIpoPrice(low: number | null, high: number | null): string {
 }
 
 interface IpoRow {
+  /** Stable unique doc id — used as the React key. `s` (symbol) is NOT unique:
+   *  every pre-symbol IPO carries "—", so keying on it collides. */
+  id: string;
   s: string; n: string; date: string;
   offer: number | null;
   /** Aftermarket pricing computed by the ipos job from Polygon bars: current
@@ -107,6 +110,7 @@ export function IPOsScreen() {
   // computed by the backend ipos job from Polygon daily bars for already-listed
   // names; it's null only when the name hasn't listed yet or has no series.
   const liveRows: IpoRow[] = liveIposSorted.map(e => ({
+    id: e.id,
     s: e.symbol ?? "—",
     n: e.name,
     date: e.date,
@@ -254,14 +258,14 @@ export function IPOsScreen() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No IPOs match your filter.</td>
+                  <td colSpan={9} style={{ padding: 16, color: "var(--text-dim-solid)" }}>No IPOs match your filter.</td>
                 </tr>
               ) : pageSlice(filtered).map(r => {
                 // Prefer the backend's return-since-offer; fall back to computing
                 // it from cur/offer. Null → "—" when there's no aftermarket price.
                   const ret = r.since ?? (r.cur != null && r.offer != null && r.offer !== 0 ? (r.cur - r.offer) / r.offer * 100 : null);
                 return (
-                  <tr key={r.s} onClick={() => setSelectedSym(r.s && r.s !== "—" ? r.s : "")} style={{ cursor: "pointer" }}>
+                  <tr key={r.id} onClick={() => setSelectedSym(r.s && r.s !== "—" ? r.s : "")} style={{ cursor: "pointer" }}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <StockLogo sym={r.s} size={26} />

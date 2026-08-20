@@ -4,88 +4,12 @@ import { useState } from "react";
 import { NotAvailable, VendorTag } from "./utils";
 import type { FinancialsDoc, AnnualFinancials, QuarterFinancials, EpsHistoryRow } from "./types";
 import { reportedQuarterEps, quarterEpsSurprisePct, reportedAnnualEps, estimatedAnnualEps } from "./types";
+import { pctChangeStr, epsSalesSeries, annualEpsSalesRows, quarterlyEpsSalesRows, type AnnualRow } from "./eps-sales-data";
 
-/** "+12%" / "-4%" / "—" — rounded YoY %change, blank when either side is missing. */
-function pctChangeStr(curr: number | null | undefined, prev: number | null | undefined): string {
-  if (curr == null || prev == null || Math.abs(prev) < 0.05) return "—";
-  const pct = ((curr - prev) / Math.abs(prev)) * 100;
-  // Near-zero base (spin-off / first reporting period) → meaningless four-digit %.
-  if (Math.abs(pct) > 1000) return "—";
-  return `${pct >= 0 ? "+" : ""}${Math.round(pct)}%`;
-}
 
-type EpsSalesPt = { label: string; eps: number | null; sales: number | null };
-type AnnualRow = { year: string; eps: number | null; epsEst: number | null; epsChg: string; epsSurp: string; sales: number | null; salesChg: string };
-type QuarterRow = {
-  label: string; eps: number | null; epsEst: number | null; epsChg: string; epsSurp: string;
-  sales: number | null; salesChg: string; salesSurp: string;
-};
 
-/** EPS + Sales(M) per period, oldest→newest, for the dual bar charts. Actuals only. */
-function epsSalesSeries(period: "Q" | "A", doc: FinancialsDoc | null): EpsSalesPt[] {
-  if (!doc) return [];
-  if (period === "Q") {
-    return [...doc.quarters]
-      .filter(r => r.endDate)
-      .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string))
-      .slice(-12)
-      .map(r => ({
-        label: new Date(r.endDate + "T00:00:00")
-          .toLocaleDateString("en-US", { month: "short", year: "2-digit" }).replace(" ", "-"),
-        eps: reportedQuarterEps(r),
-        sales: r.revenue != null ? r.revenue / 1e6 : null,
-      }));
-  }
-  return [...doc.annual]
-    .filter(r => r.fiscalYear)
-    .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear))
-    .slice(-10)
-    .map(r => ({ label: r.fiscalYear as string, eps: reportedAnnualEps(r.fiscalYear, doc.epsHistory, r.epsActual), sales: r.revenue != null ? r.revenue / 1e6 : null }));
-}
 
-/** One row per reported fiscal year, oldest first, with EPS/Sales YoY %change. */
-function annualEpsSalesRows(annual: AnnualFinancials[], epsHistory: EpsHistoryRow[]): AnnualRow[] {
-  const asc = [...annual].filter(r => r.fiscalYear).sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear));
-  return asc.map((r, i) => {
-    const prev = i > 0 ? asc[i - 1] : null;
-    const eps = reportedAnnualEps(r.fiscalYear, epsHistory, r.epsActual);
-    const prevEps = prev ? reportedAnnualEps(prev.fiscalYear, epsHistory, prev.epsActual) : null;
-    const epsEst = estimatedAnnualEps(r.fiscalYear, epsHistory);
-    const surp = eps != null && epsEst != null && epsEst !== 0 ? ((eps - epsEst) / Math.abs(epsEst)) * 100 : null;
-    return {
-      year: r.fiscalYear as string,
-      eps,
-      epsEst,
-      epsChg: pctChangeStr(eps, prevEps),
-      epsSurp: surp == null ? "—" : `${surp >= 0 ? "+" : ""}${Math.round(surp)}%`,
-      sales: r.revenue != null ? r.revenue / 1e6 : null,
-      salesChg: pctChangeStr(r.revenue, prev?.revenue),
-    };
-  });
-}
 
-/** One row per reported quarter, oldest first. %chg is YoY (4 back); %surp is
- *  actual-vs-estimate (blank "—" until an estimate feed is wired). */
-function quarterlyEpsSalesRows(quarters: QuarterFinancials[]): QuarterRow[] {
-  const asc = [...quarters].filter(r => r.endDate).sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string));
-  return asc.map((r, i) => {
-    const yoy = i >= 4 ? asc[i - 4] : null;
-    return {
-      // Always show fiscal quarter + year (e.g. "Q3 2026"); fall back to the
-      // period-end month/year only when the fiscal labels are missing.
-      label: r.fiscalPeriod && r.fiscalYear
-        ? `${r.fiscalPeriod} ${r.fiscalYear}`
-        : new Date(r.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-      eps: reportedQuarterEps(r),
-      epsEst: r.epsEstimateReported ?? null,
-      epsChg: pctChangeStr(reportedQuarterEps(r), yoy ? reportedQuarterEps(yoy) : null),
-      epsSurp: (() => { const s = quarterEpsSurprisePct(r); return s == null ? "—" : `${s >= 0 ? "+" : ""}${Math.round(s)}%`; })(),
-      sales: r.revenue != null ? r.revenue / 1e6 : null,
-      salesChg: pctChangeStr(r.revenue, yoy?.revenue),
-      salesSurp: "—",
-    };
-  });
-}
 
 /** One zero-baselined bar chart (EPS or Sales), value labelled on top, period
  *  label angled underneath — the reference layout's headline chart. */

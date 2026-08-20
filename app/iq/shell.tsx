@@ -29,6 +29,7 @@ import { useWatchlists, WatchlistsContext } from "./hooks/useWatchlists";
 import { WatchlistPicker } from "./watchlist-picker";
 import { pulseFromLive, tapeItemsToIndexDocs } from "./live-market-indices";
 import type { CompanyDoc, SectorApiDoc, LiveEarningsDoc } from "./types";
+import { surprisePct } from "./types";
 
 // ---- Route helpers ----
 function slugToHref(slug: string): string {
@@ -256,9 +257,7 @@ function EarningsDrawer({ sym, liveEarnings, loading, onClose }: { sym: string; 
   const { openStockFull } = useIQActions();
   const events = liveEarnings.filter(x => x.ticker === sym).sort((a, b) => b.date.localeCompare(a.date));
   const e = events[0] ?? null;
-  const epsBeat = e && e.epsActual != null && e.epsEstimate != null && e.epsEstimate !== 0
-    ? ((e.epsActual - e.epsEstimate) / Math.abs(e.epsEstimate) * 100)
-    : null;
+  const epsBeat = e ? surprisePct(e.epsActual, e.epsEstimate) : null;
 
   return (
     <>

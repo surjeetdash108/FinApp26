@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useBackendBars } from "../hooks/useBackendBars";
 import type { OHLCBar } from "../utils";
 import { DataState, VendorTag } from "../utils";
+import { surprisePct as calcSurprisePct } from "../types";
 
 /** One reported quarter: report date (SEC filing date) + EPS actual/estimate.
  * Sourced from the financials doc's `quarters` (~10 quarters) rather than the
@@ -116,10 +117,7 @@ function buildModel(reports: PlaybookReport[], bars: OHLCBar[] | undefined, maxR
     // Blank when FMP has no matched pair, rather than inventing a number.
     const reported = e.epsReported;
     const estReported = e.epsEstimateReported;
-    const surprisePct =
-      reported != null && estReported != null && estReported !== 0
-        ? ((reported - estReported) / Math.abs(estReported)) * 100
-        : null;
+    const surprisePct = calcSurprisePct(reported, estReported);
     rows.push({
       date: e.date,
       label: fmtLabel(e.date),

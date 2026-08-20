@@ -21,7 +21,7 @@ const TABS = [
   ["lose", "Top Losers"],
   ["vol",  "Unusual Volume"],
 ] as const;
-type TabKey = "win" | "lose" | "vol" | "week";
+type TabKey = "win" | "lose" | "vol";
 // Largest → smallest. The dropdown only offers tiers that actually have movers
 // right now — the day's top movers are almost never mega-caps, so "Mega" would
 // otherwise sit there returning nothing; "Micro" (which the feed does produce)
@@ -177,8 +177,7 @@ export function MoversScreen() {
     .sort((a, b) => {
       if (tab === "win")  return b.pctChange    - a.pctChange;
       if (tab === "lose") return a.pctChange    - b.pctChange;
-      if (tab === "vol")  return b.rvolRatio - a.rvolRatio;
-      return Math.abs(b.weekPct ?? 0) - Math.abs(a.weekPct ?? 0);
+      return b.rvolRatio - a.rvolRatio; // "vol"
     });
 
   // Paginate the full ranked list (up to 100 gainers / 100 losers per tab).
@@ -257,8 +256,7 @@ export function MoversScreen() {
             ) : pageRows.map(m => {
               const lq = quoteByTicker.get(m.ticker);
               const price = lq?.price ?? m.price;
-              // Live %-change on the price tabs; the Week tab has no live weekly.
-              const v = tab === "week" ? m.weekPct : (lq?.pctChange ?? m.pctChange);
+              const v = lq?.pctChange ?? m.pctChange;
               return (
                 <tr
                   key={m.ticker}

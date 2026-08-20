@@ -46,6 +46,9 @@ export interface CompanyDoc {
   dividendYield: number | null;
   beta: number | null;
   sector: string | null;
+  // FMP profile industry (e.g. "Consumer Electronics") when FMP is wired,
+  // else the Polygon SIC description. Shown next to Sector on the detail page.
+  industry: string | null;
   // Real technicals from technical-indicators.job (null until it has run).
   rsi14: number | null;
   macd: number | null;

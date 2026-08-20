@@ -14,9 +14,11 @@ import { useLiveTick } from "../hooks/useLiveTick";
 import { EarningsPlaybook } from "./EarningsPlaybook";
 import type {
   CompanyDoc, AnalystConsensusDoc, InsiderTxDoc,
-  DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EpsHistoryRow, NewsArticleDoc, LiveEarningsDoc, SectorApiDoc,
+  DividendHistoryDoc, SplitsDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EpsHistoryRow, NewsArticleDoc, LiveEarningsDoc, SectorApiDoc, AiAnalysisDoc,
 } from "../types";
 import { reportedQuarterEps, quarterEpsSurprisePct, reportedAnnualEps } from "../types";
+import { pctChangeStr, epsSalesSeries, annualEpsSalesRows, quarterlyEpsSalesRows, type EpsSalesPt } from "../eps-sales-data";
+import { surprisePct } from "../types";
 
 // Maps the numeric 1-99 tech rating onto the same string categories the
 // Screener/TrGauge use (Strong Buy / Buy / Neutral / Sell / Strong Sell).
@@ -39,6 +41,15 @@ function sma(bars: { c: number }[], n: number): number | null {
 // Computed client-side from the OHLC bars the chart already loads, so every
 // opened ticker shows levels regardless of the backend technicals sweep.
 type Pivots = { pivot: number; r1: number; r2: number; r3: number; s1: number; s2: number; s3: number };
+/** Polygon's SIC industry strings are ALL-CAPS ("PERFUMES, COSMETICS…"); title-
+ *  case them for display. FMP industries are already clean mixed-case, so a
+ *  string that isn't all-uppercase passes through unchanged. */
+function titleCaseIndustry(s: string | null | undefined): string | null {
+  if (!s) return null;
+  if (s !== s.toUpperCase()) return s; // already mixed-case (e.g. FMP) → leave
+  return s.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
+}
+
 function pivotsFrom(h: number, l: number, c: number): Pivots {
   const p = (h + l + c) / 3, range = h - l;
   return { pivot: p, r1: 2 * p - l, s1: 2 * p - h, r2: p + range, s2: p - range, r3: h + 2 * (p - l), s3: l - 2 * (h - p) };
@@ -195,102 +206,12 @@ function incRowsFromFinancials(
   });
 }
 
-/** "+12%" / "-8%" YoY, or "—" when there's no prior-period value to compare against
- * or that value is too close to zero for a percentage to be meaningful. */
-function pctChangeStr(curr: number | null | undefined, prev: number | null | undefined): string {
-  if (curr == null || prev == null || Math.abs(prev) < 0.05) return "—";
-  const pct = ((curr - prev) / Math.abs(prev)) * 100;
-  // A near-zero base (spin-off / first reporting period) yields meaningless
-  // four-digit percentages — suppress rather than print "+6227%".
-  if (Math.abs(pct) > 1000) return "—";
-  return `${pct >= 0 ? "+" : ""}${Math.round(pct)}%`;
-}
 
-type AnnualEpsSalesRow = { year: string; eps: number | null; epsChg: string; sales: number | null; salesChg: string };
 
-/** One row per real reported fiscal year (Polygon annual financials — actuals
- * only, no forward estimates exist for this in the current data pipeline),
- * oldest first, with EPS/Sales YoY %change vs the prior row. */
-function annualEpsSalesRows(annual: AnnualFinancials[], epsHistory: EpsHistoryRow[]): AnnualEpsSalesRow[] {
-  const asc = [...annual]
-    .filter(r => r.fiscalYear)
-    .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear));
-  return asc.map((r, i) => {
-    const prev = i > 0 ? asc[i - 1] : null;
-    // Non-GAAP annual EPS (summed reported quarters from the deep FMP history,
-    // matches IBD); GAAP fallback when a year isn't fully covered.
-    const eps = reportedAnnualEps(r.fiscalYear, epsHistory, r.epsActual);
-    const prevEps = prev ? reportedAnnualEps(prev.fiscalYear, epsHistory, prev.epsActual) : null;
-    return {
-      year: r.fiscalYear as string,
-      eps,
-      epsChg: pctChangeStr(eps, prevEps),
-      sales: r.revenue != null ? r.revenue / 1e6 : null,
-      salesChg: pctChangeStr(r.revenue, prev?.revenue),
-    };
-  });
-}
 
-type QuarterlyEpsSalesRow = {
-  label: string; eps: number | null; epsChg: string; epsSurp: string; sales: number | null; salesChg: string; salesSurp: string;
-};
 
-/** One row per real reported quarter, oldest first. %CHG compares the same
- * quarter a year earlier (4 rows back); %SURP is actual-vs-estimate for that
- * quarter. EPS surprise is real (epsEstimate is synced); sales/revenue has no
- * estimate in the pipeline yet, so its surprise column is always "—" rather
- * than a fabricated number. */
-function quarterlyEpsSalesRows(quarters: QuarterFinancials[]): QuarterlyEpsSalesRow[] {
-  const asc = [...quarters]
-    .filter(r => r.endDate)
-    .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string));
-  return asc.map((r, i) => {
-    const yoy = i >= 4 ? asc[i - 4] : null;
-    // EPS + %CHG + %SURP on the FMP consensus (non-GAAP) basis — matches NASDAQ.
-    const eps = reportedQuarterEps(r);
-    const surp = quarterEpsSurprisePct(r);
-    return {
-      label: new Date(r.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-      eps,
-      epsChg: pctChangeStr(eps, yoy ? reportedQuarterEps(yoy) : null),
-      epsSurp: surp == null ? "—" : `${surp >= 0 ? "+" : ""}${Math.round(surp)}%`,
-      sales: r.revenue != null ? r.revenue / 1e6 : null,
-      salesChg: pctChangeStr(r.revenue, yoy?.revenue),
-      salesSurp: "—",
-    };
-  });
-}
 
-type EpsSalesPt = { label: string; eps: number | null; sales: number | null };
 
-/** EPS + Sales(M) per period, oldest→newest, for the dual bar charts on the
- * main Financials card. Actuals only — same reported financials the tables
- * below use; no forward estimates. Sales is in $millions to match the axis. */
-function epsSalesSeries(period: "Q" | "A", doc: FinancialsDoc | null): EpsSalesPt[] {
-  if (!doc) return [];
-  if (period === "Q") {
-    return [...doc.quarters]
-      .filter(r => r.endDate)
-      .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string))
-      .slice(-12)
-      .map(r => ({
-        label: new Date(r.endDate + "T00:00:00")
-          .toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-          .replace(" ", "-"),
-        eps: reportedQuarterEps(r),
-        sales: r.revenue != null ? r.revenue / 1e6 : null,
-      }));
-  }
-  return [...doc.annual]
-    .filter(r => r.fiscalYear)
-    .sort((a, b) => Number(a.fiscalYear) - Number(b.fiscalYear))
-    .slice(-10)
-    .map(r => ({
-      label: r.fiscalYear as string,
-      eps: reportedAnnualEps(r.fiscalYear, doc.epsHistory, r.epsActual),
-      sales: r.revenue != null ? r.revenue / 1e6 : null,
-    }));
-}
 
 /** One single-series bar chart (EPS or Sales), zero-baselined so a negative
  * period reads correctly, with the value labelled on top of each bar and the
@@ -640,6 +561,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const { data: splitsDoc } = useApiResource<SplitsDoc>(`/live/splits?ticker=${encodeURIComponent(sym)}`);
   const { data: financialsDoc, loading: financialsLoading } = useApiResource<FinancialsDoc>(`/live/financials?ticker=${encodeURIComponent(sym)}`);
   const { data: tickerNews } = useApiResource<NewsArticleDoc[]>(`/live/news?ticker=${encodeURIComponent(sym)}`);
+  // On-demand AI read (technicals + news synthesised by OpenRouter), cached 30
+  // min server-side. Appended below the deterministic rows + news list.
+  const { data: aiAnalysis, loading: aiLoading, error: aiError } = useApiResource<AiAnalysisDoc>(`/live/ai-analysis?ticker=${encodeURIComponent(sym)}`);
 
   // ── Notes (Firebase stock_comments) ──────────────────────────────────────
   const [notes, setNotes]       = useState<StockNote[]>([]);
@@ -826,6 +750,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
     dividendYield: liveCompany?.dividendYield ?? null,
     beta: liveCompany?.beta ?? null,
     sector: liveCompany?.sector ?? null,
+    industry: liveCompany?.industry ?? null,
     insiderActivity: symInsider,
     week52High: week52?.high ?? null,
     week52Low: week52?.low ?? null,
@@ -905,14 +830,38 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const nf = (x: number) => Math.round(x).toLocaleString("en-US");
   const lo = data.week52Low, hi = data.week52High;
 
-  const trendTxt = rs == null ? null : isUp && rs >= 70
-    ? "<b>Strong uptrend.</b> Higher highs and higher lows; momentum confirmed by recent strength."
-    : rs < 40
-    ? "<b>Downtrend.</b> Lower highs and lower lows; price is below key moving averages."
-    : "<b>Range / consolidation.</b> Choppy two-way action with no decisive trend yet.";
-  const maTxt = rs == null ? null : rs >= 60 ? "Above the 20, 50 and 200-day — bullish alignment."
-    : rs < 40 ? "Below the 50 and 200-day — bearish alignment."
-    : "Mixed: hugging the 50-day with a flat 200-day.";
+  // Trend / MA posture. When the ticker is ranked in the synced universe we use
+  // the RS-rank read; otherwise (on-demand tickers with no RS rank) we derive it
+  // from price vs its 50-day EMA and 200-day SMA — both computed client-side from
+  // the year of daily bars — so the read still shows for every stock, not just
+  // ranked ones.
+  const aboveEma50 = ema50 != null ? p > ema50 : null;
+  const above200   = sma200 != null ? p > sma200 : null;
+  const haveMA     = aboveEma50 != null || above200 != null;
+  const trendTxt = rs != null
+    ? (isUp && rs >= 70
+        ? "<b>Strong uptrend.</b> Higher highs and higher lows; momentum confirmed by recent strength."
+        : rs < 40
+        ? "<b>Downtrend.</b> Lower highs and lower lows; price is below key moving averages."
+        : "<b>Range / consolidation.</b> Choppy two-way action with no decisive trend yet.")
+    : haveMA
+    ? (aboveEma50 && above200
+        ? "<b>Uptrend.</b> Price is trading above both its 50-day and 200-day moving averages."
+        : aboveEma50 === false && above200 === false
+        ? "<b>Downtrend.</b> Price is below both its 50-day and 200-day moving averages."
+        : "<b>Range / consolidation.</b> Price is mixed around its moving averages.")
+    : "Trend read not available yet — no price history synced.";
+  const maTxt = rs != null
+    ? (rs >= 60 ? "Above the 20, 50 and 200-day — bullish alignment."
+        : rs < 40 ? "Below the 50 and 200-day — bearish alignment."
+        : "Mixed: hugging the 50-day with a flat 200-day.")
+    : haveMA
+    ? (aboveEma50 && above200
+        ? "Above the 50-day and 200-day — bullish alignment."
+        : aboveEma50 === false && above200 === false
+        ? "Below the 50-day and 200-day — bearish alignment."
+        : `${aboveEma50 ? "Above" : "Below"} the 50-day, ${above200 ? "above" : "below"} the 200-day — mixed.`)
+    : "Moving-average posture not available yet.";
 
   const indRows: [string, string | null, string][] = [
     ["RSI (14)", rsi != null ? rsi.toFixed(2) : null, rsi == null ? "" : rsi > 70 ? "Sell" : rsi < 40 ? "Buy" : "Neutral"],
@@ -940,14 +889,15 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
       // fallback for the actual; e=0 (→ "—") when there's no matched pair.
       const repAct = q.epsActualReported ?? null;
       const repEst = q.epsEstimateReported ?? null;
-      const paired = repAct != null && repEst != null && repEst !== 0;
+      const pairedSurp = surprisePct(repAct, repEst);
+      const paired = pairedSurp != null;
       const act = repAct ?? (q.epsActual as number);
-      const surp = paired ? ((repAct - repEst) / Math.abs(repEst)) * 100 : 0;
+      const surp = pairedSurp ?? 0;
       return {
         q: q.endDate
           ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" })
           : `${q.fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim(),
-        e: paired ? repEst : 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
+        e: paired && repEst != null ? repEst : 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
       };
     });
   const beatStreak = (() => {
@@ -1265,6 +1215,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 ["52W Range",      hi != null && lo != null ? "$" + nf(lo) + " – $" + nf(hi) : null],
                 ["Avg Vol (20d)",  avgVol20 != null ? nf(avgVol20 / 1e6) + "M" : null],
                 ["Sector",         data.sector],
+                ["Industry",       titleCaseIndustry(data.industry)],
                 // Forward-annualized yield (latest declared rate × frequency ÷
                 // price), per the backend methodology change — the "(fwd)" tag
                 // tells users it's forward, not trailing-twelve-month.
@@ -1284,14 +1235,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               <h3 className="ai-c">◆ AI Technical Analysis</h3>
               <VendorTag v="polygon" />
             </div>
-            <div className="card-b">
-              {rs == null ? (
-                <DataState loading={liveCompanyLoading} label="Relative-strength rank hasn't been computed for this ticker yet, so the trend/MA read isn't available." />
-              ) : ([
+            <div className="card-b" style={{ maxHeight: "none" }}>
+              {([
                 ["Trend",            trendTxt as string],
                 ["Support / Resist.",hi != null ? `52-week high <b>$${nf(hi)}</b>${lo != null ? `; 52-week low <b>$${nf(lo)}</b>` : ""}.` : "Support/resistance levels not available."],
                 ["MA posture",       maTxt as string],
-                ["Rel. strength",    `Relative-strength rank <b class="${rs >= 70 ? "up" : rs < 40 ? "down" : ""}">${rs}/99</b> vs the market — ${rs >= 70 ? "group leader." : rs < 40 ? "lagging the tape." : "roughly in line."}`],
+                ["Rel. strength",    rs != null
+                  ? `Relative-strength rank <b class="${rs >= 70 ? "up" : rs < 40 ? "down" : ""}">${rs}/99</b> vs the market — ${rs >= 70 ? "group leader." : rs < 40 ? "lagging the tape." : "roughly in line."}`
+                  : "Not ranked yet — this ticker isn't in the synced RS universe."],
                 ["Volume",           rv != null ? `Relative volume <b>${rv.toFixed(1)}×</b> — ${rv > 2 ? "well above average (event-driven)." : "near normal."}` : "Relative volume not available."],
                 ["Event risk",       erDate !== "—" ? `Next earnings ${erDate}.` : "No upcoming earnings date on record."],
               ] as [string, string][]).map(l => (
@@ -1302,6 +1253,77 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               ))}
               <div style={{ marginTop: 10, fontSize: ".7rem", color: "var(--text-dim-solid)" }}>
                 Source: rs-rating.job, technical-indicators.job, a year of daily bars · informational purposes only, not investment advice.
+              </div>
+
+              {/* Latest news — the 4 most recent headlines for THIS ticker,
+                  deduped by URL, newest first; each opens the source article. */}
+              {(() => {
+                const seen = new Set<string>();
+                const latest = [...(tickerNews ?? [])]
+                  .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+                  .filter(n => { const k = n.url || n.id; if (seen.has(k)) return false; seen.add(k); return true; })
+                  .slice(0, 4);
+                if (latest.length === 0) return null;
+                return (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
+                    <div style={{ fontSize: ".66rem", fontWeight: 700, color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      Latest news · {sym} <VendorTag v={["polygon", "fmp"]} />
+                    </div>
+                    {latest.map((n, i) => (
+                      <a key={n.id} href={n.url} target="_blank" rel="noreferrer"
+                        style={{ display: "block", textDecoration: "none", cursor: "pointer",
+                          padding: "7px 0", borderBottom: i < latest.length - 1 ? "1px solid var(--border-soft)" : undefined }}>
+                        <div style={{ fontSize: ".78rem", color: "var(--text)", lineHeight: 1.4 }}>{n.headline}</div>
+                        <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span>{n.source} · {new Date(n.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                          {n.sentiment && <span className="pill" style={{ fontSize: ".54rem", textTransform: "capitalize", background: "var(--surface-3)", color: n.sentiment === "positive" ? "var(--up)" : n.sentiment === "negative" ? "var(--down)" : "var(--text-dim-solid)" }}>{n.sentiment}</span>}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* ── AI read — technicals + news synthesised by OpenRouter,
+                  appended below the deterministic rows + Latest-news list. AI
+                  output is rendered as PLAIN TEXT (never dangerouslySetInnerHTML)
+                  since it's model-generated / untrusted. ── */}
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
+                <div style={{ fontSize: ".66rem", fontWeight: 700, color: "var(--ai)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span>◆ AI read · {sym}</span>
+                  {aiAnalysis?.ok && (
+                    <span className="pill" style={{ fontSize: ".54rem", background: "var(--surface-3)", color: "var(--text-dim-solid)", textTransform: "none", letterSpacing: 0 }}>
+                      {aiAnalysis.model}{aiAnalysis.usedWebSearch ? " · web" : ""}
+                    </span>
+                  )}
+                </div>
+                {aiLoading && <DataState loading label="Generating AI analysis…" />}
+                {!aiLoading && (!!aiError || aiAnalysis?.ok === false) && (
+                  <div style={{ fontSize: ".76rem", color: "var(--text-dim-solid)", padding: "2px 0" }}>AI analysis unavailable right now.</div>
+                )}
+                {!aiLoading && aiAnalysis?.ok && aiAnalysis.analysis && (() => {
+                  const a = aiAnalysis.analysis!;
+                  return (
+                    <>
+                      {a.headline && <div style={{ fontSize: ".82rem", fontWeight: 600, color: "var(--text-hi)", marginBottom: 8 }}>{a.headline}</div>}
+                      {a.volatility && (
+                        <div className="ai-line"><span className="k">Volatility</span><span className="v"><b style={{ color: "var(--text-hi)", textTransform: "capitalize" }}>{a.volatility.flag}</b> — {a.volatility.note}</span></div>
+                      )}
+                      {a.momentum && (
+                        <div className="ai-line"><span className="k">Momentum</span><span className="v"><b style={{ color: "var(--text-hi)", textTransform: "capitalize" }}>{a.momentum.state}</b> — {a.momentum.note}</span></div>
+                      )}
+                      {a.newsSummary && (
+                        <div className="ai-line"><span className="k">News</span><span className="v">{a.newsSummary}</span></div>
+                      )}
+                      {a.technicalSummary && (
+                        <div className="ai-line"><span className="k">Setup</span><span className="v">{a.technicalSummary}</span></div>
+                      )}
+                      <div style={{ marginTop: 8, fontSize: ".64rem", color: "var(--text-dim-solid)" }}>
+                        AI-generated · informational only, not investment advice.
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>

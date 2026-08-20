@@ -11,6 +11,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
+import { surprisePct } from "../types";
 
 // Live source (Polygon SEC financials) has ticker/date/epsEstimate/epsActual —
 // no session (BMO/AMC), guidance, price reaction, implied move, or quarterly
@@ -18,40 +19,6 @@ import { isoDay, addDays, mondayOf } from "../calendar-range";
 // numbers (EPS estimate/actual from this feed, financials from GET
 // /live/financials) — fields with no live source render as NotAvailable/
 // DataState instead of the illustrative mock this file used to blend in.
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface IncRow  { c: string; rev: number; cogs: number; gp: number; opex: number; oi: number; ni: number; eps: number; }
-
-/**
- * Real quarterly/annual financials (GET /live/financials) mapped onto the
- * IncRow shape the existing chart/table render — mirrors stock.tsx's
- * incRowsFromFinancials so the two screens never show different numbers.
- */
-function incRowsFromFinancials(doc: FinancialsDoc | null, period: "Q" | "A" = "Q"): IncRow[] {
-  const rows: (QuarterFinancials | AnnualFinancials)[] = doc ? (period === "A" ? doc.annual : doc.quarters) : [];
-  if (rows.length === 0) return [];
-  return rows.slice(0, 10).map(r => {
-    const revenue = r.revenue ?? 0;
-    const grossProfit = r.grossProfit ?? 0;
-    const operatingIncome = r.operatingIncome ?? 0;
-    const netIncome = r.netIncome ?? 0;
-    const opex = (r as QuarterFinancials).operatingExpenses ?? Math.max(0, grossProfit - operatingIncome);
-    const label = period === "A"
-      ? `FY '${(r.fiscalYear ?? "").slice(-2)}`
-      : `${(r as QuarterFinancials).fiscalPeriod ?? "?"} '${(r.fiscalYear ?? "").slice(-2)}`;
-    return {
-      c: label,
-      rev: revenue / 1e9,
-      cogs: Math.max(0, revenue - grossProfit) / 1e9,
-      gp: grossProfit / 1e9,
-      opex: opex / 1e9,
-      oi: operatingIncome / 1e9,
-      ni: netIncome / 1e9,
-      eps: r.epsActual ?? 0,
-    };
-  });
-}
 
 // ── Earnings calendar row shape ─────────────────────────────────────────────
 
@@ -117,11 +84,9 @@ interface CalRow {
   revE: number | null; revA: number | null; revSurp: number | null;
 }
 
-/** Guarded on a near-zero estimate: dividing by ~$0 EPS yields a nonsense ±Infinity%. */
-function surprise(est: number | null, act: number | null): number | null {
-  if (est == null || act == null || Math.abs(est) < 0.005) return null;
-  return ((act - est) / Math.abs(est)) * 100;
-}
+/** Local (est, act) argument order over the shared derivation. */
+const surprise = (est: number | null, act: number | null): number | null =>
+  surprisePct(act, est);
 
 function fmtPctSigned(v: number | null, digits = 0): string {
   return v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
@@ -241,114 +206,7 @@ function MiniCalendar({ value, onPick, onClose }: { value: string; onPick: (iso:
 
 // ── SVG Charts ───────────────────────────────────────────────────────────────
 
-// No live source exists for post-earnings stock-move %, so unlike the old
-// mock version this only draws the two numbers the live earnings feed
-// actually has (EPS estimate vs. actual) — no fabricated move line/dots.
-function EpsChart({ hist }: { hist: EarnQ[] }) {
-  const d = [...hist].reverse();
-  const W = 580, H = 210, PADL = 40, PADR = 18, PADT = 14, PADB = 30;
-  const iw = W - PADL - PADR, ih = H - PADT - PADB;
-  const allVals = d.flatMap(x => [x.e, x.a]);
-  const dataMax = Math.max(...allVals) || 1;
-  const maxE = dataMax * 1.15 || 1;
-  const n = d.length, gw = iw / n, bw = gw * 0.28;
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => dataMax * f);
 
-  const bars: React.ReactElement[] = [];
-  const labels: React.ReactElement[] = [];
-
-  d.forEach((x, i) => {
-    const cx = PADL + gw * i + gw / 2;
-    const eh = x.e / maxE * ih, ah = x.a / maxE * ih;
-    const ex = cx - bw - 2, ax = cx + 2;
-    bars.push(
-      <rect key={`e${i}`} x={ex} y={PADT + ih - eh} width={bw} height={eh} rx={2} style={{ fill: "var(--text-dim-solid)" }} />,
-      <rect key={`a${i}`} x={ax} y={PADT + ih - ah} width={bw} height={ah} rx={2}
-        style={{ fill: x.surp > 0 ? "var(--up)" : x.surp < 0 ? "var(--down)" : "var(--brand-2)" }} />,
-    );
-    // Show every quarter label (previously every other was skipped, so the
-    // axis read Mar'24, Sep'24, … with the in-between quarters missing). Each
-    // ~30px label sits in its own ~48px slot, so they fit horizontally — same
-    // as the IncChart axis directly below.
-    labels.push(
-      <text key={`l${i}`} x={cx} y={H - 10} textAnchor="middle"
-        style={{ fill: "var(--text-dim-solid)", fontSize: "0.5625rem" }}>
-        {x.q.replace(" ", "'")}
-      </text>
-    );
-  });
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, display: "block" }}>
-      {yTicks.map((v, i) => {
-        const y = PADT + ih - (v / maxE) * ih;
-        return (
-          <g key={`yt${i}`}>
-            <line x1={PADL} y1={y} x2={W - PADR} y2={y} style={{ stroke: "var(--border)" }} strokeDasharray="3 3" opacity={0.45} />
-            <text x={PADL - 5} y={y + 3} textAnchor="end" style={{ fill: "var(--text-dim-solid)", fontSize: "0.5rem" }}>${v.toFixed(2)}</text>
-          </g>
-        );
-      })}
-      {bars}
-      {labels}
-    </svg>
-  );
-}
-
-function IncChart({ inc }: { inc: IncRow[] }) {
-  const d = [...inc].reverse();
-  const W = 580, H = 200, PADL = 46, PADR = 8, PADT = 14, PADB = 26;
-  const iw = W - PADL - PADR, ih = H - PADT - PADB;
-  const dataMax = Math.max(...d.map(x => x.rev)) || 1;
-  const max = dataMax * 1.12 || 1;
-  const n = d.length, gw = iw / n, bw = gw * 0.18;
-  const fmtAxis = (v: number) => v >= 100 ? `$${v.toFixed(0)}B` : v >= 1 ? `$${v.toFixed(1)}B` : `$${Math.round(v * 1000)}M`;
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => dataMax * f);
-
-  type IncKey = "rev" | "gp" | "ni";
-  const series: [IncKey, string][] = [
-    ["rev", "var(--brand)"],
-    ["gp",  "var(--ai)"],
-    ["ni",  "var(--up)"],
-  ];
-
-  const bars: React.ReactElement[] = [];
-  const labels: React.ReactElement[] = [];
-
-  d.forEach((x, i) => {
-    const gx = PADL + gw * i;
-    series.forEach(([key, color], si) => {
-      const v = x[key];
-      const h = v / max * ih;
-      const bx = gx + gw * 0.1 + si * (bw + 3);
-      bars.push(
-        <rect key={`${i}${si}`} x={bx} y={PADT + ih - h} width={bw} height={h} rx={2}
-          style={{ fill: color }} />
-      );
-    });
-    labels.push(
-      <text key={`l${i}`} x={gx + gw / 2} y={H - 8} textAnchor="middle"
-        style={{ fill: "var(--text-dim-solid)", fontSize: "0.5625rem" }}>
-        {x.c.replace(" ", "'")}
-      </text>
-    );
-  });
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, display: "block" }}>
-      {yTicks.map((v, i) => {
-        const y = PADT + ih - (v / max) * ih;
-        return (
-          <g key={`yt${i}`}>
-            <line x1={PADL} y1={y} x2={W - PADR} y2={y} style={{ stroke: "var(--border)" }} strokeDasharray="3 3" opacity={0.45} />
-            <text x={PADL - 5} y={y + 3} textAnchor="end" style={{ fill: "var(--text-dim-solid)", fontSize: "0.5rem" }}>{fmtAxis(v)}</text>
-          </g>
-        );
-      })}
-      {bars}{labels}
-    </svg>
-  );
-}
 
 // ── Company logo chip ─────────────────────────────────────────────────────────
 
@@ -621,8 +479,11 @@ export function EarningsScreen() {
   const [session, setSession] = useState<SessionKey>("both");
   const [pickerOpen, setPickerOpen]   = useState(false);
   // Quarterly vs Yearly toggles for the two detail tables (independent).
-  const [histPeriod, setHistPeriod] = useState<"Q" | "A">("Q");
-  const [incPeriod, setIncPeriod]   = useState<"Q" | "A">("Q");
+  // Quarterly basis for the EPS-history table. The Q/A toggle lived in the
+  // removed legacy detail block, so this is fixed at "Q" (the only basis that
+  // carries per-quarter estimates for beat/miss). Kept as a widened variable so
+  // the annual branches below stay valid if the toggle is ever reintroduced.
+  const histPeriod = "Q" as "Q" | "A";
   const [aiReadOpen, setAiReadOpen] = useState(true);
   const [tickerSearch, setTickerSearch] = useState("");
   // Detail mode: clicking a stock opens a split view (weekly picker + details)
@@ -632,8 +493,6 @@ export function EarningsScreen() {
   // The two legacy inline company-detail blocks that used to render at the bottom
   // of the calendar view (a duplicate header + EPS metrics, and an earnings-
   // history / income-statement / AI-read stack) are superseded by the full detail
-  // mode. Keep the code but keep them out of the UI.
-  const SHOW_LEGACY_EARNINGS_DETAIL = false;
 
   // No company is selected by default — the detail panels appear only after the
   // user clicks a reporting company in the calendar.
@@ -855,8 +714,9 @@ export function EarningsScreen() {
     const repEst = histPeriod === "Q" ? (qq.epsEstimateReported ?? null) : null;
     const act = repAct ?? (q.epsActual as number);
     const est = repEst ?? ((qq.epsEstimate ?? null));
-    const paired = repAct != null && repEst != null && repEst !== 0;
-    const surp = paired ? ((repAct - repEst) / Math.abs(repEst)) * 100 : 0;
+    const pairedSurp = surprisePct(repAct, repEst);
+    const paired = pairedSurp != null;
+    const surp = pairedSurp ?? 0;
     if (paired) { pairedTotal++; if (surp >= 0) pairedBeats++; }
     const label = q.endDate
       ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", histPeriod === "A" ? { year: "numeric" } : { month: "short", year: "2-digit" })
@@ -876,9 +736,7 @@ export function EarningsScreen() {
       ? `$${fwdAnnual.epsEstimate.toFixed(2)} · FY${fwdAnnual.fiscalYear}`
       : null;
 
-  const inc = incRowsFromFinancials(financialsDoc, incPeriod);
 
-  const fmtB = (v: number) => v >= 1 ? `$${v.toFixed(2)}B` : `$${(v * 1000).toFixed(0)}M`;
 
   const aiRead = liveMatch
     ? `${sel} ${liveMatch.epsActual != null
@@ -1096,254 +954,8 @@ export function EarningsScreen() {
       )}
 
       {/* ── Legacy inline detail — superseded by detail mode; kept gated ── */}
-      {SHOW_LEGACY_EARNINGS_DETAIL && !detailOpen && sel && (
-        <div className="card" style={{ marginTop: 14 }}>
-          <div className="card-h">
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <StockLogo sym={sel} size={36} />
-              <div>
-                <span style={{ fontWeight: 700, color: "var(--text-hi)", fontSize: ".95rem" }}>{sel}</span>
-                <span style={{ color: "var(--text-dim-solid)", fontSize: ".78rem", marginLeft: 8 }}>
-                  {liveCompanySel?.name ?? sel} · {liveCompanySel?.sector ?? <NotAvailable />}
-                </span>
-              </div>
-              <span className="pill" style={{ marginLeft: 4, background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>
-                Session: <NotAvailable />
-              </span>
-              {hasLiveEps && (
-                <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)" }}>live EPS · Polygon</span>
-              )}
-              <VendorTag v={["polygon", "fmp", "sec"]} />
-              {/* Action buttons — inline, same row */}
-              <div style={{ display: "flex", gap: 6, marginLeft: 4 }}>
-              <button
-                title="Earnings call"
-                onClick={() => setSelectedCall(sel)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  background: "var(--surface-2)", border: "1px solid var(--border-soft)",
-                  borderRadius: 8, padding: "5px 10px", cursor: "pointer",
-                  color: "var(--text)", fontSize: ".75rem", fontWeight: 600,
-                  transition: ".15s",
-                }}
-              >
-                <svg viewBox="0 0 24 24" width={12} height={12} fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>
-                Earnings call
-              </button>
-              <button
-                title="AI earnings analysis"
-                onClick={() => setAiModalSym(sel)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  background: "var(--surface-2)", border: "1px solid var(--border-soft)",
-                  borderRadius: 8, padding: "5px 10px", cursor: "pointer",
-                  color: "var(--ai)", fontSize: ".75rem", fontWeight: 600,
-                }}
-              >
-                <span style={{ fontSize: ".85rem", lineHeight: 1 }}>◆</span>
-                AI analysis
-              </button>
-              </div>{/* end buttons */}
-            </div>{/* end outer flex */}
-          </div>{/* end card-h */}
-          <div className="card-b" style={{ paddingTop: 10 }}>
-            <div className="metric-grid" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 12 }}>
-              <div className="m">
-                <div className="k">EPS estimate</div>
-                <div className="v">{liveMatch?.epsEstimate != null ? `$${liveMatch.epsEstimate.toFixed(2)}` : "—"}</div>
-              </div>
-              <div className="m">
-                <div className="k">EPS actual</div>
-                {liveMatch?.epsActual != null
-                  ? <div className={`v ${liveMatch.epsEstimate != null ? (liveMatch.epsActual >= liveMatch.epsEstimate ? "up" : "down") : ""}`}>${liveMatch.epsActual.toFixed(2)}</div>
-                  : <div className="v" style={{ color: "var(--text-dim-solid)" }}>Pending</div>}
-              </div>
-              <div className="m">
-                <div className="k">Guidance</div>
-                <div className="v" style={{ fontSize: ".95rem" }}><NotAvailable /></div>
-              </div>
-              <div className="m">
-                <div className="k">Session</div>
-                <div className="v" style={{ fontSize: ".95rem" }}>{annMatch?.session ?? <NotAvailable />}</div>
-              </div>
-              <div className="m">
-                <div className="k">Reaction</div>
-                <div className="v" style={{ fontSize: ".95rem" }}>{annMatch?.reactionPct != null ? <span className={cls(annMatch.reactionPct)}>{sign(annMatch.reactionPct)}</span> : <NotAvailable />}</div>
-              </div>
-            </div>
-            <p style={{ fontSize: ".82rem", color: "var(--text-dim-solid)", margin: 0 }}>{aiRead}</p>
-          </div>
-        </div>
-      )}
 
       {/* ── Legacy detail (EPS history + Income statement) — gated off ── */}
-      {SHOW_LEGACY_EARNINGS_DETAIL && !detailOpen && sel && (
-      <>
-      <div className="dash" style={{ marginTop: 16 }}>
-        {/* col-6: 10-quarter EPS history */}
-        <div className="col-6">
-          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-            <div className="card-h">
-              <h3>{sel} · earnings history <VendorTag v={["polygon", "fmp"]} /></h3>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div className="ecal-seg">
-                  <button className={`ecal-segbtn${histPeriod === "Q" ? " on" : ""}`} onClick={() => setHistPeriod("Q")}>Quarterly</button>
-                  <button className={`ecal-segbtn${histPeriod === "A" ? " on" : ""}`} onClick={() => setHistPeriod("A")}>Yearly</button>
-                </div>
-                {hist.length === 0 || !hasEstimates ? (
-                  hist.length > 0
-                    ? <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{hist.length} reported</span>
-                    : null
-                ) : beats / hist.length >= 0.7
-                  ? <span className="pill up">{beats}/{hist.length} beats</span>
-                  : beats / hist.length < 0.5
-                  ? <span className="pill dn">{beats}/{hist.length} beats</span>
-                  : <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-dim-solid)" }}>{beats}/{hist.length} beats</span>}
-                <ExpandBtn title={`${sel} · 10-quarter earnings history`} node={<EpsChart hist={hist} />} />
-              </div>
-            </div>
-            <div className="card-b" style={{ paddingTop: 8, flex: 1, display: "flex", flexDirection: "column" }}>
-              {hist.length === 0 ? (
-                <DataState loading={financialsLoading} label={`No reported earnings history for ${sel} yet.`} height="100%" />
-              ) : (
-                <>
-                  <div className="ec-legend">
-                    {hasEstimates ? (
-                      <>
-                        <span><i style={{ background: "var(--text-dim-solid)" }} /> EPS estimate</span>
-                        <span><i style={{ background: "var(--up)" }} /> Beat</span>
-                        <span><i style={{ background: "var(--down)" }} /> Miss</span>
-                      </>
-                    ) : (
-                      <span><i style={{ background: "var(--brand-2)" }} /> Reported EPS (diluted)</span>
-                    )}
-                  </div>
-                  <EpsChart hist={hist} />
-                  <div style={{ overflowX: "auto", marginTop: 10 }}>
-                      <table className="tbl">
-                        <thead>
-                          <tr>
-                            <th>{histPeriod === "A" ? "Year" : "Quarter"}</th>
-                            <th className="num">EPS est</th>
-                            <th className="num">EPS act</th>
-                            <th className="num">Surprise</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {hist.map(h => (
-                            <tr key={h.q}>
-                              <td><b style={{ color: "var(--text-hi)" }}>{h.q}</b></td>
-                              <td className="num">{hasEstimates ? `$${h.e.toFixed(2)}` : "—"}</td>
-                              <td className="num">${h.a.toFixed(2)}</td>
-                              <td className={`num ${hasEstimates ? cls(h.surp) : ""}`}>{hasEstimates ? sign(h.surp) : "—"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* col-6: Income statement */}
-        <div className="col-6">
-          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-            <div className="card-h">
-              <h3>{sel} · Income statement <VendorTag v="polygon" /></h3>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div className="ecal-seg">
-                  <button className={`ecal-segbtn${incPeriod === "Q" ? " on" : ""}`} onClick={() => setIncPeriod("Q")}>Quarterly</button>
-                  <button className={`ecal-segbtn${incPeriod === "A" ? " on" : ""}`} onClick={() => setIncPeriod("A")}>Yearly</button>
-                </div>
-                <ExpandBtn title={`${sel} · Income statement`} node={<IncChart inc={inc} />} />
-              </div>
-            </div>
-            <div className="card-b" style={{ paddingTop: 8, flex: 1, display: "flex", flexDirection: "column" }}>
-              {inc.length === 0 ? (
-                <DataState loading={financialsLoading} label={`No live ${incPeriod === "A" ? "annual" : "quarterly"} financials synced for ${sel} yet.`} height="100%" />
-              ) : (
-                <>
-                  <div className="ec-legend">
-                    <span><i style={{ background: "var(--brand)" }} /> Revenue</span>
-                    <span><i style={{ background: "var(--ai)" }} /> Gross profit</span>
-                    <span><i style={{ background: "var(--up)" }} /> Net income</span>
-                  </div>
-                  <IncChart inc={inc} />
-                  <div style={{ overflowX: "auto", marginTop: 10 }}>
-                      <table className="tbl">
-                        <thead>
-                          <tr>
-                            <th>Item</th>
-                            {inc.map(c => <th key={c.c} className="num">{c.c}</th>)}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(
-                            [
-                              ["Revenue",            "rev",  true ],
-                              ["Cost of revenue",    "cogs", false],
-                              ["Gross profit",       "gp",   true ],
-                              ["Operating expenses", "opex", false],
-                              ["Operating income",   "oi",   true ],
-                              ["Net income",         "ni",   true ],
-                              ["Diluted EPS",        "eps",  false],
-                            ] as [string, keyof IncRow, boolean][]
-                          ).map(([lbl, key, bold]) => (
-                            <tr key={lbl}>
-                              <td style={bold ? { fontWeight: 700, color: "var(--text-hi)" } : undefined}>{lbl}</td>
-                              {inc.map(c => (
-                                <td key={c.c} className="num"
-                                  style={bold ? { fontWeight: 700, color: "var(--text-hi)" } : undefined}>
-                                  {key === "eps" ? `$${(c[key] as number).toFixed(2)}` : fmtB(c[key] as number)}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── AI earnings read — expandable, same widget as the dashboard ──────── */}
-      <div className={`wmn${aiReadOpen ? " open" : ""}`} style={{ marginTop: 12 }}>
-        <button type="button" className="wmn-h" aria-expanded={aiReadOpen} onClick={() => setAiReadOpen(o => !o)}>
-          <div className="t">
-            <div className="wmn-orb">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z" fill="currentColor" />
-              </svg>
-            </div>
-            <div>
-              <h2 style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>AI earnings read · {sel} <VendorTag v={["polygon", "fmp"]} /></h2>
-              <div className="meta">Reported vs. estimates · guidance focus</div>
-            </div>
-          </div>
-          <svg className="wmn-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <div className="wmn-collapse">
-          <div className="wmn-collapse-inner">
-            <p style={{ fontSize: ".85rem", lineHeight: 1.6, color: "var(--text)", margin: 0 }}>
-              {aiRead}{" "}
-              Watch revenue growth and forward guidance most.{" "}
-              <button className="btn" style={{ marginLeft: 8, padding: "4px 10px" }}
-                onClick={() => openStockFull(sel)}>
-                Open full stock page →
-              </button>
-            </p>
-          </div>
-        </div>
-      </div>
-      </>
-      )}
 
       {/* Earnings call detail drawer — honest not-connected state, no fabricated summary/transcript */}
       {selectedCall && (

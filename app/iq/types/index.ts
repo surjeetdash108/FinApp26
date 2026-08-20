@@ -3,6 +3,7 @@ export * from "./market-status";
 export * from "./movers";
 export * from "./sectors";
 export * from "./companies";
+export * from "./ai";
 export * from "./analyst";
 export * from "./earnings";
 export * from "./ipos";
