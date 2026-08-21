@@ -34,6 +34,16 @@ interface InstOwnDoc {
   investorsHoldingChange: number | null;
   numberOf13Fshares: number | null; numberOf13FsharesChange: number | null;
   totalInvested: number | null; ownershipPercent: number | null; putCallRatio: number | null;
+  /** Newest-first filer history written by institutional-ownership.job. */
+  history?: Array<{
+    year: number; quarter: number;
+    investorsHolding: number | null; ownershipPercent: number | null;
+  }> | null;
+}
+
+/** "Q2 '26" — compact enough for eight columns side by side. */
+function qLabel(year: number, quarter: number): string {
+  return `Q${quarter} '${String(year).slice(2)}`;
 }
 
 function fmtValue(v: number) {
@@ -339,6 +349,23 @@ export function InsiderScreen() {
       ? (b.investorsHolding ?? 0) - (a.investorsHolding ?? 0)
       : Math.abs(b.investorsHoldingChange ?? 0) - Math.abs(a.investorsHoldingChange ?? 0),
   ).slice(0, 50);
+  // Last 4 reporting quarters, newest first, derived from the data rather than
+  // hardcoded so the header follows the 13F cycle on its own. Empty until the
+  // sync has backfilled history, in which case the table renders as before.
+  const instQuarters = (() => {
+    const seen = new Map<string, { year: number; quarter: number }>();
+    for (const d of instSorted) {
+      for (const h of d.history ?? []) {
+        if (h?.year != null && h?.quarter != null) {
+          seen.set(qLabel(h.year, h.quarter), { year: h.year, quarter: h.quarter });
+        }
+      }
+    }
+    return [...seen.entries()]
+      .sort((a, b) => b[1].year - a[1].year || b[1].quarter - a[1].quarter)
+      .slice(0, 4)
+      .map(([label]) => label);
+  })();
   const instActive = [...instRows]
     .sort((a, b) => (b.investorsHolding ?? 0) - (a.investorsHolding ?? 0))
     .slice(0, 6);
@@ -515,6 +542,9 @@ export function InsiderScreen() {
                   <thead>
                     <tr>
                       <th>Ticker</th><th className="num">13F filers</th><th className="num">Inst. %</th>
+                      {instQuarters.map(q => (
+                        <th key={q} className="num" style={{ whiteSpace: "nowrap", fontWeight: 500 }}>{q}</th>
+                      ))}
                       <th className="num">Filers QoQ</th><th className="num">Shares QoQ</th>
                     </tr>
                   </thead>
@@ -526,6 +556,14 @@ export function InsiderScreen() {
                         </td>
                         <td className="num">{fmtCount(d.investorsHolding)}</td>
                         <td className="num">{d.ownershipPercent != null ? `${d.ownershipPercent.toFixed(1)}%` : <NotAvailable />}</td>
+                        {instQuarters.map(q => {
+                          const pt = (d.history ?? []).find(h => qLabel(h.year, h.quarter) === q);
+                          return (
+                            <td key={q} className="num" style={{ color: "var(--text-dim-solid)" }}>
+                              {pt?.investorsHolding != null ? fmtCount(pt.investorsHolding) : <NotAvailable />}
+                            </td>
+                          );
+                        })}
                         <td className="num">
                           {d.investorsHoldingChange == null ? <NotAvailable /> : (
                             <b className={d.investorsHoldingChange > 0 ? "up" : d.investorsHoldingChange < 0 ? "down" : ""}>
