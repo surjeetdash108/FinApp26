@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
+import { useLiveQuotes } from "../live-quotes-context";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import type { CompanyDoc } from "../types";
 import { arr, sign, DataState, VendorTag } from "../utils";
@@ -45,9 +46,9 @@ export function WatchlistScreen() {
   // Live quotes for the active list (polls /live/quotes every 30s), overlaid on
   // top of the synced company price so watchlist rows track the live market.
   const quoteTickers = items.slice(0, 25);
-  const quotesPath = quoteTickers.length ? `/live/quotes?tickers=${encodeURIComponent(quoteTickers.join(","))}` : null;
-  const { data: liveQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(quotesPath, 30000);
-  const quoteByTicker = useMemo(() => new Map((liveQuotes ?? []).map(q => [q.ticker, q])), [liveQuotes]);
+  // Shared app-wide poll — identical values to every other live surface.
+  const quoteByTickerShared = useLiveQuotes(quoteTickers);
+  const quoteByTicker = quoteByTickerShared;
 
   const list = items.map(sym => {
     const c = byTicker.get(sym);
@@ -114,6 +115,27 @@ export function WatchlistScreen() {
 
   return (
     <>
+      {/* AI watchlist summary sits at the very top of the page — directly under
+          the global ticker tape, above the watchlist toolbar. */}
+      {uid && (
+        <div style={{ padding: "14px 18px 0" }}>
+          <AiSummaryCard title="◆ AI watchlist summary" pill={<span className="pill ai">leaders · laggards · alerts</span>} onOpenChange={(o) => o && setAiOpen(true)}>
+            {sumTxt == null ? (
+              <DataState loading={companiesLoading || wlLoading} label="No live price data for any watched ticker yet." />
+            ) : (
+              <>
+                <p dangerouslySetInnerHTML={{ __html: sumTxt }} style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }} />
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span className="src-chip">Up {up}/{priced.length}</span>
+                  <span className="src-chip">Synced to your account</span>
+                </div>
+              </>
+            )}
+            <AiAggregateBlock path={aiPath} label="watchlist" />
+          </AiSummaryCard>
+        </div>
+      )}
+
       <div className="page-head">
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           {/* Active-watchlist dropdown */}
@@ -175,21 +197,6 @@ export function WatchlistScreen() {
           <DataState label="Sign in to create and sync watchlists." />
         ) : (
         <>
-        <AiSummaryCard title="◆ AI watchlist summary" pill={<span className="pill ai">leaders · laggards · alerts</span>} onOpenChange={(o) => o && setAiOpen(true)} fullHeight>
-          {sumTxt == null ? (
-            <DataState loading={companiesLoading || wlLoading} label="No live price data for any watched ticker yet." />
-          ) : (
-            <>
-              <p dangerouslySetInnerHTML={{ __html: sumTxt }} style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }} />
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <span className="src-chip">Up {up}/{priced.length}</span>
-                <span className="src-chip">Synced to your account</span>
-              </div>
-            </>
-          )}
-          <AiAggregateBlock path={aiPath} label="watchlist" />
-        </AiSummaryCard>
-
         <StockPanelLayout
           selectedSym={sel ?? ""}
           chartPx={selData?.price ?? 0}

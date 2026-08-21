@@ -14,17 +14,28 @@ export function reportedQuarterEps(q: QuarterFinancials): number | null {
  * near-zero guards (`!== 0`, `< 0.005`, `< 0.05`), so the same quarter could
  * render a number on one screen and "—" on another. One definition now.
  *
- * The guard is `|estimate| < 0.005`: EPS is displayed to 2 decimals, so an
- * estimate below half a cent shows as "$0.00" and a percentage against it is
- * meaningless (it yields absurd four-digit surprises). Returns null there —
- * callers that need a number substitute their own fallback.
+ * Two guards, both there to stop a mathematically-correct-but-useless number
+ * reaching the screen:
+ *
+ *  - `|estimate| < MIN_ESTIMATE` (5c): dividing by a near-zero estimate explodes.
+ *    A live audit found 37 stored rows above ±500%, e.g. AGPU actual 1.1471 vs
+ *    estimate 0.009 = +12,646%. A penny-estimate quarter is a rounding artifact,
+ *    not a 12,000% beat.
+ *  - `|surprise| > MAX_SURPRISE` (500%): a real beat this large is essentially
+ *    always a bad/stale estimate rather than a genuine result.
+ *
+ * Both return null, so callers show "—" instead of a fabricated headline.
  */
+const MIN_ESTIMATE = 0.05;
+const MAX_SURPRISE = 500;
+
 export function surprisePct(
   actual: number | null | undefined,
   estimate: number | null | undefined,
 ): number | null {
-  if (actual == null || estimate == null || Math.abs(estimate) < 0.005) return null;
-  return ((actual - estimate) / Math.abs(estimate)) * 100;
+  if (actual == null || estimate == null || Math.abs(estimate) < MIN_ESTIMATE) return null;
+  const pct = ((actual - estimate) / Math.abs(estimate)) * 100;
+  return Math.abs(pct) > MAX_SURPRISE ? null : pct;
 }
 
 /** Matched-pair EPS surprise % (FMP reported actual vs the estimate from the same

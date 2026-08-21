@@ -5,6 +5,7 @@ import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
+import { useLiveQuotes } from "../live-quotes-context";
 import type { CompanyDoc, HoldingDoc } from "../types";
 import { cls, arr, sign, DataState, VendorTag } from "../utils";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
@@ -52,8 +53,8 @@ export function PortfolioScreen() {
   // Live quotes for the holdings (polls /live/quotes every 30s), overlaid on the
   // synced company price so position values/P&L track the live market.
   const quoteTickers = holdings.map(h => h.ticker).slice(0, 25);
-  const quotesPath = quoteTickers.length ? `/live/quotes?tickers=${encodeURIComponent(quoteTickers.join(","))}` : null;
-  const { data: liveQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(quotesPath, 30000);
+  // Shared app-wide poll — identical values to every other live surface.
+  const quoteByTickerShared = useLiveQuotes(quoteTickers);
 
   // Cumulative AI read over the whole portfolio. Deferred until the summary
   // card is expanded: it is collapsed by default, and generating for a card
@@ -61,7 +62,7 @@ export function PortfolioScreen() {
   // re-generated whenever the holdings change.
   const [aiOpen, setAiOpen] = useState(false);
   const aiPath = aiOpen ? "/api/ai/portfolio" : null;
-  const quoteByTicker = new Map((liveQuotes ?? []).map(q => [q.ticker, q]));
+  const quoteByTicker = quoteByTickerShared;
 
   // Every field beyond ticker/shares/positionSize/conviction comes from the
   // live quote (falling back to the synced companies collection) — a holding

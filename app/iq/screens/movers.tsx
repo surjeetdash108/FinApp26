@@ -7,6 +7,7 @@ import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag } from "../utils
 import { apiGet } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
+import { useLiveQuotes } from "../live-quotes-context";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import type { LiveMoverDoc, CompanyDoc, NewsArticleDoc, AnalystConsensusDoc, AnalystRatingChange } from "../types";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
@@ -27,6 +28,15 @@ type TabKey = "win" | "lose" | "vol";
 // otherwise sit there returning nothing; "Micro" (which the feed does produce)
 // was missing entirely before.
 const CAP_ORDER = ["Mega", "Large", "Mid", "Small", "Micro"];
+
+/** Sortable columns. `cap` orders by the tier's rank (Mega→Micro), not the
+ *  label's alphabet, so the sort reads as a real size ordering. */
+type MoverSortKey = "company" | "price" | "change" | "rvol" | "cap";
+/** Direction a column starts in on first click — text ascends (A→Z), numbers
+ *  descend (biggest first), which is what you almost always want. */
+const SORT_FIRST_DIR: Record<MoverSortKey, "asc" | "desc"> = {
+  company: "asc", price: "desc", change: "desc", rvol: "desc", cap: "asc",
+};
 
 /**
  * Live-only: a row exists here only if a real `market_movers` doc exists for
@@ -130,6 +140,10 @@ export function MoversScreen() {
   const [cap,          setCap]          = useState("All");
   const [query,        setQuery]        = useState("");
   const [page,         setPage]         = useState(0);
+  // Column sort. null = the tab's own ranking (gainers by %chg desc, losers by
+  // %chg asc, unusual-volume by RVOL desc). Clicking a header overrides it.
+  const [sortKey,      setSortKey]      = useState<MoverSortKey | null>(null);
+  const [sortDir,      setSortDir]      = useState<"asc" | "desc">("desc");
   const [selectedSym,  setSelectedSym]  = useState<string | null>(null);
   const PAGE_SIZE = 25;
   const q = query.trim().toUpperCase();
@@ -173,8 +187,51 @@ export function MoversScreen() {
 
   const filtered = tabCapRows
     .filter(m => matchesSector(sector, m.ticker, m.sector))
-    .filter(m => !q || m.ticker.toUpperCase().includes(q) || (m.name ?? "").toUpperCase().includes(q))
+    .filter(m => {
+      if (!q) return true;
+      // Free-text search across EVERY displayed field — ticker, company name,
+      // sector, cap tier and MA posture, plus the numeric columns as text
+      // (price, %change, RVOL, 5-day %) — so a user can filter by any of them
+      // (e.g. "financial", "large", "169", "+5"). Fields are joined with a
+      // separator so a query can't span two adjacent fields.
+      const hay = [
+        m.ticker,
+        m.name,
+        m.sector,
+        m.cap,
+        m.maPosture,
+        m.price != null ? String(m.price) : "",
+        String(m.pctChange),
+        m.rvolRatio ? String(m.rvolRatio) : "",
+        m.weekPct != null ? String(m.weekPct) : "",
+      ].join(" | ").toUpperCase();
+      return hay.includes(q);
+    })
     .sort((a, b) => {
+      // Explicit column sort wins over the tab's default ranking.
+      if (sortKey) {
+        const dir = sortDir === "asc" ? 1 : -1;
+        switch (sortKey) {
+          case "company":
+            return a.ticker.localeCompare(b.ticker) * dir;
+          case "price":
+            return ((a.price ?? 0) - (b.price ?? 0)) * dir;
+          case "change":
+            return (a.pctChange - b.pctChange) * dir;
+          case "rvol":
+            return ((a.rvolRatio ?? 0) - (b.rvolRatio ?? 0)) * dir;
+          case "cap": {
+            // Unknown tiers sort last in either direction rather than jumping
+            // to the top as index -1.
+            const rank = (c: string | null) => {
+              const i = CAP_ORDER.indexOf(c ?? "");
+              return i === -1 ? CAP_ORDER.length : i;
+            };
+            const d = rank(a.cap) - rank(b.cap);
+            return (d !== 0 ? d : (a.sector ?? "").localeCompare(b.sector ?? "")) * dir;
+          }
+        }
+      }
       if (tab === "win")  return b.pctChange    - a.pctChange;
       if (tab === "lose") return a.pctChange    - b.pctChange;
       return b.rvolRatio - a.rvolRatio; // "vol"
@@ -191,10 +248,47 @@ export function MoversScreen() {
   // (sort above); only the shown price/change go live. Polls every 30s and
   // refetches when the visible page changes (tab/sector/cap/search/page).
   const shownTickers = pageRows.map(m => m.ticker);
-  const qpath = shownTickers.length ? `/live/quotes?tickers=${encodeURIComponent(shownTickers.join(","))}` : null;
-  type QuoteRow = { ticker: string; price: number | null; pctChange: number | null };
-  const { data: liveQuotes } = useApiResource<QuoteRow[]>(qpath, 30000);
-  const quoteByTicker = new Map((liveQuotes ?? []).map(qr => [qr.ticker, qr]));
+  // Shared app-wide poll: one timer + one request for every live surface, so a
+  // ticker here always matches the same ticker on the heatmap/drawer exactly.
+  const quoteByTicker = useLiveQuotes(shownTickers);
+
+  /** Click a column: first click applies that column's natural direction, further
+   *  clicks toggle, and a third state returns to the tab's own ranking. */
+  const toggleSort = (k: MoverSortKey) => {
+    setPage(0);
+    if (sortKey !== k) { setSortKey(k); setSortDir(SORT_FIRST_DIR[k]); return; }
+    if (sortDir === SORT_FIRST_DIR[k]) { setSortDir(sortDir === "asc" ? "desc" : "asc"); return; }
+    setSortKey(null); // back to the default ranking
+  };
+  /** Sortable header cell. A plain render helper (not a nested component) so
+   *  React doesn't remount the header on every parent render. */
+  const sortTh = (k: MoverSortKey, label: string, num = false) => (
+    <th
+      key={k}
+      className={num ? "num" : undefined}
+      onClick={() => toggleSort(k)}
+      title={`Sort by ${label}`}
+      style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
+    >
+      {label}
+      {/* Matches the sortable header in insider.tsx: always a FILLED glyph in
+          brand violet, dimmed when inactive. The hollow "▽" this used to show
+          when unsorted was near-invisible — an outline glyph, in grey, at 0.35
+          opacity — and being a different character from ▲/▼ it also nudged the
+          header width on every toggle. `.82em` tracks the th's own font-size
+          rather than fixing a larger absolute size. */}
+      <span
+        style={{
+          color: "var(--brand-2)",
+          fontSize: ".82em",
+          marginLeft: 4,
+          opacity: sortKey === k ? 1 : 0.45,
+        }}
+      >
+        {sortKey === k && sortDir === "asc" ? "▲" : "▼"}
+      </span>
+    </th>
+  );
 
   return (
     <>
@@ -224,7 +318,7 @@ export function MoversScreen() {
         <input
           value={query}
           onChange={e => { setQuery(e.target.value.toUpperCase()); setPage(0); }}
-          placeholder="Search ticker…"
+          placeholder="Search…"
           style={{ marginLeft: 10, width: 230, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
         />
         <div className="spacer" />
@@ -236,11 +330,11 @@ export function MoversScreen() {
         <table className="tbl">
           <thead>
             <tr>
-              <th>Company</th>
-              <th className="num">Price</th>
-              <th className="num">Change</th>
-              <th className="num">RVOL</th>
-              <th>Cap · Sector</th>
+              {sortTh("company", "Company")}
+              {sortTh("price",   "Price",  true)}
+              {sortTh("change",  "Change", true)}
+              {sortTh("rvol",    "RVOL",   true)}
+              {sortTh("cap",     "Cap · Sector")}
               <th className="num">Intraday</th>
             </tr>
           </thead>

@@ -30,6 +30,7 @@ import { WatchlistPicker } from "./watchlist-picker";
 import { pulseFromLive, tapeItemsToIndexDocs } from "./live-market-indices";
 import type { CompanyDoc, SectorApiDoc, LiveEarningsDoc } from "./types";
 import { surprisePct } from "./types";
+import { LiveQuotesProvider } from "./live-quotes-context";
 
 // ---- Route helpers ----
 function slugToHref(slug: string): string {
@@ -698,6 +699,11 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   // dropdown is open, so searched tickers show a LIVE price (the /live/search
   // universe carries no quote), matching watchlist/portfolio.
   const enrichSyms = searchMatches.slice(0, 12).map(m => m.sym).slice(0, 25).join(",");
+  // NOTE: deliberately NOT the shared useLiveQuotes poll — this runs in IQShell,
+  // which is the component that RENDERS LiveQuotesProvider, so it sits outside
+  // its own context and would silently read an empty map. /live/quotes now
+  // serves the same shared server-side cache anyway, so the dropdown shows the
+  // same numbers as every other surface; only its poll phase is independent.
   const searchQuotesPath = searchOpen && enrichSyms ? `/live/quotes?tickers=${encodeURIComponent(enrichSyms)}` : null;
   const { data: liveSearchQuotes } = useApiResource<Array<{ ticker: string; price: number | null; pctChange: number | null }>>(searchQuotesPath, 30000);
   const quoteMap = new Map((liveSearchQuotes ?? []).map(q => [q.ticker.toUpperCase(), { price: q.price, pctChange: q.pctChange }]));
@@ -827,6 +833,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
     <AuthGuard>
       <IQActionsContext.Provider value={actions}>
        <WatchlistsContext.Provider value={wl}>
+        <LiveQuotesProvider>
         <div className="iq-root" data-theme={theme} data-font={font}>
           <div className={`app${navCollapsed ? " nav-collapsed" : ""}`}>
             {/* Brand cell */}
@@ -1120,6 +1127,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
             />
           )}
         </div>
+        </LiveQuotesProvider>
        </WatchlistsContext.Provider>
       </IQActionsContext.Provider>
     </AuthGuard>

@@ -65,10 +65,17 @@ export function AnalystScreen() {
     [companies],
   );
 
+  /** A price target more than 10x above, or below a tenth of, the live price is
+   *  a stale/unadjusted target rather than a real call — the vendor doesn't
+   *  restate targets after a reverse split, so BOXL (two 6:1 splits) carries a
+   *  $0.125 target against a $6.80 price. Treated as absent, not as -98% downside. */
+  const targetIsSane = (pt: number | null | undefined, px: number | null | undefined): boolean =>
+    pt != null && px != null && px > 0 && pt <= px * 10 && pt >= px * 0.1;
+
   const upside = (pt: number | null | undefined, ticker: string): number | null => {
     const px = priceByTicker.get(ticker);
-    if (pt == null || px == null || px <= 0) return null;
-    return (pt - px) / px * 100;
+    if (!targetIsSane(pt, px)) return null;
+    return (pt! - px!) / px! * 100;
   };
 
   // Flatten every ticker's recent per-firm rating changes into one feed.
@@ -265,7 +272,11 @@ export function AnalystScreen() {
                   {c.strongBuy + c.buy}B / {c.hold}H / {c.sell + c.strongSell}S
                 </span>
                 <span className="r" style={{ fontSize: ".72rem", width: 66, textAlign: "right", fontWeight: 600 }}>
-                  {money(c.priceTargetConsensus)}
+                  {/* Suppress the target too, not just its upside — printing
+                      "$0.13" beside a $6.80 stock is the misleading part. */}
+                  {targetIsSane(c.priceTargetConsensus, priceByTicker.get(c.ticker))
+                    ? money(c.priceTargetConsensus)
+                    : "—"}
                 </span>
                 <span className="r" style={{ fontSize: ".72rem", width: 62, textAlign: "right", fontWeight: 700, color: up == null ? "var(--text-dim-solid)" : up >= 0 ? "var(--up)" : "var(--down)" }}>
                   {up == null ? "—" : `${up >= 0 ? "+" : ""}${up.toFixed(0)}%`}

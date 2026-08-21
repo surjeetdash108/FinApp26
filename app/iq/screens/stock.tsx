@@ -11,6 +11,7 @@ import { useApiResource } from "../hooks/useApiResource";
 import { useApiList } from "../hooks/useApiList";
 import { useBackendBars } from "../hooks/useBackendBars";
 import { useLiveTick } from "../hooks/useLiveTick";
+import { useLiveQuotes } from "../live-quotes-context";
 import { EarningsPlaybook } from "./EarningsPlaybook";
 import type {
   CompanyDoc, AnalystConsensusDoc, InsiderTxDoc,
@@ -815,13 +816,29 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // Live overlay values for the header. Kept separate from `p`/`dollar` so the
   // many derived stats below (EPS, 52w positioning, chart baseline) stay pinned
   // to the company snapshot and don't churn on every tick.
-  const livePrice = live.tick?.price ?? null;
+  // Headline price/%: prefer the SHARED app-wide quote so this drawer shows the
+  // exact same number as the heatmap tile / movers row for the same ticker.
+  // useLiveTick still drives the intraday chart overlay below.
+  const sharedQuote = useLiveQuotes([sym]).get(sym);
+  const livePrice = sharedQuote?.price ?? live.tick?.price ?? null;
   // Nullable: live tick, then the company snapshot — but NOT `p`'s 0 fallback, so
   // an entirely-unknown quote stays null and the header renders a dash instead of
   // $0.00 (BUG-DATA-007).
   const dispPrice = livePrice ?? data.price;
-  const dispPct = live.pct ?? data.pctChange;
-  const dispDollar = live.change != null ? Math.abs(live.change) : dollar;
+  const dispPct = sharedQuote?.pctChange ?? live.pct ?? data.pctChange;
+  // Derive the $ move from whichever feed supplied the price and % above, so the
+  // three numbers in the header always describe the same tick. Taking it from
+  // live.change while price/% came from sharedQuote mixed two independent polls:
+  // $6.10 could sit beside a price and % captured seconds apart.
+  //   prevClose = price / (1 + pct/100)  =>  change = price - prevClose
+  const sharedDollar =
+    sharedQuote?.price != null && sharedQuote.pctChange != null
+      ? Math.abs(
+          sharedQuote.price - sharedQuote.price / (1 + sharedQuote.pctChange / 100),
+        )
+      : null;
+  const dispDollar =
+    sharedDollar ?? (live.change != null ? Math.abs(live.change) : dollar);
   // Freshness stamp for the price-chart bars (backend createdAt), surfaced by the
   // chart toolbar in the same muted style as the header's delayed-quote marker
   // (BUG-DATA-008).
@@ -835,7 +852,20 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
   const cap = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(2)}T` : v >= 10 ? `$${Math.round(v)}B` : `$${v.toFixed(1)}B`;
   const nf = (x: number) => Math.round(x).toLocaleString("en-US");
-  const lo = data.week52Low, hi = data.week52High;
+  // 52-week range, guarded against reverse-split artifacts. The high/low come
+  // from SPLIT-ADJUSTED bars, so a serial reverse-splitter's adjusted history
+  // explodes: SXTC (150:1 in Feb + 80:1 in Aug 2026) shows a $83,758 "52-week
+  // high" against a $3.63 price. Arithmetically the adjusted equivalent, but as
+  // a headline it is nonsense — 20 tickers in the live universe were affected.
+  // A genuine 52-week range practically never exceeds ~20x, so beyond that we
+  // show nothing rather than a fabricated number (this one guard covers the
+  // range, the Off-High/Off-Low stats and the drawer, which all read lo/hi).
+  const MAX_52W_RATIO = 20;
+  const rawLo = data.week52Low, rawHi = data.week52High;
+  const range52Reliable =
+    rawLo == null || rawHi == null || rawLo <= 0 ? true : rawHi / rawLo <= MAX_52W_RATIO;
+  const lo = range52Reliable ? rawLo : null;
+  const hi = range52Reliable ? rawHi : null;
 
   // Trend / MA posture. When the ticker is ranked in the synced universe we use
   // the RS-rank read; otherwise (on-demand tickers with no RS rank) we derive it
@@ -936,16 +966,13 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // Peers not in the synced universe are priced on demand (one snapshot call),
   // so EVERY peer Polygon returned can be shown — not just the synced ones.
   const missingPeers = rawPeerTickers.filter(t => !inUniverse.has(t));
-  const { data: peerQuotes } = useApiResource<Array<{ ticker: string; name: string | null; price: number | null; pctChange: number | null }>>(
-    missingPeers.length ? `/live/quotes?tickers=${missingPeers.join(",")}` : null,
-  );
-  const quoteByTicker = new Map((peerQuotes ?? []).map(q => [q.ticker, q]));
+  const quoteByTicker = useLiveQuotes(missingPeers);
 
   const relatedPeersAll: PeerRow[] = rawPeerTickers.map(t => {
     const c = companies.find(x => x.ticker === t);
     if (c && c.pctChange != null) return { t: c.ticker, c: c.pctChange as number, rsRating: c.rsRating, name: c.name };
     const q = quoteByTicker.get(t);
-    if (q && q.pctChange != null) return { t, c: q.pctChange, rsRating: null, name: q.name };
+    if (q && q.pctChange != null) return { t, c: q.pctChange, rsRating: null, name: null };
     return null;
   }).filter((x): x is PeerRow => !!x);
   // Fallback to same-sector RS leaders only if none of the related tickers resolve.

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useIQActions } from "../shell";
 import { sign, heatCol, fmt, StockLogo, NotAvailable, DataState, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
+import { useLiveQuotes } from "../live-quotes-context";
 import { buildSectorList } from "../live-market-indices";
 import { INDEX_MEMBERS, HEATMAP_TAB_KEYS } from "../index-constituents";
 import type { CompanyDoc, SectorApiDoc } from "../types";
@@ -71,11 +72,30 @@ export function HeatmapScreen() {
   // members that also exist in the live universe; 4 (Russell 2000) has no set.
   const tabKey    = HEATMAP_TAB_KEYS[tab];
   const memberSet = tabKey && tabKey !== "RUT" ? INDEX_MEMBERS[tabKey] : null;
-  const mergedSectorList = memberSet
+  const baseSectorList = memberSet
     ? fullSectorList
         .map(g => ({ ...g, items: g.items.filter(([sym]) => memberSet.has(sym)) }))
         .filter(g => g.items.length > 0)
     : fullSectorList;
+
+  // LIVE overlay. The tiles' stored %change comes from the `companies` docs,
+  // which a per-ticker sweep only refreshes slowly — so a tile could show a
+  // days-old move while the stock drawer (which polls live) showed today's,
+  // i.e. the same ticker in two colours. /live/snapshot is a shared server-side
+  // cache: one upstream refresh per interval regardless of how many browsers
+  // are watching, and no vendor calls at all outside the extended session.
+  // Tickers with no live quote keep their stored value rather than blanking.
+  const liveTickers = baseSectorList.flatMap(g => g.items.map(([sym]) => sym));
+  const liveQuotes = useLiveQuotes(liveTickers);
+  const mergedSectorList = liveQuotes.size === 0
+    ? baseSectorList
+    : baseSectorList.map(g => ({
+        ...g,
+        items: g.items.map(([sym, mcap, pct]) => {
+          const lq = liveQuotes.get(sym);
+          return [sym, mcap, lq?.pctChange ?? pct] as [string, number, number];
+        }),
+      }));
   const membersShown = mergedSectorList.reduce((n, g) => n + g.items.length, 0);
   const [hover, setHover] = useState<HoverStock | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

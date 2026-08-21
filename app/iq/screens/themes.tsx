@@ -5,7 +5,6 @@ import { cls, arr, sign, DataState, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
-import { AiSummaryCard } from "../ai-summary-card";
 import { THEMES, themeFor, sectorFilterOptions, matchesSector } from "../sector-filter";
 
 interface ThemeStock { s: string; n: string; price: number; c: number; sector: string | null; }
@@ -43,10 +42,6 @@ export function ThemesScreen() {
         .sort((a, b) => b.c - a.c);
 
   const heading = selectedTheme ? selectedTheme.name : (selected === "All" ? "All tracked names" : selected);
-  const desc = selectedTheme ? selectedTheme.desc : (selected === "All" ? "Every tracked company" : `Companies in the ${selected} sector`);
-
-  const up      = stocks.filter(s => s.c > 0).length;
-  const dn      = stocks.filter(s => s.c < 0).length;
   const avg     = stocks.length ? stocks.reduce((acc, s) => acc + s.c, 0) / stocks.length : 0;
   const leader  = [...stocks].sort((a, b) => b.c - a.c)[0];
   const laggard = [...stocks].sort((a, b) => a.c - b.c)[0];
@@ -121,22 +116,6 @@ export function ThemesScreen() {
           </div>
         ) : (
           <>
-            {/* AI summary */}
-            <AiSummaryCard title="◆ AI summary" pill={<span className="pill ai">leaders · laggards · momentum</span>}>
-                <p style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }}>
-                  <b style={{ color: "var(--text-hi)" }}>{heading}</b> — {desc}.{" "}
-                  {stocks.length} names finished{" "}
-                  <b className="up">{up} up</b> / <b className="down">{dn} down</b> today (avg {avgLabel}).
-                  {leader && <> <b>{leader.s}</b> led the group (<span className="up">{sign(leader.c)}</span>).</>}
-                  {laggard && laggard.s !== leader?.s && <> <b>{laggard.s}</b> was the laggard (<span className="down">{sign(laggard.c)}</span>).</>}
-                </p>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <span className="src-chip">Up {up}/{stocks.length}</span>
-                  <span className="src-chip">Avg {avgLabel}</span>
-                  {leader && <span className="src-chip">Leader {leader.s}</span>}
-                </div>
-            </AiSummaryCard>
-
             <StockPanelLayout
               selectedSym={sel ?? ""}
               chartPx={stocks.find(s => s.s === sel)?.price ?? 0}
