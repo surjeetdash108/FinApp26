@@ -80,9 +80,9 @@ export function ThemesScreen() {
             className="iq-select"
             value={selected}
             onChange={e => pick(e.target.value)}
-            style={{ width: "auto", minWidth: 160, padding: "4px 10px", fontSize: ".72rem", textTransform: "lowercase" }}
+            style={{ width: "auto", minWidth: 160, padding: "4px 10px", fontSize: ".72rem" }}
           >
-            {sectorOptions.map(s => <option key={s} value={s} style={{ textTransform: "lowercase" }}>{s.toLowerCase()}</option>)}
+            {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>

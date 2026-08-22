@@ -361,7 +361,7 @@ export function ScreenerScreen() {
               onChange={e => setSector(e.target.value)}
               style={{ width: "auto", minWidth: 150, padding: "4px 10px", fontSize: ".72rem", textTransform: "lowercase" }}
             >
-              {sectorOptions.map(s => <option key={s} value={s} style={{ textTransform: "lowercase" }}>{s.toLowerCase()}</option>)}
+              {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
 

@@ -362,8 +362,8 @@ export function MoversScreen() {
       {/* Filter bar */}
       <div className="fbar">
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Sector</span>
-        <select className="mv-sel" style={{ textTransform: "lowercase" }} value={sector} onChange={e => setSector(e.target.value)}>
-          {sectors.map(s => <option key={s} value={s} style={{ textTransform: "lowercase" }}>{s.toLowerCase()}</option>)}
+        <select className="mv-sel" value={sector} onChange={e => setSector(e.target.value)}>
+          {sectors.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 10 }}>Market cap</span>
         <select className="mv-sel" style={{ textTransform: "lowercase" }} value={effCap} onChange={e => setCap(e.target.value)}>

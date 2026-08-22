@@ -182,7 +182,7 @@ export function IPOsScreen() {
           onChange={e => setSector(e.target.value)}
           style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem", textTransform: "lowercase" }}
         >
-          {sectorOptions.map(s => <option key={s} value={s} style={{ textTransform: "lowercase" }}>{s.toLowerCase()}</option>)}
+          {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>
