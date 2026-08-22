@@ -6,7 +6,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
-import { VendorTag } from "../utils";
+import { VendorTag, titleCaseLabel} from "../utils";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
 
 // Maps the numeric 1-99 tech rating onto the filter's string categories
@@ -361,7 +361,7 @@ export function ScreenerScreen() {
               onChange={e => setSector(e.target.value)}
               style={{ width: "auto", minWidth: 150, padding: "4px 10px", fontSize: ".72rem" }}
             >
-              {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              {sectorOptions.map(s => <option key={s} value={s}>{titleCaseLabel(s)}</option>)}
             </select>
           </div>
 

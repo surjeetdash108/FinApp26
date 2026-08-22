@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } fro
 import { useIQActions, ExpandBtn } from "../shell";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import { WatchlistPicker } from "../watchlist-picker";
-import { fmt, cls, arr, sign, CandleChart, ChartSelect, TF_OPTIONS, CHART_TYPE_OPTIONS, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo, VendorTag } from "../utils";
+import { fmt, cls, arr, sign, CandleChart, ChartSelect, TF_OPTIONS, CHART_TYPE_OPTIONS, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo, VendorTag, titleCaseLabel} from "../utils";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiResource } from "../hooks/useApiResource";
@@ -45,12 +45,6 @@ type Pivots = { pivot: number; r1: number; r2: number; r3: number; s1: number; s
 /** Polygon's SIC industry strings are ALL-CAPS ("PERFUMES, COSMETICS…"); title-
  *  case them for display. FMP industries are already clean mixed-case, so a
  *  string that isn't all-uppercase passes through unchanged. */
-function titleCaseIndustry(s: string | null | undefined): string | null {
-  if (!s) return null;
-  if (s !== s.toUpperCase()) return s; // already mixed-case (e.g. FMP) → leave
-  return s.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
-}
-
 function pivotsFrom(h: number, l: number, c: number): Pivots {
   const p = (h + l + c) / 3, range = h - l;
   return { pivot: p, r1: 2 * p - l, s1: 2 * p - h, r2: p + range, s2: p - range, r3: h + 2 * (p - l), s3: l - 2 * (h - p) };
@@ -1253,8 +1247,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 ["Off 52W High",   offHigh52 != null ? offHigh52.toFixed(1) + "%" : null],
                 ["Off 52W Low",    offLow52 != null ? "+" + offLow52.toFixed(1) + "%" : null],
                 ["Avg Vol (20d)",  avgVol20 != null ? nf(avgVol20 / 1e6) + "M" : null],
-                ["Sector",         data.sector],
-                ["Industry",       titleCaseIndustry(data.industry)],
+                ["Sector",         titleCaseLabel(data.sector)],
+                ["Industry",       titleCaseLabel(data.industry)],
                 // Forward-annualized yield (latest declared rate × frequency ÷
                 // price), per the backend methodology change — the "(fwd)" tag
                 // tells users it's forward, not trailing-twelve-month.

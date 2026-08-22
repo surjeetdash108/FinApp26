@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { cls, sign, StockLogo, DataState, VendorTag } from "../utils";
+import { cls, sign, StockLogo, DataState, VendorTag, titleCaseLabel} from "../utils";
 
 // Same embedded stock detail the Movers drawer uses.
 const StockScreenEmbed = dynamic<{ initialSym?: string }>(
@@ -182,7 +182,7 @@ export function IPOsScreen() {
           onChange={e => setSector(e.target.value)}
           style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem" }}
         >
-          {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          {sectorOptions.map(s => <option key={s} value={s}>{titleCaseLabel(s)}</option>)}
         </select>
         <div className="spacer" />
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { type Mover, maPostureLabel } from "../data";
-import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag } from "../utils";
+import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag, titleCaseLabel} from "../utils";
 import { apiGet } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
@@ -363,7 +363,7 @@ export function MoversScreen() {
       <div className="fbar">
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Sector</span>
         <select className="mv-sel" value={sector} onChange={e => setSector(e.target.value)}>
-          {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+          {sectors.map(s => <option key={s} value={s}>{titleCaseLabel(s)}</option>)}
         </select>
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 10 }}>Market cap</span>
         <select className="mv-sel" value={effCap} onChange={e => setCap(e.target.value)}>

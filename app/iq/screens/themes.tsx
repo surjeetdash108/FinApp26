@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cls, arr, sign, DataState, VendorTag } from "../utils";
+import { cls, arr, sign, DataState, VendorTag, titleCaseLabel} from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import type { CompanyDoc } from "../types";
 import { StockPanelLayout, StockListCard, StockRow } from "../stock-panel";
@@ -82,7 +82,7 @@ export function ThemesScreen() {
             onChange={e => pick(e.target.value)}
             style={{ width: "auto", minWidth: 160, padding: "4px 10px", fontSize: ".72rem" }}
           >
-            {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            {sectorOptions.map(s => <option key={s} value={s}>{titleCaseLabel(s)}</option>)}
           </select>
         </div>
       </div>

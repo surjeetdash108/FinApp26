@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useIQActions } from "../shell";
-import { cls, sign, StockLogo, DataState, NotAvailable, VendorTag } from "../utils";
+import { cls, sign, StockLogo, DataState, NotAvailable, VendorTag, titleCaseLabel} from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useTapeStream } from "../hooks/useTapeStream";
 import { tapeItemsToIndexDocs } from "../live-market-indices";
@@ -175,7 +175,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
                 <div key={s.sector} className="s"
                   style={{ background: heatColor(s.pctChange), cursor: "pointer" }}
                   onClick={() => openSector(s.sector)}>
-                  <div className="nm">{s.sector}</div>
+                  <div className="nm">{titleCaseLabel(s.sector)}</div>
                   <div className="v">{sign(s.pctChange)}</div>
                 </div>
               ))}
@@ -320,7 +320,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
             <DataState label={emptyLabel} />
           ) : list.map(s => (
             <div key={s.sector} className="minirow" style={{ justifyContent: "space-between" }}>
-              <span className="mid">{s.sector}</span>
+              <span className="mid">{titleCaseLabel(s.sector)}</span>
               <span className={`mono ${cls(s.pctChange)}`} style={{ fontWeight: 700 }}>{sign(s.pctChange)}</span>
             </div>
           ))}

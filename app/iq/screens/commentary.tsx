@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { StockLogo, DataState, VendorTag, cls, sign } from "../utils";
+import { StockLogo, DataState, VendorTag, cls, sign, titleCaseLabel} from "../utils";
 import { useLiveQuotes } from "../live-quotes-context";
 import { useApiList } from "../hooks/useApiList";
 import { firebaseAuth } from "../../firebase";
@@ -291,7 +291,7 @@ export function CommentaryScreen() {
               companies in a given sector and/or size tier. */}
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 4 }}>Sector</span>
           <select className="mv-sel" value={effSec} onChange={e => setSecFilter(e.target.value)}>
-            {feedSectors.map(s => <option key={s} value={s}>{s}</option>)}
+            {feedSectors.map(s => <option key={s} value={s}>{titleCaseLabel(s)}</option>)}
           </select>
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Market cap</span>
           <select className="mv-sel" value={capFilter} onChange={e => setCapFilter(e.target.value)}>

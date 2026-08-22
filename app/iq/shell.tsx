@@ -18,7 +18,7 @@ import { useAppSelector } from "../store/hooks";
 import { AuthGuard } from "../dashboard/auth-guard";
 import { menuItems } from "../dashboard/menu-items";
 import { type PulseItem } from "./data";
-import { fmt, sign, cls, arr, SemiGauge, DataState, NotAvailable, VendorTag } from "./utils";
+import { fmt, sign, cls, arr, SemiGauge, DataState, NotAvailable, VendorTag, titleCaseLabel} from "./utils";
 import { NotificationBell } from "./notification-bell";
 import { useTickerSearch } from "./hooks/useTickerSearch";
 import { useTapeStream } from "./hooks/useTapeStream";
@@ -212,7 +212,7 @@ function StockDrawer({ sym, companies, sectorsLive, loading, onClose }: {
                   </div>
                   <div className="card-b">
                     <p style={{ fontSize: ".85rem", lineHeight: 1.6, color: "var(--text)", margin: 0 }}>
-                      Its group, <b>{sector}</b>, is {sec.pctChange >= 0 ? "up" : "down"}{" "}
+                      Its group, <b>{titleCaseLabel(sector)}</b>, is {sec.pctChange >= 0 ? "up" : "down"}{" "}
                       <b className={cls(sec.pctChange)}>{sign(sec.pctChange)}</b> today —{" "}
                       {(sec.pctChange >= 0) === (chg >= 0) ? "in line with sector strength." : "bucking its sector today."}
                     </p>
@@ -240,7 +240,7 @@ function StockDrawer({ sym, companies, sectorsLive, loading, onClose }: {
             {sector && (
               <button className="btn" style={{ width: "100%" }}
                 onClick={() => { onClose(); openSector(sector); }}>
-                View {sector} in heatmap →
+                View {titleCaseLabel(sector)} in heatmap →
               </button>
             )}
             <button className="btn primary" style={{ width: "100%" }}
@@ -387,7 +387,7 @@ function IndexDrawer({ idx, pulse: livePulse, sectorsLive, loading, onClose }: {
                   <div className="ai-sec" style={{ marginTop: 16 }}><div className="h">Leading sectors today</div></div>
                   {lead.map(g => (
                     <div key={g.sector} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
-                      <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.sector}</span>
+                      <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{titleCaseLabel(g.sector)}</span>
                       <span className="mid" />
                       <span className="r up">{sign(g.pctChange)}</span>
                     </div>
@@ -395,7 +395,7 @@ function IndexDrawer({ idx, pulse: livePulse, sectorsLive, loading, onClose }: {
                   <div className="ai-sec" style={{ marginTop: 12 }}><div className="h">Lagging sectors today</div></div>
                   {lag.map(g => (
                     <div key={g.sector} className="minirow" style={{ cursor: "pointer" }} onClick={() => { onClose(); }}>
-                      <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{g.sector}</span>
+                      <span className="tkr" style={{ fontFamily: "var(--f-body)", fontWeight: 600, width: "auto" }}>{titleCaseLabel(g.sector)}</span>
                       <span className="mid" />
                       <span className="r down">{sign(g.pctChange)}</span>
                     </div>
