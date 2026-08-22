@@ -1275,14 +1275,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 ["Support / Resist.",hi != null ? `52-week high <b>$${nf(hi)}</b>${lo != null ? `; 52-week low <b>$${nf(lo)}</b>` : ""}.` : "Support/resistance levels not available."],
                 ["MA posture",       maTxt as string],
                 ["Rel. strength",    rs != null
-                  ? `Relative-strength rank <b class="${rs >= 70 ? "up" : rs < 40 ? "down" : ""}">${rs}/99</b> vs the market — ${rs >= 70 ? "group leader." : rs < 40 ? "lagging the tape." : "roughly in line."}`
+                  ? (<>Relative-strength rank <b className={rs >= 70 ? "up" : rs < 40 ? "down" : ""}>{rs}/99</b> vs the market — {rs >= 70 ? "group leader." : rs < 40 ? "lagging the tape." : "roughly in line."}</>)
                   : "Not ranked yet — this ticker isn't in the synced RS universe."],
-                ["Volume",           rv != null ? `Relative volume <b>${rv.toFixed(1)}×</b> — ${rv > 2 ? "well above average (event-driven)." : "near normal."}` : "Relative volume not available."],
+                ["Volume",           rv != null ? (<>Relative volume <b>{rv.toFixed(1)}×</b> — {rv > 2 ? "well above average (event-driven)." : "near normal."}</>) : "Relative volume not available."],
                 ["Event risk",       erDate !== "—" ? `Next earnings ${erDate}.` : "No upcoming earnings date on record."],
-              ] as [string, string][]).map(l => (
+              ] as [string, ReactNode][]).map(l => (
                 <div key={l[0]} className="ai-line">
                   <span className="k">{l[0]}</span>
-                  <span className="v" dangerouslySetInnerHTML={{ __html: l[1] }} />
+                  <span className="v">{l[1]}</span>
                 </div>
               ))}
               <div style={{ marginTop: 10, fontSize: ".7rem", color: "var(--text-dim-solid)" }}>

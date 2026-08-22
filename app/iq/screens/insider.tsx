@@ -100,11 +100,15 @@ function InsiderDrawer({ sym, liveTxns, loading, onClose, onOpenFull }: {
     .sort((a, b) => (b.transactionDate ?? "").localeCompare(a.transactionDate ?? ""));
   const nBuy  = txns.filter(x => x.acquiredOrDisposed === "A").length;
   const nSell = txns.filter(x => x.acquiredOrDisposed === "D").length;
-  const read  = nBuy > nSell
-    ? `Net <b class="up">insider buying</b> in ${sym} — insiders adding is generally a constructive signal.`
-    : nSell > nBuy
-    ? `Net <b class="down">insider selling</b> in ${sym} — often diversification, but worth monitoring if it clusters.`
-    : `Mixed insider activity in ${sym}.`;
+  // JSX rather than an HTML string — `sym` is vendor-supplied, so hand-built
+  // markup made this an injection surface for two bold spans.
+  const read = nBuy > nSell ? (
+    <>Net <b className="up">insider buying</b> in {sym} — insiders adding is generally a constructive signal.</>
+  ) : nSell > nBuy ? (
+    <>Net <b className="down">insider selling</b> in {sym} — often diversification, but worth monitoring if it clusters.</>
+  ) : (
+    <>Mixed insider activity in {sym}.</>
+  );
 
   return (
     <>
@@ -153,8 +157,9 @@ function InsiderDrawer({ sym, liveTxns, loading, onClose, onOpenFull }: {
               <div className="ai-block" style={{ marginTop: 16 }}>
                 <div className="card-h"><h3 className="ai-c">◆ Read</h3></div>
                 <div className="card-b">
-                  <p style={{ fontSize: ".84rem", lineHeight: 1.55, color: "var(--text)" }}
-                    dangerouslySetInnerHTML={{ __html: read + " Clusters of multiple insiders carry more signal than a single filing." }} />
+                  <p style={{ fontSize: ".84rem", lineHeight: 1.55, color: "var(--text)" }}>
+                    {read} Clusters of multiple insiders carry more signal than a single filing.
+                  </p>
                 </div>
               </div>
             </>

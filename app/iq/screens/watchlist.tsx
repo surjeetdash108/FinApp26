@@ -70,10 +70,20 @@ export function WatchlistScreen() {
   const best  = priced.length ? [...priced].sort((a, b) => b.pctChange - a.pctChange)[0] : null;
   const worst = priced.length ? [...priced].sort((a, b) => a.pctChange - b.pctChange)[0] : null;
 
-  const sumTxt = priced.length === 0 ? null :
-    `Your ${priced.length} priced watched names finished <b class="up">${up} up</b> / <b class="down">${dn} down</b> today.` +
-    (best  ? ` <b>${best.ticker}</b> led (${sign(best.pctChange)})` : "") +
-    (worst && worst.ticker !== best?.ticker ? `, <b>${worst.ticker}</b> lagged (${sign(worst.pctChange)})` : "") + `.`;
+  // Built as JSX, not an HTML string: this interpolates vendor-supplied tickers,
+  // so assembling markup by hand made it an injection surface for no benefit —
+  // the markup is two bold spans.
+  const summary = priced.length === 0 ? null : (
+    <>
+      Your {priced.length} priced watched names finished{" "}
+      <b className="up">{up} up</b> / <b className="down">{dn} down</b> today.
+      {best ? (<>{" "}<b>{best.ticker}</b> led ({sign(best.pctChange)})</>) : null}
+      {worst && worst.ticker !== best?.ticker
+        ? (<>, <b>{worst.ticker}</b> lagged ({sign(worst.pctChange)})</>)
+        : null}
+      .
+    </>
+  );
 
   // Keep the row selection valid for the active list.
   useEffect(() => {
@@ -120,11 +130,11 @@ export function WatchlistScreen() {
       {uid && (
         <div style={{ padding: "14px 18px 0" }}>
           <AiSummaryCard title="◆ AI watchlist summary" pill={<span className="pill ai">leaders · laggards · alerts</span>} onOpenChange={(o) => o && setAiOpen(true)}>
-            {sumTxt == null ? (
+            {summary == null ? (
               <DataState loading={companiesLoading || wlLoading} label="No live price data for any watched ticker yet." />
             ) : (
               <>
-                <p dangerouslySetInnerHTML={{ __html: sumTxt }} style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }} />
+                <p style={{ marginBottom: 10, fontSize: ".88rem", lineHeight: 1.55 }}>{summary}</p>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <span className="src-chip">Up {up}/{priced.length}</span>
                   <span className="src-chip">Synced to your account</span>

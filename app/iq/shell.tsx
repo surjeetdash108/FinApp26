@@ -536,8 +536,11 @@ function CopilotPanel({ onClose }: { onClose: () => void }) {
         <button className="copilot-close" onClick={onClose}>✕</button>
       </div>
       <div className="copilot-body" ref={bodyRef}>
+        {/* Keyed by role+position+content rather than the bare index: the list
+            grows from the top as replies stream in, and an index key made React
+            reuse the previous message's DOM node for the new one. */}
         {messages.map((m, i) => (
-          <div key={i} className={`copilot-msg ${m.role}`}>
+          <div key={`${m.role}-${i}-${m.text.slice(0, 24)}`} className={`copilot-msg ${m.role}`}>
             <div className="cm-text">{m.text}</div>
           </div>
         ))}

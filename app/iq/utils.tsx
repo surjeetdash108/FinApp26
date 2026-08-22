@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useState, useRef, useCallback, useMemo } from "react";
 import { backendUrl } from "./backend";
 
@@ -439,7 +440,7 @@ export function CandleChart(props: CandleChartProps) {
 function CandleChartInner({
   sym, tf, px, maStep = 0, emaStep = 0, showVol = true, chartType = "candles", realBars, live,
 }: CandleChartProps) {
-  const [tip, setTip] = useState<{ html: string; left: number } | null>(null);
+  const [tip, setTip] = useState<{ node: ReactNode; left: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   const data = useMemo(() => {
@@ -515,7 +516,13 @@ function CandleChartInner({
     const hostW = rect.width;
     const px2 = (X(i) / W) * hostW;
     setTip({
-      html: `O <b>$${d.o.toFixed(2)}</b>  H <b>$${d.h.toFixed(2)}</b>  L <b>$${d.l.toFixed(2)}</b>  C <b>$${d.c.toFixed(2)}</b> <span style="color:${col}">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</span>`,
+      node: (
+        <>
+          O <b>${d.o.toFixed(2)}</b>{"  "}H <b>${d.h.toFixed(2)}</b>{"  "}
+          L <b>${d.l.toFixed(2)}</b>{"  "}C <b>${d.c.toFixed(2)}</b>{" "}
+          <span style={{ color: col }}>{chg >= 0 ? "+" : ""}{chg.toFixed(2)}%</span>
+        </>
+      ),
       left: Math.min(hostW - 200, Math.max(4, px2 + 10)),
     });
   }, [data, cw, n, W]);
@@ -524,7 +531,7 @@ function CandleChartInner({
     <div style={{ position: "relative" }}>
       {tip && (
         <div className="chart-tip" style={{ opacity: 1, left: tip.left, top: 14 }}
-          dangerouslySetInnerHTML={{ __html: tip.html }} />
+        >{tip.node}</div>
       )}
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
         {/* Grid */}
