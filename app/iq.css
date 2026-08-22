@@ -1672,6 +1672,13 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ew-tickrow.on { background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--brand); }
 .ew-tickrow-sym { font-family: var(--f-mono); font-weight: 700; font-size: .72rem; color: var(--text-hi); flex: none; }
 .ew-tickrow-name { font-size: .66rem; color: var(--text-dim-solid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Two-line tray row: symbol + company name on top, beat/miss underneath.
+   min-width:0 on both the column and the inner line is load-bearing — without
+   it a long company name refuses to shrink and pushes the row wider than the
+   sidebar instead of ellipsising. */
+.ew-tickrow-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.ew-tickrow-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ew-tickrow-surp { font-family: var(--f-mono); font-size: .62rem; font-weight: 700; letter-spacing: .01em; }
 .ew-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .ew-toprow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 /* "What this company does" + "AI summary" capped compact (scroll for the rest). */

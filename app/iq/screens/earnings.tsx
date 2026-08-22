@@ -842,8 +842,25 @@ export function EarningsScreen() {
                   {trayItems.map(r => (
                     <button key={r.s} className={`ew-tickrow${sel === r.s ? " on" : ""}`} title={r.n ?? r.s} onClick={() => openStockDetail(r.s, anchor)}>
                       <StockLogo sym={r.s} size={27} />
-                      <span className="ew-tickrow-sym">{r.s}</span>
-                      {r.n && r.n !== r.s && <span className="ew-tickrow-name">{r.n}</span>}
+                      <span className="ew-tickrow-txt">
+                        <span className="ew-tickrow-line">
+                          <span className="ew-tickrow-sym">{r.s}</span>
+                          {r.n && r.n !== r.s && <span className="ew-tickrow-name">{r.n}</span>}
+                        </span>
+                        {/* Beat/miss vs the consensus estimate, on its own line
+                            under the name. Only rendered once the company has
+                            actually reported AND there's a matched estimate to
+                            compare against — an upcoming reporter has no result
+                            yet, so showing "Miss 0%" there would be a fabrication. */}
+                        {r.epsSurp != null && (
+                          <span
+                            className="ew-tickrow-surp"
+                            style={{ color: r.epsSurp >= 0 ? "var(--up)" : "var(--down)" }}
+                          >
+                            {r.epsSurp >= 0 ? "Beat" : "Miss"} {fmtPctSigned(r.epsSurp, 1)}
+                          </span>
+                        )}
+                      </span>
                     </button>
                   ))}
                 </div>

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { StockLogo, DataState, VendorTag } from "../utils";
+import { StockLogo, DataState, VendorTag, cls, sign } from "../utils";
+import { useLiveQuotes } from "../live-quotes-context";
 import { useApiList } from "../hooks/useApiList";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
@@ -14,6 +15,14 @@ const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 // Market-cap tiers derived from companies.marketCap (raw USD). Used to filter
 // the feed by the size of the company each news item is about.
 const CAP_TIERS = ["All", "Mega", "Large", "Mid", "Small", "Micro"];
+/** Compact market cap for the feed's left column — $1.2T / $340B / $8.4B / $720M. */
+function fmtMcap(mc: number): string {
+  if (mc >= 1e12) return `$${(mc / 1e12).toFixed(1)}T`;
+  if (mc >= 1e9) return `$${(mc / 1e9).toFixed(mc >= 10e9 ? 0 : 1)}B`;
+  if (mc >= 1e6) return `$${(mc / 1e6).toFixed(0)}M`;
+  return `$${Math.round(mc).toLocaleString()}`;
+}
+
 function capTier(mc: number | null | undefined): string | null {
   if (mc == null) return null;
   if (mc >= 200e9) return "Mega";
@@ -55,8 +64,12 @@ function etTimeLabel(iso: string): string {
 }
 
 /* ── Feed item ── the logo filters the feed by that ticker; the body opens the source article. */
-function FeedItem({ item, i, total, onTicker }: {
+function FeedItem({ item, i, total, onTicker, marketCap, livePct }: {
   item: NewsArticleDoc; i: number; total: number; onTicker: (ticker: string) => void;
+  /** Raw USD market cap from the ticker's companies doc; null when unsynced. */
+  marketCap?: number | null;
+  /** Live %change for the ticker, from the app-wide shared quote poll. */
+  livePct?: number | null;
 }) {
   return (
     <div
@@ -75,6 +88,19 @@ function FeedItem({ item, i, total, onTicker }: {
         </button>
         <span className="pill" style={{ background: "var(--surface-3)", color: catCol(item.category) }}>{catLabel(item.category)}</span>
         <div className="mono" style={{ fontSize: ".66rem", color: "var(--text-dim-solid)" }}>{etTimeLabel(item.publishedAt)}</div>
+        {/* Market cap + LIVE %change for the story's ticker, under the time.
+            Both are omitted rather than shown as "—" when unavailable, so the
+            column stays compact for tickers the universe hasn't synced. */}
+        {marketCap != null && (
+          <div className="mono" style={{ fontSize: ".64rem", color: "var(--text-dim-solid)" }}>
+            {fmtMcap(marketCap)}
+          </div>
+        )}
+        {livePct != null && (
+          <div className={`mono ${cls(livePct)}`} style={{ fontSize: ".66rem", fontWeight: 700 }}>
+            {sign(livePct)}
+          </div>
+        )}
       </div>
       <a
         href={item.url} target="_blank" rel="noreferrer"
@@ -216,6 +242,11 @@ export function CommentaryScreen() {
     return order.map(k => byKey.get(k) as NewsArticleDoc);
   })();
 
+  // LIVE %change for the tickers actually rendered in the feed, via the app-wide
+  // shared poll — one timer for the whole app, so a story's %change here matches
+  // the same ticker on the heatmap, movers and the stock drawer exactly.
+  const feedQuotes = useLiveQuotes(feed.map(n => n.ticker).filter(Boolean));
+
   const feedLabel = (() => {
     if (activeTab === 0) return { title: "Intraday commentary", badge: <span className="live"><span className="dot" />Live · streaming</span> };
     if (activeTab === 1) return { title: "Pre-market · before 9:30a ET", badge: <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>Pre-market</span> };
@@ -315,7 +346,15 @@ export function CommentaryScreen() {
                         ? (uid ? "No live news matches your portfolio or watchlist names right now." : "Sign in and add names to your watchlist or portfolio to see this feed.")
                         : "No live news items in this category right now."} />
                 ) : feed.map((item, i) => (
-                  <FeedItem key={item.id} item={item} i={i} total={feed.length} onTicker={sym => setSearch(sym)} />
+                  <FeedItem
+                    key={item.id}
+                    item={item}
+                    i={i}
+                    total={feed.length}
+                    onTicker={sym => setSearch(sym)}
+                    marketCap={companyByTicker.get(item.ticker)?.marketCap ?? null}
+                    livePct={feedQuotes.get(item.ticker)?.pctChange ?? companyByTicker.get(item.ticker)?.pctChange ?? null}
+                  />
                 ))}
               </div>
             </div>
