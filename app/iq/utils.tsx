@@ -675,22 +675,30 @@ export function RsiPane({ rsi14, loading }: { rsi14: number | null; loading?: bo
 }
 
 /**
- * Title-case a sector / industry label for display: every word starts with a
- * capital, including both halves of a hyphenated one.
+ * Normalise a sector / industry label for DISPLAY: lower-case the whole string,
+ * then capitalise the first letter of every word.
  *
- * WHY: vendor data reaches us in three shapes — clean names ("Basic
- * Materials"), FMP's mixed case, and raw SEC SIC descriptions that SHOUT
- * ("CONSTRUCTION MACHINERY & EQUIP", "SERVICES-PREPACKAGED SOFTWARE"). Those
- * last ones were rendering verbatim in every sector dropdown.
+ * The backend stores whatever the vendor gives it — clean names, FMP's mixed
+ * case, or raw SEC SIC descriptions that SHOUT ("CONSTRUCTION MACHINERY &
+ * EQUIP"). Rather than police storage, every label is normalised here, so one
+ * rule governs what a user sees no matter which shape arrived.
  *
- * Already-mixed-case input is returned untouched, so a correct name is never
- * mangled ("Non-Energy Minerals" stays as-is rather than becoming
- * "Non-energy Minerals"). Once the TradingView taxonomy migration lands this
- * is a no-op on every value — those names are already title case — but it
- * stays as the guard that stops a raw vendor string ever displaying again.
+ * Applied UNCONDITIONALLY — an earlier version returned already-mixed-case
+ * input untouched, which meant a value stored half-right stayed half-right.
+ * The only exception is ACRONYMS: blind lower-casing turns "AI & Semiconductors"
+ * into "Ai & Semiconductors", so the short forms that appear in these lists are
+ * restored afterwards.
  */
+const ACRONYMS = new Set([
+  "AI", "ETF", "ETFS", "IPO", "REIT", "REITS", "US", "USA", "UK", "EV", "SPAC", "IT",
+]);
+
 export function titleCaseLabel(s: string | null | undefined): string {
   if (!s) return "";
-  if (s !== s.toUpperCase()) return s; // already mixed case — leave it alone
-  return s.toLowerCase().replace(/(^|[\s/&(-])([a-z])/g, (_m, p, c) => p + c.toUpperCase());
+  return s
+    .toLowerCase()
+    .replace(/(^|[\s/&(,-])([a-z])/g, (_m, p, c) => p + c.toUpperCase())
+    .replace(/[A-Za-z]+/g, (w) =>
+      ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w,
+    );
 }
