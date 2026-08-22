@@ -359,7 +359,7 @@ export function ScreenerScreen() {
               className="iq-select"
               value={sector}
               onChange={e => setSector(e.target.value)}
-              style={{ width: "auto", minWidth: 150, padding: "4px 10px", fontSize: ".72rem", textTransform: "lowercase" }}
+              style={{ width: "auto", minWidth: 150, padding: "4px 10px", fontSize: ".72rem" }}
             >
               {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
             </select>

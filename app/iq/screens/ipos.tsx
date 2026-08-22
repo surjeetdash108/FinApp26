@@ -180,7 +180,7 @@ export function IPOsScreen() {
           className="iq-select"
           value={sector}
           onChange={e => setSector(e.target.value)}
-          style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem", textTransform: "lowercase" }}
+          style={{ width: "auto", minWidth: 160, padding: "5px 10px", fontSize: ".82rem" }}
         >
           {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>

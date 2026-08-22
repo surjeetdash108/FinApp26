@@ -290,8 +290,8 @@ export function CommentaryScreen() {
           {/* Sector + market-cap filters — narrow the feed to news about
               companies in a given sector and/or size tier. */}
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 4 }}>Sector</span>
-          <select className="mv-sel" style={{ textTransform: "lowercase" }} value={effSec} onChange={e => setSecFilter(e.target.value)}>
-            {feedSectors.map(s => <option key={s} value={s}>{s.toLowerCase()}</option>)}
+          <select className="mv-sel" value={effSec} onChange={e => setSecFilter(e.target.value)}>
+            {feedSectors.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Market cap</span>
           <select className="mv-sel" value={capFilter} onChange={e => setCapFilter(e.target.value)}>

@@ -366,8 +366,8 @@ export function MoversScreen() {
           {sectors.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 10 }}>Market cap</span>
-        <select className="mv-sel" style={{ textTransform: "lowercase" }} value={effCap} onChange={e => setCap(e.target.value)}>
-          {availableCaps.map(c => <option key={c} value={c}>{c.toLowerCase()}</option>)}
+        <select className="mv-sel" value={effCap} onChange={e => setCap(e.target.value)}>
+          {availableCaps.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <input
           value={query}
