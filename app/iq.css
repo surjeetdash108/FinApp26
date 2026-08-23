@@ -773,11 +773,40 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
    header's own price line needs the full width at that point. */
 .sd-headwrap { display: flex; align-items: flex-start; gap: 16px; }
 .sd-headwrap > .sd-head { flex: 1 1 auto; min-width: 0; margin-bottom: 14px; }
-.sd-headwrap > .sd-about { flex: 0 1 46%; min-width: 340px; margin-top: 0; max-height: 104px; }
+.sd-headwrap > .sd-about { flex: 0 1 30%; min-width: 280px; margin-top: 0; max-height: 88px; }
+/* Basis 0, NOT auto. .sd-head is a wrapping flex row, and wrapping is decided
+   from each item's flex-basis before any shrinking happens — with basis:auto
+   the name block's basis is its full max-content width (~990px), which exceeds
+   the space left beside the logo and kicks the whole block onto a row of its
+   own, stranding the logo above it. Basis 0 always fits on the logo's line and
+   then grows into whatever is left, so the two stay on one row and the identity
+   line wraps INSIDE the name block if it must. */
+.sd-head .sd-name { flex: 1 1 0; min-width: 0; }
 @media (max-width: 1100px) {
   .sd-headwrap { flex-wrap: wrap; }
   .sd-headwrap > .sd-head { flex: 1 1 100%; margin-bottom: 0; }
-  .sd-headwrap > .sd-about { flex: 1 1 100%; min-width: 0; margin-top: 12px; }
+  .sd-headwrap > .sd-about { flex: 1 1 100%; min-width: 0; margin-top: 12px; max-height: 104px; }
+}
+/* The identity line: symbol, quote, market cap, name/exchange/sector, pills —
+   all baseline-aligned on ONE row. It wraps rather than clipping when the
+   window can't hold it, and row-gap keeps a wrapped second row from colliding
+   with the first. Baseline alignment is what makes text at 1.5rem, 1.7rem and
+   .8rem sit on a common footing instead of floating at different heights. */
+.sd-headline {
+  display: flex; align-items: baseline; flex-wrap: wrap;
+  column-gap: 10px; row-gap: 4px;
+}
+/* The one element on the line that is allowed to give. Everything else —
+   symbol, price, change, market cap, the pills — is a fixed fact that must not
+   be cut, so exchange/sector absorbs the squeeze: basis 0 (same reason as
+   .sd-name above — wrapping is decided from the basis, so a 0 basis can never
+   push a later pill onto a second row), growing into whatever is left and
+   ellipsing only when there genuinely isn't room. Measured on the real header
+   at a 1265px content width the line needed 891px against 813px available;
+   this is what closes that gap without dropping anything. */
+.sd-headline .sub {
+  flex: 1 1 0; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* AI Technical Analysis body capped to ~half height, scroll for the rest. */
 .ai-block .card-b { max-height: 128px; overflow-y: auto; }

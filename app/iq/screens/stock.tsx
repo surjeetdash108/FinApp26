@@ -153,6 +153,19 @@ function hashPal(s: string): [string, string] {
 const logoBg = (s: string) => (LOGO_BG[s] ?? hashPal(s))[0];
 const logoFg = (s: string) => (LOGO_BG[s] ?? hashPal(s))[1];
 
+/**
+ * Vendor name for display. The backend tags a quote's source with the code path
+ * that served it — "polygon-ondemand", "fmp-ondemand" (ondemand.service.ts) —
+ * which is a backend concern; the reader of the pill only wants to know whose
+ * price this is. Strips that suffix and keeps FMP an initialism rather than
+ * "Fmp". The stored `source` value itself is untouched.
+ */
+function vendorLabel(source: string | null | undefined): string {
+  const base = (source ?? "polygon").replace(/-ondemand$/i, "").trim();
+  if (!base) return "Polygon";
+  return base.toLowerCase() === "fmp" ? "FMP" : base[0].toUpperCase() + base.slice(1);
+}
+
 const EXCHANGE: Record<string, string> = {
   AAPL: "NASDAQ", NVDA: "NASDAQ", MSFT: "NASDAQ", GOOGL: "NASDAQ", META: "NASDAQ",
   AMZN: "NASDAQ", TSLA: "NASDAQ", JPM: "NYSE", V: "NYSE", UNH: "NYSE",
@@ -1053,9 +1066,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           <div className="sd-head">
             <StockLogo sym={sym} size={46} />
             <div className="sd-name">
-              {/* Ticker + price + % on ONE line, side by side, so the quote sits
-                  right next to the symbol instead of far to the right. */}
-              <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+              {/* ONE line for the whole identity: symbol, quote, market cap,
+                  then name / exchange / sector and the pills. Name-and-sector
+                  used to be a second line under the price; folding it up here
+                  makes the header a single line, which is what lets the chart
+                  start higher. It still wraps rather than clips on a narrow
+                  window — flex-wrap with a small row-gap, so a wrapped header
+                  degrades to the old two-line look instead of losing text. */}
+              <div className="sd-headline">
                 <h1>{sym}</h1>
                 <div className="sd-px" style={{ margin: 0, display: "flex", alignItems: "baseline", gap: 10 }}>
                   {dispPrice != null
@@ -1067,8 +1085,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   {/* Market cap sits where the "○ delayed · 15m delayed" feed
                       marker used to: the slot now carries data instead of a
                       status label. The quote's live/delayed provenance is still
-                      stated by the "live quote · <source>" pill on the sub-line
-                      below, so nothing is lost. `mc` is billions. */}
+                      stated by the "live quote · <source>" pill further along
+                      this line, so nothing is lost. `mc` is billions. */}
                   {mc != null && (
                     <span style={{ fontFamily: "var(--f-mono)", fontSize: ".72rem", fontWeight: 600,
                       color: "var(--text-dim-solid)", letterSpacing: ".02em", whiteSpace: "nowrap" }}>
@@ -1076,17 +1094,22 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     </span>
                   )}
                 </div>
-              </div>
-              <div className="sub">
-                {data.name} · {ex} · {group}
+                {/* The company name is dropped here only when the About box is
+                    showing, because its own heading already reads "About <full
+                    name>" 10px to the right — repeating it costs ~200px of the
+                    single line and would force the pills to wrap. With no About
+                    box the name has nowhere else to appear, so it stays. */}
+                <span className="sub" title={`${data.name} · ${ex} · ${group}`}>
+                  {data.description ? "" : `${data.name} · `}{ex} · {group}
+                </span>
                 {inSectorRank != null && inSectorTotal != null && (
-                  <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-hi)", marginLeft: 6, fontSize: ".62rem" }}>
+                  <span className="pill" style={{ background: "var(--surface-3)", color: "var(--text-hi)", fontSize: ".62rem" }}>
                     #{inSectorRank} of {inSectorTotal} in sector
                   </span>
                 )}
                 {isLiveStock && (
-                  <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", marginLeft: 6, fontSize: ".62rem" }}>
-                    live quote · {liveCompany?.source ? liveCompany.source[0].toUpperCase() + liveCompany.source.slice(1) : "Polygon"}
+                  <span className="pill" style={{ background: "var(--surface-3)", color: "var(--up)", fontSize: ".62rem" }}>
+                    live quote · {vendorLabel(liveCompany?.source)}
                   </span>
                 )}
               </div>
