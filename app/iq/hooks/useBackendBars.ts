@@ -20,8 +20,13 @@ interface BarsResponse {
 export function useBackendBars(
   sym: string,
   tf: string,
+  /** Skip the request entirely when false — used by the chart's moving-average
+   *  warm-up fetch, which is only needed while an MA/EMA overlay is on. */
+  enabled = true,
 ): { bars: OHLCBar[] | undefined; loading: boolean; asOf?: string; source?: BarsResponse["source"] } {
-  const { data, loading } = useApiResource<BarsResponse>(`/live/bars?ticker=${encodeURIComponent(sym)}&tf=${tf}`);
+  const { data, loading } = useApiResource<BarsResponse>(
+    enabled ? `/live/bars?ticker=${encodeURIComponent(sym)}&tf=${tf}` : null,
+  );
   const bars = !data || data.bars.length < 2
     ? undefined
     : data.bars.map((b) => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));

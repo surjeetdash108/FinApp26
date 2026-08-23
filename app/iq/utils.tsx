@@ -5,6 +5,10 @@ import { mapEarningsToBars, type ChartEarnings } from "./chart-earnings";
 export type { ChartEarnings };
 import { useState, useRef, useCallback, useMemo } from "react";
 import { backendUrl } from "./backend";
+// useBackendBars imports OHLCBar back from this file, but as `import type`,
+// which is erased before it reaches the bundler — so this pair does not form a
+// runtime cycle.
+import { useBackendBars } from "./hooks/useBackendBars";
 
 // ---- TEMPORARY data-source attribution tag ----
 // Shows which upstream vendor supplies a widget's data (Polygon / FMP / FRED /
@@ -410,6 +414,24 @@ function _ema(data: OHLCBar[], p: number): (number | null)[] {
   });
 }
 
+/**
+ * Where to get bars that PRECEDE the visible window, to seed the moving
+ * averages. Only bars of the SAME granularity can seed an indicator, so this
+ * maps each timeframe to the longest series that shares its bar size —
+ * measured against /live/bars for CSCO:
+ *
+ *   1D  78 bars @ 5min  |  1W 390 @ 5min  |  1M 286 @ 30min
+ *   3M  64 @ 1d  |  6M 128 @ 1d  |  1Y 252 @ 1d  |  5Y 1264 @ 1d
+ *
+ * 1W, 1M and 5Y are each the longest series at their own bar size, so they have
+ * no warm-up and their overlays still begin `period` bars in. Everything else
+ * gets a fully-seeded line across the whole chart.
+ */
+const MA_WARMUP_TF: Record<string, string> = {
+  "1D": "1W",
+  "3M": "5Y", "6M": "5Y", "1Y": "5Y",
+};
+
 const MA_PERS = [9, 21, 50, 200];
 const MA_COLS = ['#f5b14c', '#34E2F0', '#7C6CF5', '#ff79c6'];
 const EMA_COLS = ['#5ff0b3', '#22b8d6', '#a78bfa', '#ff9aab'];
@@ -465,6 +487,21 @@ function CandleChartInner({
     }
     return base;
   }, [sym, tf, px, realBars, live]);
+
+  // Longer same-granularity series, fetched ONLY while an MA/EMA overlay is on,
+  // purely to seed those averages (see MA_WARMUP_TF). Nothing from it is drawn.
+  const warmupTf = (maStep > 0 || emaStep > 0) ? MA_WARMUP_TF[tf] : undefined;
+  const { bars: warmupSource } = useBackendBars(sym, warmupTf ?? "5Y", warmupTf != null);
+  const warmupBars = useMemo(() => {
+    if (!warmupTf || !warmupSource || data.length === 0) return [] as OHLCBar[];
+    // Strictly BEFORE the window, so the visible bars are never duplicated.
+    // Capped at the longest period we draw; more would be wasted work and an
+    // EMA is fully converged long before that.
+    const firstT = data[0].t;
+    const prior = warmupSource.filter(b => b.t < firstT);
+    return prior.slice(-(MA_PERS[MA_PERS.length - 1] * 3));
+  }, [warmupTf, warmupSource, data]);
+
   const n = data.length;
   const W = 720, PH = 224, VH = showVol ? 54 : 0, GAP = showVol ? 10 : 0, PADT = 12, PADB = 26, axisW = 46;
   const H = PADT + PH + GAP + VH + PADB;
@@ -509,8 +546,20 @@ function CandleChartInner({
   const linePts = data.map((d, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(d.c).toFixed(1)}`).join(' ');
   const areaFill = linePts + ` L${X(n - 1).toFixed(1)} ${(PADT + PH).toFixed(1)} L${X(0).toFixed(1)} ${(PADT + PH).toFixed(1)} Z`;
 
-  const maPaths = MA_PERS.slice(0, maStep).map(p => buildPath(_sma(data, p)));
-  const emaPaths = MA_PERS.slice(0, emaStep).map(p => buildPath(_ema(data, p)));
+  // Moving averages are computed over [warm-up bars ..., visible bars] and then
+  // sliced back to the visible range.
+  //
+  // Computing them over the visible window alone was wrong twice over: _sma and
+  // _ema return null for the first `period - 1` bars, so on a 3M chart (64 daily
+  // bars) MA50/EMA50 only began ~78% of the way across and MA200/EMA200 never
+  // drew at all — the "lines start in the middle" — and where a line DID draw,
+  // an EMA seeded from the first bar of a 64-bar window is not the EMA any
+  // charting package reports, because a real one carries years of prior closes.
+  // Seeding from actual earlier bars fixes the values and the span together.
+  const seedCount = warmupBars.length;
+  const maSeries = seedCount ? [...warmupBars, ...data] : data;
+  const maPaths = MA_PERS.slice(0, maStep).map(p => buildPath(_sma(maSeries, p).slice(seedCount)));
+  const emaPaths = MA_PERS.slice(0, emaStep).map(p => buildPath(_ema(maSeries, p).slice(seedCount)));
 
   const handleMove = useCallback((e: React.MouseEvent<SVGRectElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
