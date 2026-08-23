@@ -771,9 +771,42 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
    half, so the blurb moved off its own row into that dead space — which lifts
    the chart ~90px up the page. Below 1100px the two stack again, since the
    header's own price line needs the full width at that point. */
-.sd-headwrap { display: flex; align-items: flex-start; gap: 16px; }
-.sd-headwrap > .sd-head { flex: 1 1 auto; min-width: 0; margin-bottom: 14px; }
-.sd-headwrap > .sd-about { flex: 0 1 30%; min-width: 280px; margin-top: 0; max-height: 88px; }
+/* stretch, not flex-start: the About box should run down to the bottom of the
+   ticker-details block rather than ending short and leaving a ragged edge. */
+.sd-headwrap { display: flex; align-items: stretch; gap: 16px; }
+/* Shrink-to-fit, NOT grow. With flex:1 1 auto the header stretched to fill the
+   row while its own text stopped short, leaving a dead gap between the ticker
+   details and the About box. Sizing to content puts About immediately after the
+   identity block and hands it the leftover width. */
+/* Shrink-to-fit, NOT grow. With flex:1 1 auto the header stretched to fill the
+   row while its own text stopped short, leaving a dead gap between the ticker
+   details and the About box. Sizing to content puts About immediately after the
+   identity block and hands it the leftover width.
+   min-width is a floor, not a stretch: .sd-name keeps flex-basis 0 (removing
+   that strands the logo on its own row), which makes the shrink-to-fit width
+   collapse toward min-content.
+   Sized to the PRICE ROW, not the meta row, so About's left border lands just
+   past the % change. Measured in the live DOM: h1 is 64px and .sd-px 317px,
+   which with the 10px column-gap needs 391px, plus the 46px logo and 16px gap
+   = 453. Rounded to 460 for slack.
+   Do NOT re-derive this by cloning .sd-headline outside .sd-head — descendant
+   selectors (.sd-head .sd-px .p sets the 1.7rem price) stop applying and the
+   clone under-measures by ~90px, which is how an earlier 360px floor shipped
+   and wrapped the symbol above the price.
+   The meta row (Mkt cap · exchange · sector · rank · live quote) needs ~590px,
+   so it deliberately wraps to two lines here — the accepted cost of the tighter
+   alignment, not an oversight. Capped at 45% so About keeps the bulk of the
+   row on narrower windows. */
+.sd-headwrap > .sd-head {
+  flex: 0 1 auto; min-width: min(460px, 45%); margin-bottom: 14px;
+}
+/* Taller than the identity block so the blurb shows more before it scrolls;
+   min-height keeps a SHORT description from collapsing the box well above the
+   header's bottom edge. */
+.sd-headwrap > .sd-about {
+  flex: 1 1 auto; min-width: 300px; margin-top: 0;
+  min-height: 104px; max-height: 148px;
+}
 /* Basis 0, NOT auto. .sd-head is a wrapping flex row, and wrapping is decided
    from each item's flex-basis before any shrinking happens — with basis:auto
    the name block's basis is its full max-content width (~990px), which exceeds
@@ -795,6 +828,13 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .sd-headline {
   display: flex; align-items: baseline; flex-wrap: wrap;
   column-gap: 10px; row-gap: 4px;
+}
+/* Second identity row: market cap, exchange/sector, provenance pills. Sits
+   under the price so the header no longer needs the full width, which is what
+   frees the space the About box grew into. */
+.sd-meta {
+  display: flex; align-items: center; flex-wrap: wrap;
+  column-gap: 10px; row-gap: 4px; margin-top: 5px;
 }
 /* The one element on the line that is allowed to give. Everything else —
    symbol, price, change, market cap, the pills — is a fixed fact that must not
@@ -1067,6 +1107,32 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .drawer-close:hover { background: var(--surface-2); color: var(--text-hi); }
 .drawer-h { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .drawer-b { overflow-y: auto; padding: 18px 20px 32px; flex: 1; }
+/* Earnings-dot popover on the price chart. Absolute like .chart-tip, so it
+   rides the same positioned chart host; `left` is set inline as a percentage
+   because the SVG scales with the card. */
+.chart-erpop {
+  position: absolute; top: 30px; z-index: 6;
+  min-width: 186px; padding: 9px 11px;
+  background: var(--surface-1); border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm); box-shadow: 0 12px 28px rgba(0,0,0,.5);
+  font-size: .72rem;
+}
+.chart-erpop-h {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-weight: 700; color: var(--ai); margin-bottom: 6px;
+  padding-bottom: 5px; border-bottom: 1px solid var(--border-soft);
+}
+.chart-erpop-h button {
+  background: none; border: 0; cursor: pointer; padding: 0 2px;
+  color: var(--text-dim-solid); font-size: .8rem; line-height: 1;
+}
+.chart-erpop-h button:hover { color: var(--text-hi); }
+.chart-erpop-r { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; }
+.chart-erpop-r span { color: var(--text-dim-solid); }
+.chart-erpop-r b { font-family: var(--f-mono); color: var(--text-hi); font-weight: 600; }
+.chart-erpop-r b.up { color: var(--up); }
+.chart-erpop-r b.dn { color: var(--down); }
+
 .closebtn { margin-left: auto; width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--text); border: 1px solid var(--border); background: none; cursor: pointer; flex-shrink: 0; font-size: 0.875rem; }
 .closebtn:hover { border-color: var(--border-strong); background: var(--surface-2); color: var(--text-hi); }
 /* Must follow :hover — same specificity, so source order decides which wins when
@@ -1880,6 +1946,42 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ecal-num { font-family: var(--f-mono); }
 .ecal-table .up { color: var(--up); }
 .ecal-table .dn { color: var(--down); }
+
+/* Expandable at-a-glance row: caret in the symbol cell, and the quarters panel
+   it opens. The panel is a full-width cell spanning every column, so it reads
+   as a drawer under its row rather than a second set of columns. */
+.ecal-caret {
+  flex: none; width: 18px; height: 18px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer; line-height: 1;
+  font-size: .8rem; color: var(--text-dim-solid);
+  transition: transform .15s ease, color .15s ease;
+}
+.ecal-caret:hover { color: var(--text-hi); }
+.ecal-caret.open { transform: rotate(90deg); color: var(--brand-2); }
+/* Overrides .ecal-table tbody tr:hover — this row is a panel, not a target. */
+.ecal-table tbody tr.ecal-exp-row,
+.ecal-table tbody tr.ecal-exp-row:hover { background: var(--surface-1); cursor: default; }
+.ecal-exp { padding: 10px 12px 12px 40px; }
+.ecal-exp-h {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 7px;
+  font-size: .66rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-dim-solid);
+}
+.ecal-exp-tbl { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.ecal-exp-tbl th {
+  text-align: left; padding: 5px 10px; white-space: nowrap;
+  font-size: .62rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-dim-solid); border-bottom: 1px solid var(--border-soft);
+}
+.ecal-exp-tbl td {
+  padding: 5px 10px; white-space: nowrap; color: var(--text);
+  border-bottom: 1px solid var(--border-soft);
+}
+.ecal-exp-tbl tr:last-child td { border-bottom: none; }
+.ecal-exp-tbl th.r, .ecal-exp-tbl td.r { text-align: right; }
+.ecal-exp-tbl .up { color: var(--up); }
+.ecal-exp-tbl .dn { color: var(--down); }
 
 .ecal-symcell { display: flex; align-items: center; gap: 9px; }
 .ecal-sym { font-weight: 700; color: var(--text-hi); }

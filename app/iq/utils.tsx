@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { mapEarningsToBars, type ChartEarnings } from "./chart-earnings";
+export type { ChartEarnings };
 import { useState, useRef, useCallback, useMemo } from "react";
 import { backendUrl } from "./backend";
 
@@ -420,6 +422,8 @@ type CandleChartProps = {
   realBars?: OHLCBar[];
   /** Latest live (delayed) price, folded onto the most recent real bar so the chart updates in place. */
   live?: { price: number; high: number | null; low: number | null } | null;
+  /** Reported quarters to mark on the chart. Omit (or pass []) to hide them. */
+  earnings?: ChartEarnings[];
 };
 
 /**
@@ -439,8 +443,11 @@ export function CandleChart(props: CandleChartProps) {
 
 function CandleChartInner({
   sym, tf, px, maStep = 0, emaStep = 0, showVol = true, chartType = "candles", realBars, live,
+  earnings = [],
 }: CandleChartProps) {
   const [tip, setTip] = useState<{ node: ReactNode; left: number } | null>(null);
+  /** Which earnings dot is open. Index into `erMarks`, or null. */
+  const [erOpen, setErOpen] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   const data = useMemo(() => {
@@ -493,7 +500,9 @@ function CandleChartInner({
     : [...new Set(Array.from({ length: xTickCount }, (_, i) => Math.round(i * (n - 1) / (xTickCount - 1))))];
   const xAxisY = PADT + PH + GAP + VH + 15;
 
-  const erIdx = Math.round(n * 0.82);
+  // Earnings dots, placed by date — see chart-earnings.ts for the rules.
+  const erMarks = mapEarningsToBars(data, earnings);
+
   const ct = chartType.toLowerCase();
   const trendUp = data[n - 1].c >= data[0].c;
   const lineColor = trendUp ? 'var(--up)' : 'var(--down)';
@@ -533,6 +542,40 @@ function CandleChartInner({
         <div className="chart-tip" style={{ opacity: 1, left: tip.left, top: 14 }}
         >{tip.node}</div>
       )}
+      {erOpen != null && erMarks[erOpen] && (() => {
+        const { i, e } = erMarks[erOpen];
+        const surp = e.epsActual != null && e.epsEstimate != null && e.epsEstimate !== 0
+          ? ((e.epsActual - e.epsEstimate) / Math.abs(e.epsEstimate)) * 100
+          : null;
+        const money = (v: number | null | undefined) =>
+          v == null ? "—" : v >= 1e9 ? `$${(v / 1e9).toFixed(2)}B`
+            : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${v.toFixed(0)}`;
+        const eps = (v: number | null | undefined) => (v == null ? "—" : `$${v.toFixed(2)}`);
+        // Percent of plot width, so the card tracks the dot when the SVG scales.
+        const leftPct = Math.min(78, Math.max(2, (X(i) / W) * 100));
+        return (
+          <div className="chart-erpop" style={{ left: `${leftPct}%` }}>
+            <div className="chart-erpop-h">
+              <span>{e.date}{e.session ? ` · ${e.session}` : ""}</span>
+              <button onClick={() => setErOpen(null)} aria-label="Close">✕</button>
+            </div>
+            <div className="chart-erpop-r"><span>EPS actual</span><b>{eps(e.epsActual)}</b></div>
+            <div className="chart-erpop-r"><span>Consensus</span><b>{eps(e.epsEstimate)}</b></div>
+            <div className="chart-erpop-r">
+              <span>Surprise</span>
+              <b className={surp == null ? undefined : surp >= 0 ? "up" : "dn"}>
+                {surp == null ? "—" : `${surp >= 0 ? "+" : ""}${surp.toFixed(1)}%`}
+              </b>
+            </div>
+            {(e.revenueActual != null || e.revenueEstimate != null) && (
+              <>
+                <div className="chart-erpop-r"><span>Revenue</span><b>{money(e.revenueActual)}</b></div>
+                <div className="chart-erpop-r"><span>Rev. cons.</span><b>{money(e.revenueEstimate)}</b></div>
+              </>
+            )}
+          </div>
+        );
+      })()}
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
         {/* Grid */}
         {gridLines.map(({ yy, val }) => (
@@ -628,13 +671,21 @@ function CandleChartInner({
             <text className="caxis" x={10} y={PADT + 11 + (maStep + idx) * 12} fill={EMA_COLS[idx]}>·· EMA{MA_PERS[idx]}</text>
           </g>
         ))}
-        {/* ER event marker */}
-        {erIdx < n && (
-          <>
-            <circle cx={X(erIdx)} cy={Y(data[erIdx].h) - 10} r="4" fill="var(--ai)" />
-            <text className="caxis" x={X(erIdx)} y={Y(data[erIdx].h) - 16} textAnchor="middle" fill="var(--ai)">◆ ER</text>
-          </>
-        )}
+        {/* Earnings dots — one per reported quarter, positioned by date. */}
+        {erMarks.map(({ i, e }, k) => {
+          const cy = Math.max(PADT + 6, Y(data[i].h) - 10);
+          const open = erOpen === k;
+          return (
+            <g key={`er${i}`} style={{ cursor: "pointer" }}
+              onClick={ev => { ev.stopPropagation(); setErOpen(open ? null : k); setTip(null); }}>
+              {/* Invisible pad: a 4px dot is a hard click target on a dense chart. */}
+              <circle cx={X(i)} cy={cy} r="11" fill="transparent" />
+              <circle cx={X(i)} cy={cy} r={open ? 5.5 : 4}
+                fill="var(--ai)" stroke="var(--surface-0)" strokeWidth="1.5" />
+              <text className="caxis" x={X(i)} y={cy - 8} textAnchor="middle" fill="var(--ai)">ER</text>
+            </g>
+          );
+        })}
         {/* X-axis date/time ticks — edge ticks anchor inward so their text never clips off the plot */}
         {xTickIdx.map((i, k) => (
           <text key={`x${i}`} className="caxis" x={X(i)} y={xAxisY}

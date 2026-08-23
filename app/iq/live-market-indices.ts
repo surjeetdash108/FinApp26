@@ -18,14 +18,14 @@ export function buildSectorList(
   sectorsLive: SectorApiDoc[],
 ): SectorRow[] {
   const livePctByName = new Map(sectorsLive.map((s) => [s.sector, s.pctChange]));
-  const gics = sectorsLive.map((s) => s.sector);
-  const gicsSet = new Set(gics);
-  // Canonical sectors that have NO SPDR benchmark row (so they never appear in
-  // `sectorsLive`) but are still valid buckets — e.g. crypto miners. Without
-  // this they'd be filtered out as "not a clean GICS name" and vanish from the
-  // treemap. Their tile %change is the average of their own live constituents.
-  const EXTRA_SECTORS = ["Crypto / Blockchain"];
-  const validSet = new Set([...gics, ...EXTRA_SECTORS]);
+  const liveNames = sectorsLive.map((s) => s.sector);
+  // No allow-list of extra buckets any more. `sectors` is now built by
+  // cap-weighting our OWN constituents (sectors.job) rather than by reading 11
+  // SPDR ETFs, so every sector a company can carry already has a row — the
+  // "Crypto / Blockchain" special case existed only because no SPDR benchmark
+  // covered it. Companies are on the TradingView/FactSet taxonomy, so an
+  // unrecognised label here means bad data, and dropping it is correct.
+  const validSet = new Set(liveNames);
 
   const bySector = new Map<string, [string, number, number][]>();
   for (const c of companies) {
@@ -36,12 +36,11 @@ export function buildSectorList(
     bucket.push([c.ticker, c.marketCap / 1e9, c.pctChange]);
   }
 
-  // 11 SPDR sectors in their live order, then any canonical extra sectors that
-  // actually have constituents (so an empty crypto bucket adds no tile).
-  const orderedNames = [
-    ...gics,
-    ...EXTRA_SECTORS.filter((s) => !gicsSet.has(s) && (bySector.get(s)?.length ?? 0) > 0),
-  ];
+  // Every sector the aggregate produced, in its live order. There is no longer
+  // a second list to append: sectors.job emits one row per sector that actually
+  // has constituents, so the set is already complete and non-empty by
+  // construction.
+  const orderedNames = liveNames;
   const rows: SectorRow[] = [];
   orderedNames.forEach((name, i) => {
     const items = bySector.get(name);

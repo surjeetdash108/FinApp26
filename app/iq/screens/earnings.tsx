@@ -12,7 +12,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
 import { isoDay, addDays, mondayOf } from "../calendar-range";
-import { surprisePct } from "../types";
+import { surprisePct, reportedQuarterEps, quarterEpsSurprisePct } from "../types";
 
 // Live source (Polygon SEC financials) has ticker/date/epsEstimate/epsActual —
 // no session (BMO/AMC), guidance, price reaction, implied move, or quarterly
@@ -417,13 +417,164 @@ function GuidanceCell({ it }: { it: EarnCalItem }) {
   );
 }
 
-function GlanceRow({ it, showDate, onSelect }: { it: EarnCalItem; showDate: boolean; onSelect: (s: string, date: string) => void }) {
+/** How many reported quarters the expanded row shows. */
+const GLANCE_HISTORY_QUARTERS = 4;
+
+/**
+ * The last four reported quarters for one ticker, shown inside an expanded
+ * at-a-glance row.
+ *
+ * Fetched lazily — `useApiResource(null)` skips the request entirely, so the
+ * per-ticker /live/financials call only happens the first time a row is opened.
+ * The alternative, prefetching for every row, would fire 25 requests to render
+ * a panel nobody had asked to see yet.
+ *
+ * The market-wide /market-data/earnings feed can NOT serve this: it holds ~10
+ * months of the calendar, which is 2-3 rows per ticker (measured: 13,236 rows
+ * over 5,516 tickers, IREN has 2). Four quarters of history only exists on the
+ * per-ticker financials doc.
+ *
+ * EPS uses reportedQuarterEps / quarterEpsSurprisePct — the FMP matched
+ * (actual, estimate) pair on one basis — never the raw GAAP epsActual, so the
+ * beat/miss here agrees with every other beat/miss in the app.
+ */
+interface GlanceQuarterRow {
+  key: string;
+  period: string;
+  reported: string | null;
+  act: number | null;
+  est: number | null;
+  surp: number | null;
+  revenue: number | null;
+}
+
+function GlanceQuarters({ ticker, colSpan }: { ticker: string; colSpan: number }) {
+  const { data, loading } = useApiResource<FinancialsDoc>(
+    `/live/financials?ticker=${encodeURIComponent(ticker)}`,
+  );
+
+  // Newest first. The vendor already returns them in that order, but a doc
+  // written by an older sync run cannot be assumed to be sorted.
+  const quarters: QuarterFinancials[] = [...(data?.quarters ?? [])]
+    .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""));
+
+  // Revenue lives only on `quarters`, so index it to join onto the EPS series.
+  const revByPeriod = new Map<string, number | null>(
+    quarters.map(q => [`${q.fiscalYear}-${q.fiscalPeriod}`, q.revenue]),
+  );
+
+  /**
+   * Rows come from `epsHistory` (deep FMP reported EPS), NOT from `quarters`.
+   *
+   * `quarters` is the Polygon SEC-filing series and it lags: measured on CSCO,
+   * `quarters` topped out at Q2 FY2026 (filed 2026-02-17) while epsHistory
+   * already carried Q3 (2026-05-13) and Q4 (2026-08-12) — so a quarters-driven
+   * panel omitted the two newest reports, including the very one its own row
+   * describes ($1.22 vs $1.17 on 08-12). epsHistory is also the basis
+   * reportedAnnualEps uses, so the numbers agree with the rest of the app.
+   *
+   * Rows with no actual are upcoming quarters carrying only an estimate
+   * (CSCO has a Q1 FY2027 row dated 2026-11-11) — dropped, since this panel is
+   * about what was reported.
+   */
+  const fromHistory: GlanceQuarterRow[] = (data?.epsHistory ?? [])
+    .filter(h => h.epsActual != null)
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
+    .slice(0, GLANCE_HISTORY_QUARTERS)
+    .map(h => ({
+      key: `${h.fiscalYear}-${h.fiscalPeriod}-${h.date}`,
+      period: [h.fiscalPeriod, h.fiscalYear].filter(Boolean).join(" "),
+      reported: h.date ?? null,
+      act: h.epsActual,
+      est: h.epsEstimate,
+      surp: surprisePct(h.epsActual, h.epsEstimate),
+      revenue: revByPeriod.get(`${h.fiscalYear}-${h.fiscalPeriod}`) ?? null,
+    }));
+
+  // Docs synced before epsHistory existed have only `quarters`; fall back so
+  // those tickers still get a panel rather than an empty one.
+  const fromQuarters: GlanceQuarterRow[] = quarters
+    .slice(0, GLANCE_HISTORY_QUARTERS)
+    .map((q, i) => ({
+      key: `${q.fiscalYear}-${q.fiscalPeriod}-${q.endDate}-${i}`,
+      period: [q.fiscalPeriod, q.fiscalYear].filter(Boolean).join(" "),
+      // Filing date is when it was actually reported; endDate (quarter close)
+      // is the fallback when the filing carries no date.
+      reported: q.filingDate ?? q.endDate ?? null,
+      act: reportedQuarterEps(q),
+      est: q.epsEstimateReported ?? q.epsEstimate,
+      surp: quarterEpsSurprisePct(q),
+      revenue: q.revenue,
+    }));
+
+  const rows = fromHistory.length > 0 ? fromHistory : fromQuarters;
+
+  return (
+    <tr className="ecal-exp-row">
+      <td colSpan={colSpan} style={{ padding: 0 }}>
+        <div className="ecal-exp">
+          <div className="ecal-exp-h">
+            Last {GLANCE_HISTORY_QUARTERS} reported quarters · {ticker}
+            <VendorTag v={["polygon", "fmp"]} />
+          </div>
+          {rows.length === 0 ? (
+            <DataState loading={loading} label={`No reported quarters on file for ${ticker}.`} />
+          ) : (
+            <table className="ecal-exp-tbl">
+              <thead>
+                <tr>
+                  <th>Quarter</th>
+                  <th className="r">Reported</th>
+                  <th className="r">EPS act</th>
+                  <th className="r">EPS est</th>
+                  <th className="r">Surprise</th>
+                  <th className="r">Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.key}>
+                    <td>{r.period || r.reported || "—"}</td>
+                    <td className="r ecal-num" style={{ color: "var(--text-dim-solid)" }}>{r.reported ?? "—"}</td>
+                    <td className="r ecal-num">{r.act != null ? `$${r.act.toFixed(2)}` : "—"}</td>
+                    <td className="r ecal-num" style={{ color: "var(--text-dim-solid)" }}>
+                      {r.est != null ? `$${r.est.toFixed(2)}` : "—"}
+                    </td>
+                    <td className={`r ecal-num ${fmtUpDn(r.surp)}`}>{fmtPctSigned(r.surp)}</td>
+                    <td className="r ecal-num">{fmtRev(r.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function GlanceRow({ it, showDate, onSelect, colSpan }: { it: EarnCalItem; showDate: boolean; onSelect: (s: string, date: string) => void; colSpan: number }) {
   const epsSurp = surprise(it.epsE, it.epsA);
   const yoyRev = surprise(it.revYearAgo, it.revA); // (rev - yearAgo)/|yearAgo|
+  const [open, setOpen] = useState(false);
   return (
+    <>
     <tr onClick={() => onSelect(it.s, it.date)} style={{ cursor: "pointer" }}>
       <td>
         <div className="ecal-symcell">
+          {/* Its own control rather than a whole-row toggle: clicking the row
+              still opens the ticker's detail view, which is the primary action
+              and predates this. stopPropagation keeps the two apart. */}
+          <button
+            type="button"
+            className={`ecal-caret${open ? " open" : ""}`}
+            aria-expanded={open}
+            aria-label={open ? `Hide quarters for ${it.s}` : `Show last ${GLANCE_HISTORY_QUARTERS} quarters for ${it.s}`}
+            title={open ? "Hide recent quarters" : "Show last 4 reported quarters"}
+            onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+          >
+            ▸
+          </button>
           <StockLogo sym={it.s} size={28} />
           <div>
             <div className="ecal-sym">{it.s}</div>
@@ -441,14 +592,106 @@ function GlanceRow({ it, showDate, onSelect }: { it: EarnCalItem; showDate: bool
       <td className={`r ecal-num ${fmtUpDn(yoyRev)}`}>{fmtPctSigned(yoyRev)}</td>
       <td className="r ecal-num"><GuidanceCell it={it} /></td>
     </tr>
+    {/* Mounted only while open, so closing a row also drops its fetched doc —
+        25 open rows would otherwise hold 25 financials docs alive for the rest
+        of the session. */}
+    {open && <GlanceQuarters ticker={it.s} colSpan={colSpan} />}
+    </>
   );
+}
+
+type GlanceSortKey =
+  | "company" | "date" | "surprise" | "actual" | "consensus"
+  | "yearAgo" | "actualRev" | "consRev" | "yoyRev" | "guidance";
+
+/** Direction a column starts in on first click — text ascends (A→Z), numbers
+ *  and dates descend (biggest / most recent first). Mirrors movers.tsx. */
+const GLANCE_FIRST_DIR: Record<GlanceSortKey, "asc" | "desc"> = {
+  company: "asc", date: "desc", surprise: "desc", actual: "desc",
+  consensus: "desc", yearAgo: "desc", actualRev: "desc", consRev: "desc",
+  yoyRev: "desc", guidance: "desc",
+};
+
+/** Guidance ordered by how favourable it is, so a descending sort surfaces
+ *  raises first and cuts last. A range with no stated direction ranks above
+ *  nothing at all; a blank cell has no value and sorts to the end either way. */
+const GUIDANCE_RANK: Record<string, number> = {
+  raised: 5, reaffirmed: 4, mixed: 3, cut: 2,
+};
+function guidanceValue(it: EarnCalItem): number | null {
+  if (it.guide) return GUIDANCE_RANK[it.guide] ?? null;
+  return it.guideRange ? 1 : null;
+}
+
+function glanceValue(it: EarnCalItem, k: GlanceSortKey): number | string | null {
+  switch (k) {
+    case "company":   return it.s;
+    case "date":      return it.date || null;
+    case "surprise":  return surprise(it.epsE, it.epsA);
+    case "actual":    return it.epsA;
+    case "consensus": return it.epsE;
+    case "yearAgo":   return it.epsAYearAgo;
+    case "actualRev": return it.revA;
+    case "consRev":   return it.revE;
+    case "yoyRev":    return surprise(it.revYearAgo, it.revA);
+    case "guidance":  return guidanceValue(it);
+  }
+}
+
+/** Missing values sort to the BOTTOM in both directions — a blank is not
+ *  "smallest", and flipping direction should not fill the top with dashes. */
+function compareGlance(a: EarnCalItem, b: EarnCalItem, k: GlanceSortKey, dir: 1 | -1): number {
+  const x = glanceValue(a, k), y = glanceValue(b, k);
+  if (x == null && y == null) return 0;
+  if (x == null) return 1;
+  if (y == null) return -1;
+  if (typeof x === "string" || typeof y === "string") {
+    return String(x).localeCompare(String(y)) * dir;
+  }
+  return (x - y) * dir;
 }
 
 function GlanceTable({ title, items, showDate, onSelect }: { title: string; items: EarnCalItem[]; showDate: boolean; onSelect: (s: string, date: string) => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [sortKey, setSortKey] = useState<GlanceSortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   if (items.length === 0) return null;
-  const shown = expanded ? items : items.slice(0, GLANCE_MAX);
+
+  /** First click applies the column's natural direction, the second toggles,
+   *  the third clears back to the incoming largest-cap-first ordering. */
+  const toggleSort = (k: GlanceSortKey) => {
+    if (sortKey !== k) { setSortKey(k); setSortDir(GLANCE_FIRST_DIR[k]); return; }
+    if (sortDir === GLANCE_FIRST_DIR[k]) { setSortDir(sortDir === "asc" ? "desc" : "asc"); return; }
+    setSortKey(null);
+  };
+  /** Plain render helper, not a nested component, so React does not remount
+   *  the header row on every parent render. */
+  const sortTh = (k: GlanceSortKey, label: string, right = true) => (
+    <th
+      className={right ? "r" : undefined}
+      onClick={() => toggleSort(k)}
+      title={`Sort by ${label}`}
+      style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
+    >
+      {label}
+      {/* Always a FILLED glyph in brand violet, dimmed when inactive — same as
+          movers.tsx / insider.tsx. A hollow glyph for the unsorted state was
+          near-invisible and shifted the column width on every toggle. */}
+      <span style={{ color: "var(--brand-2)", fontSize: ".82em", marginLeft: 4, opacity: sortKey === k ? 1 : 0.45 }}>
+        {sortKey === k && sortDir === "asc" ? "▲" : "▼"}
+      </span>
+    </th>
+  );
+
+  const ordered = sortKey
+    ? [...items].sort((a, b) => compareGlance(a, b, sortKey, sortDir === "asc" ? 1 : -1))
+    : items;
+  const shown = expanded ? ordered : ordered.slice(0, GLANCE_MAX);
   const canExpand = items.length > GLANCE_MAX;
+  // Company, Surprise, Actual, Consensus, 1 Yr Ago, Actual Rev, Cons. Rev,
+  // Yr/Yr Rev, Guidance — plus Date when it is shown. Kept next to the header
+  // it counts so the two move together.
+  const colCount = 9 + (showDate ? 1 : 0);
   return (
     <div className="ecal-day" style={{ marginBottom: 14 }}>
       <div className="ecal-day-h">
@@ -459,20 +702,20 @@ function GlanceTable({ title, items, showDate, onSelect }: { title: string; item
         <table className="ecal-table">
           <thead>
             <tr>
-              <th>Company</th>
-              {showDate && <th className="r">Date</th>}
-              <th className="r">Surprise</th>
-              <th className="r">Actual</th>
-              <th className="r">Consensus</th>
-              <th className="r">1 Yr Ago</th>
-              <th className="r">Actual Rev</th>
-              <th className="r">Cons. Rev</th>
-              <th className="r">Yr/Yr Rev</th>
-              <th className="r">Guidance</th>
+              {sortTh("company", "Company", false)}
+              {showDate && sortTh("date", "Date")}
+              {sortTh("surprise", "Surprise")}
+              {sortTh("actual", "Actual")}
+              {sortTh("consensus", "Consensus")}
+              {sortTh("yearAgo", "1 Yr Ago")}
+              {sortTh("actualRev", "Actual Rev")}
+              {sortTh("consRev", "Cons. Rev")}
+              {sortTh("yoyRev", "Yr/Yr Rev")}
+              {sortTh("guidance", "Guidance")}
             </tr>
           </thead>
           <tbody>
-            {shown.map((it, i) => <GlanceRow key={`${it.s}-${it.date}-${i}`} it={it} showDate={showDate} onSelect={onSelect} />)}
+            {shown.map((it, i) => <GlanceRow key={`${it.s}-${it.date}-${i}`} it={it} showDate={showDate} onSelect={onSelect} colSpan={colCount} />)}
           </tbody>
         </table>
       </div>

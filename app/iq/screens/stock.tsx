@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } fro
 import { useIQActions, ExpandBtn } from "../shell";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import { WatchlistPicker } from "../watchlist-picker";
-import { fmt, cls, arr, sign, CandleChart, ChartSelect, TF_OPTIONS, CHART_TYPE_OPTIONS, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo, VendorTag, titleCaseLabel} from "../utils";
+import { fmt, cls, arr, sign, CandleChart, ChartSelect, TF_OPTIONS, CHART_TYPE_OPTIONS, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo, VendorTag, titleCaseLabel, type ChartEarnings } from "../utils";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiResource } from "../hooks/useApiResource";
@@ -174,6 +174,27 @@ const EXCHANGE: Record<string, string> = {
 };
 
 const ac = (a: string) => a === "Buy" ? "var(--up)" : a === "Sell" ? "var(--down)" : "var(--text-dim-solid)";
+
+/**
+ * Colour for an ANALYST consensus label.
+ *
+ * This exists because the consensus label used to be painted with `tone`, which
+ * is the TECHNICAL gauge's colour. The two are different readings — technicals
+ * are oscillators and moving averages, consensus is analyst votes — and they
+ * disagree often and legitimately. Pairing them meant IREN's "Buy" consensus
+ * (10 buy / 3 hold / 1 sell) rendered in the Sell red, because its technicals
+ * read Sell: the word and its colour said opposite things.
+ *
+ * Three levels, matching the Sell/Hold/Buy counts rendered directly beneath it.
+ * Deliberately NOT ac() above, which grades oscillator verdicts where "Strong"
+ * and "Weak" describe signal strength rather than direction.
+ */
+const consensusTone = (c: string | null | undefined): string => {
+  const k = (c ?? "").trim().toLowerCase();
+  if (k === "buy" || k === "strong buy" || k === "outperform") return "var(--up)";
+  if (k === "sell" || k === "strong sell" || k === "underperform") return "var(--down)";
+  return "var(--text-dim-solid)";
+};
 
 type IncRow = { c: string; rev: number; cogs: number; gp: number; opex: number; oi: number; ni: number; eps: number };
 
@@ -537,7 +558,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const [tfActive, setTfActive] = useState("3M");
   const [showVol, setShowVol] = useState(true);
   const [showRsi, setShowRsi] = useState(false);
-  const [showEarnings, setShowEarnings] = useState(false);
+  // Default ON: the earnings dots are the chart's main annotation, and behind a
+  // default-off toggle they were invisible unless you knew to look for the
+  // button. The toggle still turns them off for a clean price-only chart.
+  const [showEarnings, setShowEarnings] = useState(true);
   const [chartType, setChartType] = useState<"Candles" | "Hollow" | "Bars" | "Line" | "Area">("Candles");
   const [maStep, setMaStep] = useState(0);
 
@@ -781,7 +805,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const rv = liveCompany?.rvol ?? null;
   const mc = liveCompany?.marketCap != null ? liveCompany.marketCap / 1e9 : null;
   const gv = RATING_VAL[rating] ?? 0;
-  const tone = gv > 0.6 ? "var(--up)" : gv > 0 ? "#7bdcae" : gv < -0.6 ? "var(--down)" : gv < 0 ? "#ff9aab" : "var(--text-dim-solid)";
+  // (The technical `tone` that used to live here is gone: TrGauge already
+  // colours its own label from `rating`, and its only other consumer was the
+  // analyst-consensus label, which now derives its colour from the consensus
+  // itself via consensusTone.)
   // Real analyst consensus (Buy/Hold/Sell vote counts) from analyst_actions —
   // shown as its own block rather than mislabeled as a technical-indicator read.
   const consensusDoc = liveConsensus.find(c => c.ticker === sym);
@@ -797,6 +824,50 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const erDate = symEvents.find(e => e.date >= todayStr)?.date
     ?? symEvents[symEvents.length - 1]?.date
     ?? "—";
+  // Reported quarters for the chart's earnings dots. Only past reports carry an
+  // actual, and a dot on a future date would have nothing to show, so upcoming
+  // rows are excluded rather than rendered empty.
+  //
+  // Built from `epsHistory` (deep FMP reported series) rather than the
+  // market-wide earnings calendar. mapEarningsToBars already drops reports
+  // outside the loaded range correctly — the problem was that the calendar had
+  // nothing to drop: /market-data/earnings spans ~10 months and carries 2-3
+  // rows per ticker, so 1Y and 5Y rendered the SAME one or two dots and the
+  // timeframe dropdown looked broken. epsHistory goes back years (measured on
+  // CSCO: 39 reported quarters to 2017-02-15 — 4 inside 1Y, 20 inside 5Y), so
+  // widening the timeframe now actually reveals more reports.
+  //
+  // Revenue lives only on `quarters`, session only on the calendar feed, so
+  // both are joined back on where they exist. Neither is required for a dot.
+  const revByFiscalQuarter = new Map<string, number | null>(
+    (financialsDoc?.quarters ?? []).map(q => [`${q.fiscalYear}-${q.fiscalPeriod}`, q.revenue]),
+  );
+  const sessionByDate = new Map<string, "BMO" | "AMC" | null>(
+    symEvents.map(e => [e.date, e.session ?? null]),
+  );
+  const historyEarnings: ChartEarnings[] = (financialsDoc?.epsHistory ?? [])
+    .filter(h => h.epsActual != null && h.date && h.date <= todayStr)
+    .map(h => ({
+      date: h.date,
+      epsActual: h.epsActual,
+      epsEstimate: h.epsEstimate,
+      revenueActual: revByFiscalQuarter.get(`${h.fiscalYear}-${h.fiscalPeriod}`) ?? null,
+      revenueEstimate: null,
+      session: sessionByDate.get(h.date) ?? null,
+    }));
+  // Docs synced before epsHistory existed still get dots from the calendar.
+  const calendarEarnings: ChartEarnings[] = symEvents
+    .filter(e => e.date <= todayStr && e.epsActual != null)
+    .map(e => ({
+      date: e.date,
+      epsActual: e.epsActual,
+      epsEstimate: e.epsEstimate,
+      revenueActual: e.revenueActual ?? null,
+      revenueEstimate: e.revenueEstimate ?? null,
+      session: e.session ?? null,
+    }));
+  const chartEarnings: ChartEarnings[] =
+    historyEarnings.length > 0 ? historyEarnings : calendarEarnings;
 
   // EPS (TTM): the stored trailing-twelve-month EPS from the company doc, shown
   // as-is — NOT reconstructed as price ÷ P/E (circular: the sync-time P/E was
@@ -1082,23 +1153,24 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   {dispPct != null && (
                     <span className={`c ${cls(dispPct)}`}>{arr(dispPct)} {dispPct >= 0 ? "+" : ""}${fmt(dispDollar ?? 0, 2)} ({sign(dispPct)})</span>
                   )}
-                  {/* Market cap sits where the "○ delayed · 15m delayed" feed
-                      marker used to: the slot now carries data instead of a
-                      status label. The quote's live/delayed provenance is still
-                      stated by the "live quote · <source>" pill further along
-                      this line, so nothing is lost. `mc` is billions. */}
-                  {mc != null && (
-                    <span style={{ fontFamily: "var(--f-mono)", fontSize: ".72rem", fontWeight: 600,
-                      color: "var(--text-dim-solid)", letterSpacing: ".02em", whiteSpace: "nowrap" }}>
-                      Mkt cap {cap(mc)}
-                    </span>
-                  )}
                 </div>
+              </div>
+              {/* Second line, under the price: market cap, exchange/sector and
+                  the provenance pills. These used to share the identity line
+                  with the symbol and quote, which left the header wide and the
+                  About box squeezed into a 30% column. Dropping them one row
+                  narrows what the header needs and lets About take the width. */}
+              <div className="sd-meta">
+                {mc != null && (
+                  <span style={{ fontFamily: "var(--f-mono)", fontSize: ".72rem", fontWeight: 600,
+                    color: "var(--text-dim-solid)", letterSpacing: ".02em", whiteSpace: "nowrap" }}>
+                    Mkt cap {cap(mc)}
+                  </span>
+                )}
                 {/* The company name is dropped here only when the About box is
                     showing, because its own heading already reads "About <full
-                    name>" 10px to the right — repeating it costs ~200px of the
-                    single line and would force the pills to wrap. With no About
-                    box the name has nowhere else to appear, so it stays. */}
+                    name>" to the right — repeating it is pure duplication. With
+                    no About box the name has nowhere else to appear, so it stays. */}
                 <span className="sub" title={`${data.name} · ${ex} · ${group}`}>
                   {data.description ? "" : `${data.name} · `}{ex} · {group}
                 </span>
@@ -1207,7 +1279,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               <CandleChart sym={sym} tf={tfActive} px={p}
                 maStep={maStep} emaStep={emaStep}
                 showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars}
-                live={live.tick ? { price: live.tick.price, high: live.tick.high, low: live.tick.low } : null} />
+                live={live.tick ? { price: live.tick.price, high: live.tick.high, low: live.tick.low } : null}
+                earnings={showEarnings ? chartEarnings : []} />
             </div>
             {showRsi && (
               <div id="rsiHost">
@@ -1521,7 +1594,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               {consensusDoc && (
                 <div className="trgroup" style={{ marginBottom: 12 }}>
                   <div className="gl">Analyst Consensus</div>
-                  <div className="rate" style={{ color: tone }}>{consensusDoc.consensus}</div>
+                  <div className="rate" style={{ color: consensusTone(consensusDoc.consensus) }}>{consensusDoc.consensus}</div>
                   <div className="counts">
                     <span style={{ color: "var(--down)" }}>Sell<b>{consensusDoc.sell + consensusDoc.strongSell}</b></span>
                     <span style={{ color: "var(--text-dim-solid)" }}>Hold<b>{consensusDoc.hold}</b></span>
