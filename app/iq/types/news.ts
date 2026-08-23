@@ -15,6 +15,10 @@ export interface NewsArticleDoc {
   vendor?: string;
   url: string;
   category: string | null;
+  /** Feed bucket derived at ingest by news-category.util (Earnings, Analyst
+   *  Actions, M&A, Legal & Regulatory, Product & Launches, Capital &
+   *  Dividends, Other). Older docs written before tagging may omit it. */
+  tag?: "earnings" | "analyst" | "ma" | "legal" | "product" | "capital" | "other";
   sentiment: "positive" | "negative" | "neutral" | null;
   sentimentReasoning: string | null;
   keywords: string[];
@@ -22,3 +26,18 @@ export interface NewsArticleDoc {
   publishedAt: string;
   updatedAt: string;
 }
+
+/**
+ * Feed category chips, in display order. Mirrors NEWS_CATEGORY_ORDER /
+ * NEWS_CATEGORY_LABEL in the backend's news-category.util — the tags are
+ * written at ingest, so the two lists must stay in step. "Other" is last.
+ */
+export const NEWS_TAGS: Array<{ key: string; label: string }> = [
+  { key: "earnings", label: "Earnings" },
+  { key: "analyst",  label: "Analyst Actions" },
+  { key: "ma",       label: "M&A" },
+  { key: "legal",    label: "Legal & Regulatory" },
+  { key: "product",  label: "Product & Launches" },
+  { key: "capital",  label: "Capital & Dividends" },
+  { key: "other",    label: "Other" },
+];

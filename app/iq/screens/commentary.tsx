@@ -8,6 +8,7 @@ import { useApiList } from "../hooks/useApiList";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
 import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc } from "../types";
+import { NEWS_TAGS } from "../types/news";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
@@ -163,6 +164,7 @@ export function CommentaryScreen() {
   const [search,        setSearch]        = useState("");
   const [secFilter,     setSecFilter]     = useState("All");
   const [capFilter,     setCapFilter]     = useState("All");
+  const [tagFilter,     setTagFilter]     = useState<string>("all");
   const searchRef = useRef<HTMLInputElement>(null);
 
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
@@ -213,6 +215,7 @@ export function CommentaryScreen() {
       !((n.ticker ?? "").toLowerCase().includes(q) ||
         (n.headline ?? "").toLowerCase().includes(q) ||
         (n.summary ?? "").toLowerCase().includes(q))) return false;
+    if (tagFilter !== "all" && (n.tag ?? "other") !== tagFilter) return false;
     if (effSec !== "All" || capFilter !== "All") {
       const c = companyByTicker.get(n.ticker);
       if (effSec !== "All" && !matchesSector(effSec, n.ticker, c?.sector)) return false;
@@ -220,6 +223,30 @@ export function CommentaryScreen() {
     }
     return true;
   });
+
+  /* Chip counts come from the feed BEFORE the tag filter is applied, so the
+     numbers stay put when you select a chip — a count that collapsed to its
+     own bucket the moment you clicked it would be useless for comparison. */
+  const tagCounts = (() => {
+    const base = tabFeed.filter(n => {
+      if (q &&
+        !((n.ticker ?? "").toLowerCase().includes(q) ||
+          (n.headline ?? "").toLowerCase().includes(q) ||
+          (n.summary ?? "").toLowerCase().includes(q))) return false;
+      if (effSec !== "All" || capFilter !== "All") {
+        const c = companyByTicker.get(n.ticker);
+        if (effSec !== "All" && !matchesSector(effSec, n.ticker, c?.sector)) return false;
+        if (capFilter !== "All" && capTier(c?.marketCap) !== capFilter) return false;
+      }
+      return true;
+    });
+    const counts: Record<string, number> = { all: base.length };
+    for (const n of base) {
+      const t = n.tag ?? "other";
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+    return counts;
+  })();
 
   /* Collapse multi-ticker duplicates. Polygon tags one article to EVERY ticker
      it mentions, so the same story arrives once per ticker (an Alphabet piece
@@ -300,10 +327,30 @@ export function CommentaryScreen() {
 
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {search.trim() || effSec !== "All" || capFilter !== "All"
+            {search.trim() || effSec !== "All" || capFilter !== "All" || tagFilter !== "all"
               ? `Showing ${feed.length} item${feed.length === 1 ? "" : "s"}`
-              : "Filter the feed — search text, sector or market cap"}
+              : "Filter the feed — search text, sector, market cap or category"}
           </span>
+        </div>
+
+        {/* Category chips — one per news tag, with a live count. Counts ignore
+            the chip selection itself so they stay comparable while browsing. */}
+        <div className="feed-chips">
+          {[{ key: "all", label: "All" },
+            ...NEWS_TAGS.map(t => ({ key: t.key, label: t.label }))]
+            .filter(c => c.key === "all" || (tagCounts[c.key] ?? 0) > 0)
+            .map(c => (
+              <button
+                key={c.key}
+                className={`feed-chip${tagFilter === c.key ? " on" : ""}`}
+                onClick={() => setTagFilter(c.key)}
+                data-tag={c.key}
+              >
+                <span className="feed-chip-dot" />
+                {c.label}
+                <b>{tagCounts[c.key] ?? 0}</b>
+              </button>
+            ))}
         </div>
 
         <div className="dash">
