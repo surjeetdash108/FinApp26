@@ -1045,6 +1045,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
       {!hideHeader && (
         <div style={{ padding: "14px 18px 0" }}>
+          {/* Header row: identity/quote on the left, the About blurb in the dead
+              space to its right. The blurb used to sit on its own line BELOW the
+              header, pushing the chart ~90px down the page for no informational
+              gain — the header never used its right half. */}
+          <div className="sd-headwrap">
           <div className="sd-head">
             <StockLogo sym={sym} size={46} />
             <div className="sd-name">
@@ -1059,9 +1064,15 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                   {dispPct != null && (
                     <span className={`c ${cls(dispPct)}`}>{arr(dispPct)} {dispPct >= 0 ? "+" : ""}${fmt(dispDollar ?? 0, 2)} ({sign(dispPct)})</span>
                   )}
-                  {livePrice != null && (
-                    <span style={{ fontSize: ".56rem", color: "var(--text-dim-solid)", letterSpacing: ".02em" }}>
-                      {live.connected ? "● live" : "○ delayed"} · {live.delayMinutes ?? 15}m delayed
+                  {/* Market cap sits where the "○ delayed · 15m delayed" feed
+                      marker used to: the slot now carries data instead of a
+                      status label. The quote's live/delayed provenance is still
+                      stated by the "live quote · <source>" pill on the sub-line
+                      below, so nothing is lost. `mc` is billions. */}
+                  {mc != null && (
+                    <span style={{ fontFamily: "var(--f-mono)", fontSize: ".72rem", fontWeight: 600,
+                      color: "var(--text-dim-solid)", letterSpacing: ".02em", whiteSpace: "nowrap" }}>
+                      Mkt cap {cap(mc)}
                     </span>
                   )}
                 </div>
@@ -1080,11 +1091,18 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 )}
               </div>
             </div>
-            <span style={{ marginLeft: "auto", alignSelf: "flex-start" }}><VendorTag v="polygon" /></span>
+            {/* The About box now sits 16px to the right and carries its own
+                Polygon tag, so a second identical badge here is just noise.
+                Without a description there is no neighbouring tag, and the
+                header keeps its own — attribution is never dropped. */}
+            {!data.description && (
+              <span style={{ marginLeft: "auto", alignSelf: "flex-start" }}><VendorTag v="polygon" /></span>
+            )}
           </div>
 
           {/* About the company — Polygon /v3/reference/tickers description, wired
-              via /live/company. Shown in full (no clamp / no toggle). */}
+              via /live/company. Shown in full (no clamp / no toggle); it scrolls
+              inside its box, which is now the header's right-hand half. */}
           {data.description && (
             <div className="sd-about">
               <div className="sd-about-lbl" style={{ display: "flex", alignItems: "center", gap: 8 }}>About {data.name} <VendorTag v="polygon" /></div>
@@ -1101,6 +1119,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               )}
             </div>
           )}
+          </div>
         </div>
       )}
 
