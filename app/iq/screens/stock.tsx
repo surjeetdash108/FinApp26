@@ -466,12 +466,17 @@ function EarnPane({ hist10 }: { hist10: EarnQ[] }) {
 function StockChartExpanded({
   sym, px, initialTf, initialChartType, initialMaStep, initialEmaStep,
   initialShowVol, initialShowRsi, initialShowEarnings, hist10, rsi, rsiLoading, erDate,
+  earnings,
 }: {
   sym: string; px: number; initialTf: string;
   initialChartType: "Candles" | "Hollow" | "Bars" | "Line" | "Area";
   initialMaStep: number; initialEmaStep: number;
   initialShowVol: boolean; initialShowRsi: boolean; initialShowEarnings: boolean;
   hist10: EarnQ[]; rsi: number | null; rsiLoading: boolean; erDate: string;
+  /** Reported quarters for the dots. Without this the Earnings toggle below
+   *  was inert: it flipped state that nothing read, so the expanded chart never
+   *  drew a dot and its timeframe dropdown had no earnings to re-filter. */
+  earnings: ChartEarnings[];
 }) {
   const [tf, setTf] = useState(initialTf);
   const [chartType, setChartType] = useState(initialChartType);
@@ -500,7 +505,8 @@ function StockChartExpanded({
         <button className={`rng indbtn${showEarnings ? " on" : ""}`} onClick={() => setShowEarnings(v => !v)}>Earnings</button>
       </div>
       <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars}
-        live={live.tick ? { price: live.tick.price, high: live.tick.high, low: live.tick.low } : null} />
+        live={live.tick ? { price: live.tick.price, high: live.tick.high, low: live.tick.low } : null}
+        earnings={showEarnings ? earnings : []} />
       {showRsi && (
         <div style={{ marginTop: 4 }}>
           <div style={{ padding: "4px 0", fontSize: ".66rem", color: "var(--text-dim-solid)", display: "flex", justifyContent: "space-between" }}>
@@ -1270,6 +1276,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     initialShowVol={showVol} initialShowRsi={showRsi}
                     initialShowEarnings={showEarnings}
                     hist10={hist10} rsi={rsi} rsiLoading={liveCompanyLoading} erDate={erDate}
+                    earnings={chartEarnings}
                   />
                 }
               />

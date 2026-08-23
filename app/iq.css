@@ -1950,15 +1950,31 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 /* Expandable at-a-glance row: caret in the symbol cell, and the quarters panel
    it opens. The panel is a full-width cell spanning every column, so it reads
    as a drawer under its row rather than a second set of columns. */
-.ecal-caret {
-  flex: none; width: 18px; height: 18px; padding: 0;
+/* Reads as a button, not a decoration. The first version was an 18px bare
+   chevron in --text-dim-solid, which against a dark row was almost invisible
+   next to a 28px logo — people did not know the rows expanded at all, and a
+   click landing a few px off it opened the ticker detail instead, which made
+   the feature look broken. Bordered chip, bigger hit area, brand fill when
+   open. */
+/* Selector is `.iq-root button.ecal-caret`, not `.ecal-caret`, deliberately:
+   the global reset `.iq-root button { background:none; border:none;
+   color:inherit }` is specificity (0,1,1) and beats a lone class (0,1,0), so
+   every background / border / colour set on `.ecal-caret` was silently
+   stripped and the control rendered as a bare grey glyph — invisible enough
+   that the rows did not read as expandable at all. */
+.iq-root button.ecal-caret {
+  flex: none; width: 26px; height: 26px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: none; border: none; cursor: pointer; line-height: 1;
-  font-size: .8rem; color: var(--text-dim-solid);
-  transition: transform .15s ease, color .15s ease;
+  background: var(--brand-2); border: 1px solid var(--brand-2);
+  border-radius: 6px; cursor: pointer; line-height: 1;
+  font-size: .9rem; font-weight: 700; color: #fff;
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
 }
-.ecal-caret:hover { color: var(--text-hi); }
-.ecal-caret.open { transform: rotate(90deg); color: var(--brand-2); }
+.iq-root button.ecal-caret:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-2) 30%, transparent);
+}
+.iq-root button.ecal-caret.open { transform: rotate(90deg); }
 /* Overrides .ecal-table tbody tr:hover — this row is a panel, not a target. */
 .ecal-table tbody tr.ecal-exp-row,
 .ecal-table tbody tr.ecal-exp-row:hover { background: var(--surface-1); cursor: default; }
