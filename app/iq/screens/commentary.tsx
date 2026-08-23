@@ -165,6 +165,9 @@ export function CommentaryScreen() {
   const [secFilter,     setSecFilter]     = useState("All");
   const [capFilter,     setCapFilter]     = useState("All");
   const [tagFilter,     setTagFilter]     = useState<string>("all");
+  /* Default ON: ~26% of the feed is auto-generated 13F notes and listicles,
+     mostly from defenseworld.net and Motley Fool syndication. */
+  const [hideFiller,    setHideFiller]    = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
@@ -215,6 +218,7 @@ export function CommentaryScreen() {
       !((n.ticker ?? "").toLowerCase().includes(q) ||
         (n.headline ?? "").toLowerCase().includes(q) ||
         (n.summary ?? "").toLowerCase().includes(q))) return false;
+    if (hideFiller && n.filler) return false;
     if (tagFilter !== "all" && (n.tag ?? "other") !== tagFilter) return false;
     if (effSec !== "All" || capFilter !== "All") {
       const c = companyByTicker.get(n.ticker);
@@ -229,6 +233,7 @@ export function CommentaryScreen() {
      own bucket the moment you clicked it would be useless for comparison. */
   const tagCounts = (() => {
     const base = tabFeed.filter(n => {
+      if (hideFiller && n.filler) return false;
       if (q &&
         !((n.ticker ?? "").toLowerCase().includes(q) ||
           (n.headline ?? "").toLowerCase().includes(q) ||
@@ -324,6 +329,14 @@ export function CommentaryScreen() {
           <select className="mv-sel" value={capFilter} onChange={e => setCapFilter(e.target.value)}>
             {CAP_TIERS.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+            fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}
+            title="Hide auto-generated 13F holdings notes and ranked-list clickbait">
+            <input type="checkbox" checked={hideFiller} onChange={e => setHideFiller(e.target.checked)}
+              style={{ accentColor: "var(--brand)", cursor: "pointer" }} />
+            Hide filler
+          </label>
 
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>

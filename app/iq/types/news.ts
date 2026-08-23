@@ -19,6 +19,9 @@ export interface NewsArticleDoc {
    *  Actions, M&A, Legal & Regulatory, Product & Launches, Capital &
    *  Dividends, Other). Older docs written before tagging may omit it. */
   tag?: "earnings" | "analyst" | "ma" | "legal" | "product" | "capital" | "other";
+  /** Syndicated 13F/listicle noise, flagged at ingest by news-filler.util.
+   *  Hidden by default in the feed; the rows are kept, not dropped. */
+  filler?: boolean;
   sentiment: "positive" | "negative" | "neutral" | null;
   sentimentReasoning: string | null;
   keywords: string[];
