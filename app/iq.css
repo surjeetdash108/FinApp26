@@ -1131,20 +1131,35 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
   transition: border-color .13s, color .13s, background .13s;
 }
 .feed-chip:hover { border-color: var(--border-strong); color: var(--text-hi); }
+/* Selected chip takes its OWN category colour rather than a single brand
+   highlight, so the active filter is identifiable at a glance and matches the
+   dot you clicked. The colour is held in --chip and drives the dot, the
+   selected border, fill and count — set once per category below. */
 .feed-chip.on {
-  border-color: var(--brand); background: var(--brand-dim); color: var(--text-hi);
+  border-color: var(--chip);
+  background: color-mix(in srgb, var(--chip) 20%, transparent);
+  color: var(--text-hi);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--chip) 22%, transparent);
+}
+.feed-chip.on .feed-chip-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chip) 28%, transparent);
 }
 .feed-chip b { font-family: var(--f-mono); font-weight: 700; color: var(--text-hi); }
+.feed-chip.on b { color: var(--chip); }
 /* A colour per category, so the eye can find a bucket without reading it. */
-.feed-chip-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-dim-solid); flex: none; }
-.feed-chip[data-tag="all"]      .feed-chip-dot { background: var(--brand-2); }
-.feed-chip[data-tag="earnings"] .feed-chip-dot { background: var(--up); }
-.feed-chip[data-tag="analyst"]  .feed-chip-dot { background: #a78bfa; }
-.feed-chip[data-tag="ma"]       .feed-chip-dot { background: var(--warn); }
-.feed-chip[data-tag="legal"]    .feed-chip-dot { background: var(--down); }
-.feed-chip[data-tag="product"]  .feed-chip-dot { background: var(--ai); }
-.feed-chip[data-tag="capital"]  .feed-chip-dot { background: #60a5fa; }
-.feed-chip[data-tag="other"]    .feed-chip-dot { background: var(--text-dim-solid); }
+.feed-chip { --chip: var(--text-dim-solid); }
+.feed-chip-dot {
+  width: 5px; height: 5px; border-radius: 50%; flex: none;
+  background: var(--chip);
+}
+.feed-chip[data-tag="all"]      { --chip: var(--brand-2); }
+.feed-chip[data-tag="earnings"] { --chip: var(--up); }
+.feed-chip[data-tag="analyst"]  { --chip: #a78bfa; }
+.feed-chip[data-tag="ma"]       { --chip: var(--warn); }
+.feed-chip[data-tag="legal"]    { --chip: var(--down); }
+.feed-chip[data-tag="product"]  { --chip: var(--ai); }
+.feed-chip[data-tag="capital"]  { --chip: #60a5fa; }
+.feed-chip[data-tag="other"]    { --chip: var(--text-dim-solid); }
 
 /* Themes: multi-select sector panel. Sectors are the only multi-select filter
    on that screen — themes stay exclusive, so they keep their pill row. */
