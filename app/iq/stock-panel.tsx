@@ -7,6 +7,7 @@ import { ExpandBtn } from "./shell";
 import { useApiList } from "./hooks/useApiList";
 import { useApiResource } from "./hooks/useApiResource";
 import { useBackendBars } from "./hooks/useBackendBars";
+import { useChartEarnings } from "./hooks/useChartEarnings";
 import type { LiveEarningsDoc, CompanyDoc } from "./types";
 import { surprisePct } from "./types";
 
@@ -190,6 +191,9 @@ function ChartCardExpanded({
   const [showRsi, setShowRsi] = useState(initialShowRsi);
   const [showEarnings, setShowEarnings] = useState(initialShowEarnings);
   const { bars: realBars } = useBackendBars(sym, tf);
+  // Same derivation as stock details, so a report lands on the same bar with
+  // the same numbers here as it does there.
+  const chartEarnings = useChartEarnings(sym, showEarnings);
   return (
     <div>
       <div className="chart-toolbar" style={{ flexWrap: "wrap", gap: "4px 0", paddingBottom: 8 }}>
@@ -206,7 +210,8 @@ function ChartCardExpanded({
         <button className={`rng indbtn${showRsi ? " on" : ""}`} onClick={() => setShowRsi(v => !v)}>RSI</button>
         <button className={`rng indbtn${showEarnings ? " on" : ""}`} onClick={() => setShowEarnings(v => !v)}>Earnings</button>
       </div>
-      <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars} />
+      <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars}
+        earnings={showEarnings ? chartEarnings : []} />
       {showRsi && (
         <div style={{ marginTop: 4 }}>
           <div style={{ padding: "4px 0", fontSize: ".66rem", color: "var(--text-dim-solid)", display: "flex", justifyContent: "space-between" }}>
@@ -252,6 +257,10 @@ export function ChartCard({
   const { data: liveCompany, loading: liveCompanyLoading } = useApiResource<CompanyDoc>(sym ? `/live/company?ticker=${encodeURIComponent(sym)}` : null);
   const rsi = liveCompany?.rsi14 ?? null;
   const { hist, erDate, loading: earningsLoading } = useLiveEarningsForSym(sym);
+  // Same derivation as stock details — see chart-earnings.ts. Fetched only while
+  // the Earnings overlay is on; before this the toggle below flipped state that
+  // nothing read, so this chart never drew a dot.
+  const chartEarnings = useChartEarnings(sym, showEarnings);
 
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -295,7 +304,8 @@ export function ChartCard({
             />
           </div>
           <div style={{ padding: "0 14px 0" }}>
-            <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars} />
+            <CandleChart sym={sym} tf={tf} px={px} maStep={maStep} emaStep={emaStep} showVol={showVol} chartType={chartType.toLowerCase()} realBars={realBars}
+        earnings={showEarnings ? chartEarnings : []} />
           </div>
           {showRsi && (
             <div style={{ padding: "0 14px 4px" }}>

@@ -1,3 +1,5 @@
+import type { FinancialsDoc, LiveEarningsDoc } from "./types";
+
 /** One reported quarter, positioned on the chart by its reporting date. */
 export interface ChartEarnings {
   /** ISO reporting date — matched to the nearest bar at or before it. */
@@ -7,6 +9,62 @@ export interface ChartEarnings {
   revenueActual?: number | null;
   revenueEstimate?: number | null;
   session?: "BMO" | "AMC" | null;
+}
+
+/**
+ * THE derivation of a ticker's chart earnings dots. Every chart in the app must
+ * call this — stock details, its expanded view, and the watchlist / portfolio /
+ * screener / movers / IPO panels — so a report shows in the same place with the
+ * same numbers wherever it is drawn. It lived inline in stock.tsx, which is why
+ * the panel charts had an Earnings toggle that drew nothing at all.
+ *
+ * Reports come from `epsHistory`, the deep FMP reported series, NOT from the
+ * market-wide earnings calendar. The calendar spans ~10 months and holds 2-3
+ * rows per ticker (measured: 13,236 rows over 5,516 tickers), so a chart built
+ * on it showed the same one or two dots at 1Y as at 5Y and the timeframe
+ * dropdown looked broken. epsHistory goes back years — CSCO carries 39 reported
+ * quarters to 2017-02-15.
+ *
+ * Revenue exists only on `quarters` and session only on the calendar, so each is
+ * joined back on where present; neither is required to draw a dot. Rows with no
+ * actual are upcoming quarters carrying only an estimate, and are dropped —
+ * this panel is about what was reported.
+ */
+export function buildChartEarnings(
+  doc: FinancialsDoc | null | undefined,
+  calendarEvents: ReadonlyArray<LiveEarningsDoc>,
+  todayIso: string,
+): ChartEarnings[] {
+  const revByFiscalQuarter = new Map<string, number | null>(
+    (doc?.quarters ?? []).map(q => [`${q.fiscalYear}-${q.fiscalPeriod}`, q.revenue]),
+  );
+  const sessionByDate = new Map<string, "BMO" | "AMC" | null>(
+    calendarEvents.map(e => [e.date, e.session ?? null]),
+  );
+
+  const fromHistory: ChartEarnings[] = (doc?.epsHistory ?? [])
+    .filter(h => h.epsActual != null && h.date && h.date <= todayIso)
+    .map(h => ({
+      date: h.date,
+      epsActual: h.epsActual,
+      epsEstimate: h.epsEstimate,
+      revenueActual: revByFiscalQuarter.get(`${h.fiscalYear}-${h.fiscalPeriod}`) ?? null,
+      revenueEstimate: null,
+      session: sessionByDate.get(h.date) ?? null,
+    }));
+  if (fromHistory.length > 0) return fromHistory;
+
+  // Docs synced before epsHistory existed still get dots from the calendar.
+  return calendarEvents
+    .filter(e => e.date <= todayIso && e.epsActual != null)
+    .map(e => ({
+      date: e.date,
+      epsActual: e.epsActual,
+      epsEstimate: e.epsEstimate,
+      revenueActual: e.revenueActual ?? null,
+      revenueEstimate: e.revenueEstimate ?? null,
+      session: e.session ?? null,
+    }));
 }
 
 /**

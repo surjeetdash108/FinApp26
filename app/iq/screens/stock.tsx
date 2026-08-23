@@ -5,6 +5,7 @@ import { useIQActions, ExpandBtn } from "../shell";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import { WatchlistPicker } from "../watchlist-picker";
 import { fmt, cls, arr, sign, CandleChart, ChartSelect, TF_OPTIONS, CHART_TYPE_OPTIONS, RsiPane, TrGauge, RATING_VAL, EarnQ, EarningsGrowthChart, DataState, NotAvailable, StockLogo, VendorTag, titleCaseLabel, type ChartEarnings } from "../utils";
+import { buildChartEarnings } from "../chart-earnings";
 import { firebaseAuth } from "../../firebase";
 import { apiGet, apiPost, apiDelete } from "../backend";
 import { useApiResource } from "../hooks/useApiResource";
@@ -830,50 +831,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const erDate = symEvents.find(e => e.date >= todayStr)?.date
     ?? symEvents[symEvents.length - 1]?.date
     ?? "—";
-  // Reported quarters for the chart's earnings dots. Only past reports carry an
-  // actual, and a dot on a future date would have nothing to show, so upcoming
-  // rows are excluded rather than rendered empty.
-  //
-  // Built from `epsHistory` (deep FMP reported series) rather than the
-  // market-wide earnings calendar. mapEarningsToBars already drops reports
-  // outside the loaded range correctly — the problem was that the calendar had
-  // nothing to drop: /market-data/earnings spans ~10 months and carries 2-3
-  // rows per ticker, so 1Y and 5Y rendered the SAME one or two dots and the
-  // timeframe dropdown looked broken. epsHistory goes back years (measured on
-  // CSCO: 39 reported quarters to 2017-02-15 — 4 inside 1Y, 20 inside 5Y), so
-  // widening the timeframe now actually reveals more reports.
-  //
-  // Revenue lives only on `quarters`, session only on the calendar feed, so
-  // both are joined back on where they exist. Neither is required for a dot.
-  const revByFiscalQuarter = new Map<string, number | null>(
-    (financialsDoc?.quarters ?? []).map(q => [`${q.fiscalYear}-${q.fiscalPeriod}`, q.revenue]),
-  );
-  const sessionByDate = new Map<string, "BMO" | "AMC" | null>(
-    symEvents.map(e => [e.date, e.session ?? null]),
-  );
-  const historyEarnings: ChartEarnings[] = (financialsDoc?.epsHistory ?? [])
-    .filter(h => h.epsActual != null && h.date && h.date <= todayStr)
-    .map(h => ({
-      date: h.date,
-      epsActual: h.epsActual,
-      epsEstimate: h.epsEstimate,
-      revenueActual: revByFiscalQuarter.get(`${h.fiscalYear}-${h.fiscalPeriod}`) ?? null,
-      revenueEstimate: null,
-      session: sessionByDate.get(h.date) ?? null,
-    }));
-  // Docs synced before epsHistory existed still get dots from the calendar.
-  const calendarEarnings: ChartEarnings[] = symEvents
-    .filter(e => e.date <= todayStr && e.epsActual != null)
-    .map(e => ({
-      date: e.date,
-      epsActual: e.epsActual,
-      epsEstimate: e.epsEstimate,
-      revenueActual: e.revenueActual ?? null,
-      revenueEstimate: e.revenueEstimate ?? null,
-      session: e.session ?? null,
-    }));
-  const chartEarnings: ChartEarnings[] =
-    historyEarnings.length > 0 ? historyEarnings : calendarEarnings;
+  // Earnings dots for both charts on this screen. Shared derivation (see
+  // chart-earnings.ts) so the panel charts on watchlist / portfolio / screener /
+  // movers / IPOs place the same reports at the same points. Called with the
+  // financials doc this screen already fetched, rather than via
+  // useChartEarnings, to avoid fetching it a second time.
+  const chartEarnings: ChartEarnings[] = buildChartEarnings(financialsDoc, symEvents, todayStr);
 
   // EPS (TTM): the stored trailing-twelve-month EPS from the company doc, shown
   // as-is — NOT reconstructed as price ÷ P/E (circular: the sync-time P/E was
