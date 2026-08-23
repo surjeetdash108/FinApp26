@@ -251,7 +251,7 @@ function DashPopContent({
 }
 
 export function DashboardScreen() {
-  const { openStock, openMoverModal, openEarnings, openSector, openIndex } = useIQActions();
+  const { openStock, openStockDetail, openMoverModal, openEarnings, openSector, openIndex } = useIQActions();
 
   // Same shared upstream tape SSE broadcast the shell's ticker strip uses
   // (Phase 1) — not a direct market_indices Firestore listener.
@@ -530,7 +530,7 @@ export function DashboardScreen() {
                     const c = companyByTicker.get(ticker);
                     return (
                       <div key={ticker}
-                        onClick={() => openStock(ticker)}
+                        onClick={() => openStockDetail(ticker, searchedDeduped.map(x => x.ticker))}
                         style={{
                           display: "flex", alignItems: "center", gap: 8,
                           flex: "1 1 190px", minWidth: 190, maxWidth: 240,

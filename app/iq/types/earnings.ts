@@ -9,6 +9,13 @@ export interface EarningsAnnouncementDoc {
   reactionPct: number | null;
   accessionNumber: string;
   url: string;
+  /** Company guidance parsed from the 8-K earnings press release (exhibit 99.x).
+   *  null direction with guidanceMentioned true means the release restated a
+   *  range without saying which way it moved — real for ~44% of filings. */
+  guidanceDirection: "raised" | "cut" | "mixed" | "reaffirmed" | null;
+  guidanceRange: string | null;
+  guidanceSnippet: string | null;
+  guidanceMentioned: boolean;
 }
 
 export interface LiveEarningsDoc {

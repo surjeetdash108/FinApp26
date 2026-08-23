@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useIQActions, ExpandBtn } from "../shell";
 import { cls, sign, EarnQ, StockLogo, NotAvailable, DataState, VendorTag } from "../utils";
+import { useNarrationVoice, applyNarrationVoice, pickNarrationVoice } from "../speech";
 import { ChartCard } from "../stock-panel";
 import { EpsSalesWidget } from "../eps-sales-widget";
 import { EarningsPlaybook } from "./EarningsPlaybook";
@@ -33,7 +34,12 @@ interface EarnCalItem {
   revE: number | null; revA: number | null; // reported revenue (Polygon actuals)
   epsAYearAgo: number | null; revYearAgo: number | null; // same fiscal quarter, prior year
   date: string; // ISO report date — used to group the snapshot across a week/month
-  guide: "Raised" | "In-line" | "Lowered" | null;
+  /** Direction the company moved its own guidance, from the 8-K press release. */
+  guide: "raised" | "cut" | "mixed" | "reaffirmed" | null;
+  /** Guidance range as the company wrote it, e.g. "$4.10 to $4.30". */
+  guideRange: string | null;
+  /** The sentence the direction came from — shown as the cell's tooltip. */
+  guideSnippet: string | null;
   react: number | null;
 }
 
@@ -57,6 +63,8 @@ function toEarnCalItem(d: LiveEarningsDoc): EarnCalItem {
     revYearAgo: d.revenueYearAgo ?? null,
     date: d.date,
     guide: null,
+    guideRange: null,
+    guideSnippet: null,
     react: null,
   };
 }
@@ -278,6 +286,9 @@ function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
   const ttsSupported = typeof window !== "undefined" && "speechSynthesis" in window;
   const [tts, setTts] = useState<"idle" | "playing" | "paused">("idle");
   const chunks = useRef<string[]>([]);
+  // Without this the utterances get the platform default voice, which is the
+  // legacy formant synth on every major OS — the "computerised" sound.
+  const voice = useNarrationVoice(ttsSupported);
 
   // Rebuild the speech queue when the transcript changes; stop any prior speech.
   useEffect(() => {
@@ -294,8 +305,12 @@ function CallDrawer({ sym, onClose }: { sym: string; onClose: () => void }) {
     const synth = window.speechSynthesis;
     if (tts === "paused") { synth.resume(); setTts("playing"); return; }
     synth.cancel();
+    // The voice list can still be loading on a very early first click, so resolve
+    // once more here rather than falling back to the robotic default.
+    const v = voice ?? pickNarrationVoice(synth.getVoices());
     for (const c of chunks.current) {
       const u = new SpeechSynthesisUtterance(c);
+      applyNarrationVoice(u, v);
       u.onend = () => { if (!synth.pending && !synth.speaking) setTts("idle"); };
       synth.speak(u);
     }
@@ -376,6 +391,32 @@ const GLANCE_MAX = 25;
  *  actual vs consensus EPS + surprise, revenue actual/consensus, and the
  *  same-quarter-a-year-ago comparables. Everything comes from Polygon + FMP;
  *  Guidance is intentionally absent (no vendor feed for it). */
+/**
+ * Guidance the company issued in its own 8-K press release — NOT analyst
+ * consensus, and not derived from news headlines (measured: 22 guidance
+ * headlines per month across the whole feed, most misattributed by Polygon's
+ * multi-ticker tagging). A dash means the release did not state a direction,
+ * which is the honest answer for roughly half of reporters.
+ */
+function GuidanceCell({ it }: { it: EarnCalItem }) {
+  if (!it.guide) {
+    // A stored range with no direction still tells the reader something.
+    return it.guideRange
+      ? <span style={{ color: "var(--text-dim-solid)" }} title={`Guidance issued: ${it.guideRange}`}>{it.guideRange}</span>
+      : <span style={{ color: "var(--text-dim-solid)" }}>—</span>;
+  }
+  const label = { raised: "Raised", cut: "Cut", mixed: "Mixed", reaffirmed: "Reaffirmed" }[it.guide];
+  const arrow = it.guide === "raised" ? "\u25B2" : it.guide === "cut" ? "\u25BC" : "";
+  const cls = it.guide === "raised" ? "up" : it.guide === "cut" ? "dn" : "";
+  const tip = [it.guideRange ? `Guidance: ${it.guideRange}` : null, it.guideSnippet]
+    .filter(Boolean).join("  —  ");
+  return (
+    <span className={cls} title={tip || label} style={{ whiteSpace: "nowrap", fontWeight: 600 }}>
+      {arrow && <span style={{ fontSize: ".8em", marginRight: 3 }}>{arrow}</span>}{label}
+    </span>
+  );
+}
+
 function GlanceRow({ it, showDate, onSelect }: { it: EarnCalItem; showDate: boolean; onSelect: (s: string, date: string) => void }) {
   const epsSurp = surprise(it.epsE, it.epsA);
   const yoyRev = surprise(it.revYearAgo, it.revA); // (rev - yearAgo)/|yearAgo|
@@ -398,6 +439,7 @@ function GlanceRow({ it, showDate, onSelect }: { it: EarnCalItem; showDate: bool
       <td className="r ecal-num">{fmtRev(it.revA)}</td>
       <td className="r ecal-num">{fmtRev(it.revE)}</td>
       <td className={`r ecal-num ${fmtUpDn(yoyRev)}`}>{fmtPctSigned(yoyRev)}</td>
+      <td className="r ecal-num"><GuidanceCell it={it} /></td>
     </tr>
   );
 }
@@ -426,6 +468,7 @@ function GlanceTable({ title, items, showDate, onSelect }: { title: string; item
               <th className="r">Actual Rev</th>
               <th className="r">Cons. Rev</th>
               <th className="r">Yr/Yr Rev</th>
+              <th className="r">Guidance</th>
             </tr>
           </thead>
           <tbody>
@@ -520,10 +563,13 @@ export function EarningsScreen() {
   // no session — joined by ticker + reporting date. Rows with no 8-K session
   // match fall into a "Time not specified" group rather than being hidden.
   const annSessionByKey = new Map<string, "BMO" | "AMC">();
+  // Guidance rides the same 8-K feed and the same ticker|date key as session.
+  const annGuidanceByKey = new Map<string, EarningsAnnouncementDoc>();
   for (const a of earningsAnnouncements) {
     if (a.session === "BMO" || a.session === "AMC") {
       annSessionByKey.set(`${a.ticker}|${a.announceDate}`, a.session);
     }
+    annGuidanceByKey.set(`${a.ticker}|${a.announceDate}`, a);
   }
   // ── At-a-glance snapshot rows ──────────────────────────────────────────────
   // Reporters for the current mode (day = the anchor day; week = its 5 weekdays;
@@ -536,6 +582,12 @@ export function EarningsScreen() {
       : (mode === "week" ? weekDays5 : [anchor]).flatMap(iso => rowsForDate(iso, liveEarningsData));
   const glanceItems: EarnCalItem[] = glanceRaw
     .map(it => (it.sess ? it : { ...it, sess: annSessionByKey.get(`${it.s}|${it.date}`) ?? null }))
+    .map(it => {
+      const a = annGuidanceByKey.get(`${it.s}|${it.date}`);
+      return a
+        ? { ...it, guide: a.guidanceDirection ?? null, guideRange: a.guidanceRange ?? null, guideSnippet: a.guidanceSnippet ?? null }
+        : it;
+    })
     .filter(it => session === "both" || it.sess === session)
     .sort((a, b) => (mcapByTicker.get(b.s) ?? 0) - (mcapByTicker.get(a.s) ?? 0) || a.s.localeCompare(b.s));
   const glanceBmo = glanceItems.filter(it => it.sess === "BMO");

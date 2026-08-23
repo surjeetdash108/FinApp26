@@ -51,6 +51,7 @@ export type FontKey = "geist" | "inter" | "dm-sans" | "space-grotesk" | "plus-ja
 interface IQActions {
   openStock: (sym: string) => void;
   openStockFull: (sym: string) => void;
+  openStockDetail: (sym: string, list?: string[]) => void;
   openMoverModal: (sym: string) => void;
   openEarnings: (sym: string) => void;
   openSector: (name: string) => void;
@@ -66,6 +67,7 @@ interface IQActions {
 export const IQActionsContext = createContext<IQActions>({
   openStock: () => {},
   openStockFull: () => {},
+  openStockDetail: () => {},
   openMoverModal: () => {},
   openEarnings: () => {},
   openSector: () => {},
@@ -439,6 +441,71 @@ function MoverModal({ sym, onClose }: { sym: string; onClose: () => void }) {
   );
 }
 
+/**
+ * The whole stock detail screen rendered INSIDE the centred popover, instead of
+ * a summary plus an "Open full stock page" button that navigated away.
+ *
+ * Deliberately a separate drawer type from StockDrawer: this is wired only to
+ * the dashboard's Most Searched cards (openStockDetail). Every other caller of
+ * openStock still gets the compact StockDrawer summary, so click behaviour
+ * elsewhere in the app is unchanged.
+ *
+ * `.drawer.wide` is the same centred popover shell as StockDrawer, just wider
+ * and taller so the embedded screen's columns are not crushed. StockScreenEmbed
+ * brings its own padding, hence `.drawer.wide .drawer-b{padding:0}` in iq.css.
+ */
+function StockDetailPopover({ sym, list, onNavigate, onClose }: {
+  sym: string;
+  /** Tickers to page through with the arrows — the list the popover was opened from. */
+  list?: string[];
+  onNavigate: (sym: string) => void;
+  onClose: () => void;
+}) {
+  // Arrows step through the originating list. Disabled (not wrapped) at either
+  // end, so the ends of a ranked list stay legible rather than silently looping.
+  const idx  = list?.indexOf(sym) ?? -1;
+  const prev = idx > 0 ? list![idx - 1] : null;
+  const next = idx >= 0 && idx < (list?.length ?? 0) - 1 ? list![idx + 1] : null;
+
+  return (
+    <>
+      <div className="scrim" onClick={onClose} />
+      <div className="drawer open wide">
+        <div className="drawer-h" style={{ paddingTop: 14, paddingBottom: 14 }}>
+          <div className="sd-logo" style={{ background: "linear-gradient(135deg,#3a2f6b,#241c44)", color: "var(--brand-2)", fontSize: ".9rem" }}>
+            {sym[0]}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)" }}>
+              {sym} · Stock Details
+            </div>
+            <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Full analysis · chart · technicals · peers</div>
+          </div>
+          {/* .closebtn carries margin-left:auto; the group takes that over. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+            {list && list.length > 1 && (
+              <>
+                <button className="closebtn" style={{ marginLeft: 0 }} disabled={!prev}
+                  title={prev ? `Previous · ${prev}` : "Start of list"}
+                  aria-label={prev ? `Show previous ticker, ${prev}` : "Start of list"}
+                  onClick={() => prev && onNavigate(prev)}>◀</button>
+                <button className="closebtn" style={{ marginLeft: 0 }} disabled={!next}
+                  title={next ? `Next · ${next}` : "End of list"}
+                  aria-label={next ? `Show next ticker, ${next}` : "End of list"}
+                  onClick={() => next && onNavigate(next)}>▶</button>
+              </>
+            )}
+            <button className="closebtn" style={{ marginLeft: 0 }} aria-label="Close" onClick={onClose}>✕</button>
+          </div>
+        </div>
+        <div className="drawer-b">
+          <StockScreenEmbed initialSym={sym} />
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ---- Fear & Greed drawer ----
 function FearGreedDrawer({ onClose }: { onClose: () => void }) {
   const comps = [
@@ -719,6 +786,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   const [drawer, setDrawer] = useState<
     | { type: "stock"; sym: string }
     | { type: "mover-modal"; sym: string }
+    | { type: "stock-detail"; sym: string; list?: string[] }
     | { type: "earnings"; sym: string }
     | { type: "sector"; name: string }
     | { type: "index"; idx: number }
@@ -798,6 +866,7 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   const actions: IQActions = {
     openStock: useCallback((sym) => setDrawer({ type: "stock", sym }), []),
     openMoverModal: useCallback((sym) => setDrawer({ type: "mover-modal", sym }), []),
+    openStockDetail: useCallback((sym, list) => setDrawer({ type: "stock-detail", sym, list }), []),
     openStockFull: useCallback((sym) => {
       if (typeof window !== "undefined") localStorage.setItem("iq-stock", sym);
       router.push("/menu/stock");
@@ -1081,6 +1150,11 @@ export function IQShell({ children }: { children: React.ReactNode }) {
           )}
           {drawer?.type === "mover-modal" && (
             <MoverModal key={drawer.sym} sym={drawer.sym} onClose={() => setDrawer(null)} />
+          )}
+          {drawer?.type === "stock-detail" && (
+            <StockDetailPopover key={drawer.sym} sym={drawer.sym} list={drawer.list}
+              onNavigate={(s) => setDrawer({ type: "stock-detail", sym: s, list: drawer.list })}
+              onClose={() => setDrawer(null)} />
           )}
           {drawer?.type === "earnings" && (
             <EarningsDrawer sym={drawer.sym} liveEarnings={shellEarnings} loading={shellEarningsLoading} onClose={() => setDrawer(null)} />
