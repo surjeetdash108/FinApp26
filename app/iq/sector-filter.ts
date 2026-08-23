@@ -50,6 +50,26 @@ export function isTheme(selected: string): boolean {
  * The uniform option list for EVERY sector dropdown: "All" + the GICS sectors
  * actually present in `companies` + the curated theme names. Same everywhere.
  */
+/**
+ * Just the sector names present in the data — no "All", no themes.
+ *
+ * sectorFilterOptions() folds sectors and themes into one list for screens that
+ * offer a single unified choice. Themes lets you pick SEVERAL sectors at once,
+ * so it needs the sectors on their own: a theme is a curated basket and mixing
+ * it into a multi-select would imply unions that do not mean anything.
+ */
+export function sectorNames(
+  companies: Array<{ sector?: string | null }>,
+): string[] {
+  return Array.from(
+    new Set(
+      companies
+        .map(c => c.sector)
+        .filter((s): s is string => !!s && s !== "—"),
+    ),
+  ).sort();
+}
+
 export function sectorFilterOptions(
   companies: Array<{ sector?: string | null }>,
 ): string[] {

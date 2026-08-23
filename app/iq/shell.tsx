@@ -841,6 +841,21 @@ export function IQShell({ children }: { children: React.ReactNode }) {
   // Close mobile nav on route change
   useEffect(() => { setNavOpen(false); }, [pathname]);
 
+  // Auto-collapse the left rail on the stock/search detail page (slug "stock",
+  // route /menu/stock) so the ticker view gets the full width. goToStock() routes
+  // here on search, so searching a ticker collapses the rail too; landing on the
+  // page with a ticker already loaded collapses it as well. Navigating anywhere
+  // else restores the user's manual rail preference. setNavCollapsed(true) here
+  // is transient — it does NOT write localStorage, so the manual toggle's saved
+  // preference is preserved and re-applied on exit.
+  useEffect(() => {
+    if (pathname === "/menu/stock") {
+      setNavCollapsed(true);
+    } else if (typeof window !== "undefined") {
+      setNavCollapsed(localStorage.getItem("iq-nav-collapsed") === "1");
+    }
+  }, [pathname]);
+
   // Persist rail scroll position across page navigations
   useEffect(() => {
     const rail = railRef.current;

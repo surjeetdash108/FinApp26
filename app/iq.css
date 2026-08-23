@@ -1111,6 +1111,34 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .drawer-close:hover { background: var(--surface-2); color: var(--text-hi); }
 .drawer-h { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .drawer-b { overflow-y: auto; padding: 18px 20px 32px; flex: 1; }
+/* Themes: multi-select sector panel. Sectors are the only multi-select filter
+   on that screen — themes stay exclusive, so they keep their pill row. */
+.theme-secpanel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 30;
+  min-width: 230px; max-height: 320px; overflow-y: auto;
+  padding: 6px; background: var(--surface-1);
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  box-shadow: 0 14px 32px rgba(0,0,0,.5);
+}
+.theme-secpanel-h {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 8px 7px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: .66rem; color: var(--text-dim-solid);
+}
+.theme-secpanel-h button {
+  background: none; border: 0; cursor: pointer; padding: 0;
+  font-size: .66rem; font-weight: 700; color: var(--brand-2);
+}
+.theme-secpanel-h button:disabled { color: var(--text-dim-solid); cursor: default; }
+.theme-secrow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 6px; cursor: pointer;
+  font-size: .74rem; color: var(--text);
+}
+.theme-secrow:hover { background: var(--surface-2); color: var(--text-hi); }
+.theme-secrow input { accent-color: var(--brand); cursor: pointer; }
+
 /* Earnings-dot popover on the price chart. Absolute like .chart-tip, so it
    rides the same positioned chart host; `left` is set inline as a percentage
    because the SVG scales with the card. */
