@@ -753,11 +753,15 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 /* stock detail */
 .sd-grid { padding: 14px 18px; display: grid; grid-template-columns: minmax(0,1fr) 400px; gap: 14px; align-items: start; }
 @media(max-width: 900px) { .sd-grid { grid-template-columns: 1fr; } }
-.sd-head .sd-name h1 { font-family: var(--f-mono); font-size: 1.5rem; font-weight: 700; color: var(--text-hi); letter-spacing: -.01em; }
+/* Symbol / price / change sized so the whole quote (e.g. "AAPL $309.69 ▲
+   +$0.34 (+0.11%)") sits on ONE line in the header column instead of wrapping
+   to three. Reduced from 1.5/1.7/.86rem; .sd-headline keeps flex-wrap so it
+   still degrades gracefully on a narrow window / mobile. */
+.sd-head .sd-name h1 { font-family: var(--f-mono); font-size: 1.2rem; font-weight: 700; color: var(--text-hi); letter-spacing: -.01em; }
 .sd-head .sd-name .sub { font-size: .8rem; color: var(--text-dim-solid); }
 .sd-head .sd-px { margin-left: 8px; }
-.sd-head .sd-px .p { font-family: var(--f-mono); font-size: 1.7rem; font-weight: 700; color: var(--text-hi); }
-.sd-head .sd-px .c { font-family: var(--f-mono); font-size: .86rem; font-weight: 600; }
+.sd-head .sd-px .p { font-family: var(--f-mono); font-size: 1.3rem; font-weight: 700; color: var(--text-hi); }
+.sd-head .sd-px .c { font-family: var(--f-mono); font-size: .82rem; font-weight: 600; }
 .sd-head .sd-actions { margin-left: auto; display: flex; gap: 8px; }
 /* About-the-company blurb beside the ticker header (Polygon description). */
 .sd-about {
