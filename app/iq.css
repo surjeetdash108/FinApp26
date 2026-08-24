@@ -1111,6 +1111,24 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .drawer-close:hover { background: var(--surface-2); color: var(--text-hi); }
 .drawer-h { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .drawer-b { overflow-y: auto; padding: 18px 20px 32px; flex: 1; }
+/* Live Feed: per-row "Analysis" button + the drawer it opens. */
+.feed-analysis-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 20px; cursor: pointer;
+  border: 1px solid var(--ai-dim); background: var(--ai-dim);
+  color: var(--ai); font-size: .56rem; font-weight: 700;
+  letter-spacing: .02em; white-space: nowrap;
+  transition: border-color .13s, background .13s;
+}
+.feed-analysis-btn:hover { border-color: var(--ai); background: var(--surface-3); }
+.ta-lbl {
+  font-size: .62rem; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--text-dim-solid); margin-bottom: 3px;
+}
+.ta-p { margin: 0; font-size: .82rem; line-height: 1.6; color: var(--text); }
+.ta-list { margin: 0; padding-left: 16px; }
+.ta-list li { font-size: .8rem; line-height: 1.55; color: var(--text); margin-bottom: 2px; }
+
 /* Live Feed category chips — one per news tag, with a live count. */
 /* One line, always. Measured at 1440: the eight chips need 1097px at the old
    .72rem against 1220px of content width, so they fit there but wrapped to two

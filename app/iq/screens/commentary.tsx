@@ -10,6 +10,7 @@ import { apiGet } from "../backend";
 import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc } from "../types";
 import { NEWS_TAGS } from "../types/news";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
+import { TickerAnalysisDrawer } from "../ticker-analysis-drawer";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 
@@ -65,8 +66,9 @@ function etTimeLabel(iso: string): string {
 }
 
 /* ── Feed item ── the logo filters the feed by that ticker; the body opens the source article. */
-function FeedItem({ item, i, total, onTicker, marketCap, livePct }: {
+function FeedItem({ item, i, total, onTicker, onAnalysis, marketCap, livePct }: {
   item: NewsArticleDoc; i: number; total: number; onTicker: (ticker: string) => void;
+  onAnalysis: (ticker: string) => void;
   /** Raw USD market cap from the ticker's companies doc; null when unsynced. */
   marketCap?: number | null;
   /** Live %change for the ticker, from the app-wide shared quote poll. */
@@ -134,6 +136,16 @@ function FeedItem({ item, i, total, onTicker, marketCap, livePct }: {
               {item.sentiment}
             </span>
           )}
+          {/* The row is wrapped in an <a> to the article, so this must stop the
+              click reaching it — otherwise opening the analysis also navigates
+              away to the publisher. */}
+          <button
+            className="feed-analysis-btn"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); onAnalysis(item.ticker); }}
+            title={`AI analysis for ${item.ticker}`}
+          >
+            ◆ Analysis
+          </button>
         </div>
         </div>
         {item.imageUrl && (
@@ -168,6 +180,9 @@ export function CommentaryScreen() {
   /* Default ON: ~26% of the feed is auto-generated 13F notes and listicles,
      mostly from defenseworld.net and Motley Fool syndication. */
   const [hideFiller,    setHideFiller]    = useState(true);
+  /* Which ticker's rolling AI analysis is open. Read-only: the endpoint never
+     triggers generation, so opening this cannot incur a model call. */
+  const [analysisTicker, setAnalysisTicker] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
@@ -412,6 +427,7 @@ export function CommentaryScreen() {
                     i={i}
                     total={feed.length}
                     onTicker={sym => setSearch(sym)}
+                    onAnalysis={setAnalysisTicker}
                     marketCap={companyByTicker.get(item.ticker)?.marketCap ?? null}
                     livePct={feedQuotes.get(item.ticker)?.pctChange ?? companyByTicker.get(item.ticker)?.pctChange ?? null}
                   />
@@ -552,6 +568,9 @@ export function CommentaryScreen() {
           </div>
         </div>
       </div>
+      {analysisTicker && (
+        <TickerAnalysisDrawer sym={analysisTicker} onClose={() => setAnalysisTicker(null)} />
+      )}
     </>
   );
 }
