@@ -897,7 +897,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
       : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   })();
 
-  const cap = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(2)}T` : v >= 10 ? `$${Math.round(v)}B` : `$${v.toFixed(1)}B`;
+  // v is in $B. Below $1B, show millions so micro-caps (e.g. GAUZ ≈ $9M) read
+  // "$9.1M" rather than rounding to a meaningless "$0.0B".
+  const cap = (v: number) =>
+    v >= 1000 ? `$${(v / 1000).toFixed(2)}T`
+    : v >= 10 ? `$${Math.round(v)}B`
+    : v >= 1  ? `$${v.toFixed(1)}B`
+    : v > 0   ? `$${(v * 1000).toFixed(v < 0.1 ? 1 : 0)}M`
+    : "—";
   const nf = (x: number) => Math.round(x).toLocaleString("en-US");
   // 52-week range, guarded against reverse-split artifacts. The high/low come
   // from SPLIT-ADJUSTED bars, so a serial reverse-splitter's adjusted history
@@ -961,7 +968,23 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   // (/live/financials) — reported EPS is always present; the estimate/%surp
   // fill in where the FMP estimate feed has it. (The market-wide earnings
   // calendar carries estimates for only a few names, so it left this empty.)
-  const hist10: EarnQ[] = (financialsDoc?.quarters ?? [])
+  // Foreign private issuers / ADRs (e.g. GAUZ, a 20-F filer) commonly have NO
+  // Polygon/FMP statement `quarters` synced yet DO carry a deep FMP `epsHistory`.
+  // Fall back to that so the EPS-growth chart shows reported EPS instead of an
+  // empty state when statements simply don't exist for the ticker.
+  type EpsSrc = {
+    endDate: string | null; fiscalPeriod: string | null; fiscalYear: string | number | null;
+    epsActual: number | null; epsEstimate: number | null;
+    epsActualReported?: number | null; epsEstimateReported?: number | null;
+  };
+  const qRows: EpsSrc[] = financialsDoc?.quarters ?? [];
+  const epsSrc: EpsSrc[] = qRows.some(q => q.epsActual != null)
+    ? qRows
+    : (financialsDoc?.epsHistory ?? []).map(h => ({
+        endDate: h.date ?? null, fiscalPeriod: h.fiscalPeriod, fiscalYear: h.fiscalYear,
+        epsActual: h.epsActual, epsEstimate: h.epsEstimate,
+      }));
+  const hist10: EarnQ[] = epsSrc
     .filter(q => q.epsActual != null)
     .slice()
     .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? ""))
