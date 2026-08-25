@@ -360,12 +360,12 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .bp-art .body ul,.bp-art .body ol{padding-left:20px}
 .bp-empty{padding:60px 24px;text-align:center;color:var(--dim2);font-size:13px}
 .zone-pill{display:inline-flex;align-items:center;gap:6px;font:600 10px var(--f-mono);padding:3px 9px;border-radius:20px}
-.z-lead{color:var(--brand2);background:#7c6cf51c}.z-stock{color:var(--info);background:#38d6e618}.z-news{color:var(--up);background:#2fe6a616}.z-edu{color:var(--warn);background:#ffb5471a}
+.z-edu{color:var(--warn);background:#ffb5471a}.z-recap{color:var(--up);background:#2fe6a616}.z-research{color:#c58bae;background:#c58bae1a}
 /* blog zone board */
 .board-note{font-size:13px;color:var(--dim);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 15px;margin-bottom:16px}
 .board-note .cash{font-family:var(--f-mono);color:var(--brand2)}
-.blogboard{display:grid;grid-template-columns:1fr 1.7fr 1fr;grid-template-areas:"left center right" "bottom bottom bottom";gap:14px}
-.z-l{grid-area:left}.z-c{grid-area:center}.z-r{grid-area:right}.z-b{grid-area:bottom}
+.blogboard{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:"left center right";gap:14px}
+.z-l{grid-area:left}.z-c{grid-area:center}.z-r{grid-area:right}
 .bzone{border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:14px;display:flex;flex-direction:column;min-height:230px}
 .bzone.z-c{min-height:340px}
 .bzone .zh{display:flex;align-items:center;gap:8px;margin-bottom:11px}
@@ -421,7 +421,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .pubbar .btn{flex:none;padding:9px 16px}
 .pubbar .btn-pub{flex:none;padding:10px 20px}
 .bm-place{display:inline-flex;align-items:center;gap:7px;font:600 11px var(--f-mono);padding:5px 11px;border-radius:20px;margin-bottom:8px}
-@media(max-width:1000px){.blogboard{grid-template-columns:1fr;grid-template-areas:"center" "left" "right" "bottom"}.z-b .zlist{grid-template-columns:1fr 1fr}}
+@media(max-width:1000px){.blogboard{grid-template-columns:1fr;grid-template-areas:"left" "center" "right"}}
 .chan{display:inline-flex;gap:5px;align-items:center}
 .chan .ci{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;color:#fff}
 
@@ -669,7 +669,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
     <div class="brow2">
       <div><label class="fl">Kicker / category</label><input id="bKick" class="inp" placeholder="Analysis · $NVDA"></div>
       <div><label class="fl">Placement</label><select id="bZone" class="inp">
-        <option value="lead">Featured — center</option><option value="stock">Stock 101 — left</option><option value="news">Market 101 — bottom</option><option value="edu">Educational 101 — right</option></select></div>
+        <option value="edu">Educational — left</option><option value="recap">Recap — center</option><option value="research">Research desk — right</option></select></div>
     </div>
     <div class="brow3">
       <div><label class="fl">Author</label><input id="bAuthor" class="inp" placeholder="Desk"></div>
@@ -1486,12 +1486,11 @@ initStudio();
 
 /* ================= BLOGS (zone board) ================= */
 const ZONES={
-  lead:{label:'Featured',pos:'center',cls:'z-lead',dot:'#7c6cf5',area:'z-c'},
-  stock:{label:'Stock 101',pos:'left column',cls:'z-stock',dot:'#38d6e6',area:'z-l'},
-  edu:{label:'Educational 101',pos:'right column',cls:'z-edu',dot:'#ffb547',area:'z-r'},
-  news:{label:'Market 101',pos:'bottom',cls:'z-news',dot:'#2fe6a6',area:'z-b'}
+  edu:{label:'Educational',pos:'left column',cls:'z-edu',dot:'#ffb547',area:'z-l'},
+  recap:{label:'Recap',pos:'center',cls:'z-recap',dot:'#2fe6a6',area:'z-c'},
+  research:{label:'Research desk',pos:'right column',cls:'z-research',dot:'#c58bae',area:'z-r'}
 };
-const ZORDER=['stock','lead','edu','news'];
+const ZORDER=['edu','recap','research'];
 /* ---------------------------------------------------------------
    REAL CONTENT — the board reads its articles from the staged admin
    dataset (REAL.blogs), delivered by the React parent before this
@@ -1506,7 +1505,7 @@ function normalizeBlog(p){
   p=p||{};
   return {
     id:p.id,
-    zone:p.zone||'lead',
+    zone:p.zone||'edu',
     rank:(typeof p.rank==='number')?p.rank:999,
     kick:p.kick||'',
     title:p.title||'',
@@ -1527,7 +1526,7 @@ let BLOGS=(REAL&&Array.isArray(REAL.blogs))?REAL.blogs.map(normalizeBlog):[];
 const BLOG_BRIDGE=!IS_DEMO;
 function blogPost(msg){ try{ parent.postMessage(msg,'*'); }catch(e){} }
 const bEl=id=>document.getElementById(id);
-let _targetZone='lead', _editId=null;
+let _targetZone='edu', _editId=null;
 
 async function convertFile(file){
   const name=(file.name||'').toLowerCase();
@@ -1585,7 +1584,7 @@ function renderBoard(){
   const board=bEl('blogboard');if(!board)return;
   board.innerHTML=ZORDER.map(z=>{
     const m=ZONES[z], posts=zoneposts(z);
-    const cards=posts.length?posts.map((p,i)=>`<div class="zcard ${z==='lead'&&i===0?'lead':''}" draggable="true" data-id="${p.id}" onclick="openBlogModal('${z}','${p.id}')">
+    const cards=posts.length?posts.map((p,i)=>`<div class="zcard ${z==='recap'&&i===0?'lead':''}" draggable="true" data-id="${p.id}" onclick="openBlogModal('${z}','${p.id}')">
         <span class="zrk">${i+1}</span>
         <button class="zst ${p.status==='Draft'?'draft':''}" title="${p.status==='Draft'?'Draft — click to publish':'Live — click to unpublish'}" onclick="event.stopPropagation();togglePublish('${p.id}')">${p.status==='Draft'?'Draft':'Live'}</button>
         <button class="zx" title="Remove" onclick="event.stopPropagation();deleteBlog('${p.id}')">×</button>
@@ -1679,7 +1678,7 @@ async function placeAt(id,zone,at){
   if(moved){ orders.push(...renumber(from)); }   // resequence the source zone too
   renderBoard();                                  // optimistic
   sendReorder(orders);
-  toast(moved?('Moved to '+(ZONES[zone]||ZONES.lead).label+' · #'+(idx+1))
+  toast(moved?('Moved to '+(ZONES[zone]||ZONES.edu).label+' · #'+(idx+1))
              :('Now #'+(idx+1)));
 }
 
@@ -1704,7 +1703,7 @@ function wireFileDrop(board){
   });
 }
 function updateBlogWords(){const t=(bEl('bBody').innerText||'').trim();bEl('bWords').textContent=t?(t.split(/\s+/).length+' words'):'';}
-function updatePlaceChip(){const z=bEl('bZone').value||'lead',m=ZONES[z]||ZONES.lead;bEl('bmPlace').className='bm-place '+m.cls;bEl('bmPlace').innerHTML=`<span style="width:8px;height:8px;border-radius:3px;background:${m.dot};display:inline-block"></span>${m.label} · ${m.pos}`;}
+function updatePlaceChip(){const z=bEl('bZone').value||'edu',m=ZONES[z]||ZONES.edu;bEl('bmPlace').className='bm-place '+m.cls;bEl('bmPlace').innerHTML=`<span style="width:8px;height:8px;border-radius:3px;background:${m.dot};display:inline-block"></span>${m.label} · ${m.pos}`;}
 function openBlogModal(zone,editId,draft){
   _editId=editId||null;
   const p=editId?(BLOGS.find(x=>x.id===editId)||{}):{zone,kick:'',title:draft?draft.title:'',dek:'',author:'',read:'',html:draft?draft.html:''};
@@ -1721,7 +1720,7 @@ function closeBlogModal(){bEl('blogModal').classList.remove('on');bEl('blogScrim
 /* Modal save = write straight to the backend through the bridge. The parent
    POSTs (new) or PATCHes (edit), then posts the refreshed list back. */
 function savePublish(){
-  const d={zone:bEl('bZone').value||'lead',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value,author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
+  const d={zone:bEl('bZone').value||'edu',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value,author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
   if(!d.title){toast('Add a title first');return;}
   if(!d.dek.trim()){ const dk=bEl('bDek'); dk.style.borderColor='var(--down)'; bEl('bDekErr').style.display='block'; dk.focus(); return; }
   const typed=parseInt(bEl('bRank').value,10);
@@ -1778,7 +1777,7 @@ window.addEventListener('message',function(e){
 
 function initBlogs(){
   const file=bEl('blogFile');
-  file.onchange=async e=>{const f=e.target.files[0];if(f){const d=await convertFile(f);if(d)openBlogModal(_targetZone||'lead',null,d);}};
+  file.onchange=async e=>{const f=e.target.files[0];if(f){const d=await convertFile(f);if(d)openBlogModal(_targetZone||'edu',null,d);}};
   bEl('bBody').addEventListener('input',updateBlogWords);
   bEl('bDek').addEventListener('input',()=>{ bEl('bDek').style.borderColor=''; bEl('bDekErr').style.display='none'; });
   bEl('bZone').addEventListener('change',updatePlaceChip);
