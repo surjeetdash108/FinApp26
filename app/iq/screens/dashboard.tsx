@@ -253,6 +253,13 @@ function DashPopContent({
 
 export function DashboardScreen() {
   const { openStock, openStockDetail, openMoverModal, openEarnings, openSector, openIndex } = useIQActions();
+  /* Market-wide AI digest for the What Matters Now card. Read-only from the
+     app's side: the endpoint regenerates at most once an hour and shares one
+     call across concurrent viewers. */
+  const { data: wmn } = useApiResource<{
+    summary?: string; overallAssessment?: string; keyDevelopments?: string[];
+    generatedAt?: string; sourceCounts?: { news: number; analyses: number };
+  }>("/live/what-matters-now");
 
   // Same shared upstream tape SSE broadcast the shell's ticker strip uses
   // (Phase 1) — not a direct market_indices Firestore listener.
@@ -466,7 +473,9 @@ export function DashboardScreen() {
                 </div>
                 <div>
                   <h2>What Matters Now</h2>
-                  <div className="meta">Latest market-moving headlines</div>
+                  <div className="meta">
+                    {wmn?.summary ? "AI read of the last few hours · updated hourly" : "Latest market-moving headlines"}
+                  </div>
                 </div>
               </div>
               <svg className="wmn-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -475,6 +484,27 @@ export function DashboardScreen() {
             </button>
             <div className="wmn-collapse">
               <div className="wmn-collapse-inner" style={{ padding: "2px 18px 16px" }}>
+                {/* AI digest above the headline list. The card keeps its
+                    existing shape — this is additive, and absent when the
+                    model has produced nothing for the window. */}
+                {wmn?.summary && (
+                  <div className="wmn-ai">
+                    <p className="wmn-ai-sum">{wmn.summary}</p>
+                    {wmn.overallAssessment && (
+                      <p className="wmn-ai-assess">{wmn.overallAssessment}</p>
+                    )}
+                    {!!wmn.keyDevelopments?.length && (
+                      <ul className="wmn-ai-list">
+                        {wmn.keyDevelopments.slice(0, 4).map((k, i) => <li key={i}>{k}</li>)}
+                      </ul>
+                    )}
+                    <div className="wmn-ai-foot">
+                      AI-generated · {wmn.sourceCounts?.news ?? 0} headlines
+                      {wmn.sourceCounts?.analyses ? ` · ${wmn.sourceCounts.analyses} analyses` : ""}
+                      {wmn.generatedAt ? ` · ${wmn.generatedAt.slice(11, 16)} UTC` : ""}
+                    </div>
+                  </div>
+                )}
                 {(() => {
                   // 8 latest headlines in a 2-column grid, newest first, deduped
                   // by URL (Polygon tags one story to every ticker it mentions).

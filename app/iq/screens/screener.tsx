@@ -304,8 +304,11 @@ export function ScreenerScreen() {
               color: "var(--text-dim-solid)", fontWeight: 600, marginRight: 4,
             }}>Presets</span>
 
-            {/* All presets live in this single dropdown (multi-select, close on outside click) */}
-            <div ref={ddRef} style={{ position: "relative" }}>
+            {/* All presets live in this single dropdown (multi-select, close on outside click).
+                zIndex while open lifts the whole wrapper into a high stacking context so the
+                menu floats ABOVE the results/chart panels below it (the .dd-menu z-index:40
+                was being painted under them). */}
+            <div ref={ddRef} style={{ position: "relative", zIndex: ddOpen ? 100 : undefined }}>
               <button
                 onClick={() => setDdOpen(o => !o)}
                 style={{

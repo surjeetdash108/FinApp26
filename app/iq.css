@@ -1111,6 +1111,22 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .drawer-close:hover { background: var(--surface-2); color: var(--text-hi); }
 .drawer-h { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .drawer-b { overflow-y: auto; padding: 18px 20px 32px; flex: 1; }
+/* What Matters Now — AI digest above the headline list. Sits inside the
+   existing card; the card's own layout is unchanged. */
+.wmn-ai {
+  padding: 12px 14px; margin: 6px 0 14px;
+  background: var(--surface-1); border: 1px solid var(--ai-dim);
+  border-left: 3px solid var(--ai); border-radius: var(--r-sm);
+}
+.wmn-ai-sum { margin: 0; font-size: .86rem; line-height: 1.6; color: var(--text-hi); }
+.wmn-ai-assess { margin: 8px 0 0; font-size: .8rem; line-height: 1.6; color: var(--text); }
+.wmn-ai-list { margin: 8px 0 0; padding-left: 17px; }
+.wmn-ai-list li { font-size: .79rem; line-height: 1.55; color: var(--text); margin-bottom: 2px; }
+.wmn-ai-foot {
+  margin-top: 9px; padding-top: 7px; border-top: 1px solid var(--border-soft);
+  font-size: .64rem; color: var(--text-dim-solid);
+}
+
 /* Live Feed: per-row "Analysis" button + the drawer it opens. */
 .feed-analysis-btn {
   display: inline-flex; align-items: center; gap: 4px;
