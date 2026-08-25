@@ -272,7 +272,9 @@ export function DashboardScreen() {
   const { data: liveInsiderTx, loading: insiderLoading } = useApiList<InsiderTxDoc>("/market-data/insider-transactions");
   // Per-ticker news — powers the "why it moved" line in the hover popup AND the
   // latest-headlines list inside the "What Matters Now" card.
-  const { data: dashNews, loading: dashNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
+  // Still needed by the ticker popovers, but no longer for a loading state —
+  // the What Matters Now card stopped rendering the headline list.
+  const { data: dashNews } = useApiList<NewsArticleDoc>("/market-data/news");
   // Live Fear & Greed (fear-greed.job → market_sentiment/fear_greed). No mock
   // fallback: fgVal/fgLabel are null until the job has actually run.
   const { data: marketSentiment, loading: marketSentimentLoading } = useApiList<MarketSentimentDoc>("/market-data/market-sentiment");
@@ -484,9 +486,9 @@ export function DashboardScreen() {
             </button>
             <div className="wmn-collapse">
               <div className="wmn-collapse-inner" style={{ padding: "2px 18px 16px" }}>
-                {/* AI digest above the headline list. The card keeps its
-                    existing shape — this is additive, and absent when the
-                    model has produced nothing for the window. */}
+                {/* The card's whole content: the AI read, scrolling inside a
+                    fixed height so a long digest cannot push the rest of the
+                    dashboard down the page. */}
                 {wmn?.summary && (
                   <div className="wmn-ai">
                     <p className="wmn-ai-sum">{wmn.summary}</p>
@@ -505,44 +507,12 @@ export function DashboardScreen() {
                     </div>
                   </div>
                 )}
-                {(() => {
-                  // 8 latest headlines in a 2-column grid, newest first, deduped
-                  // by URL (Polygon tags one story to every ticker it mentions).
-                  // Click → open the stock detail for that ticker.
-                  const seen = new Set<string>();
-                  const latest = [...dashNews]
-                    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-                    .filter(n => { const k = n.url || n.id; if (seen.has(k)) return false; seen.add(k); return true; })
-                    .slice(0, 8);
-                  if (latest.length === 0) {
-                    return <DataState loading={dashNewsLoading} label="No market-moving news right now." />;
-                  }
-                  return (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 24, alignItems: "start" }}>
-                      {latest.map((f, i) => (
-                        <div key={f.id}
-                          onClick={() => openStock(f.ticker)}
-                          style={{
-                            display: "flex", gap: 11, padding: "10px 0", alignItems: "flex-start", cursor: "pointer",
-                            // no bottom border on the last row (last two items)
-                            borderBottom: i < latest.length - 2 ? "1px solid var(--border-soft)" : undefined,
-                          }}>
-                          <StockLogo sym={f.ticker} size={30} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: ".82rem", color: "var(--text)", lineHeight: 1.45 }}>
-                              <b style={{ color: "var(--text-hi)" }}>{f.ticker}</b> · {f.headline}
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontSize: ".66rem", color: "var(--text-dim-solid)", flexWrap: "wrap" }}>
-                              {f.category && <span className="pill" style={{ background: "var(--surface-3)", color: "var(--brand-2)" }}>{f.category}</span>}
-                              <span className="mono">{new Date(f.publishedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
-                              {f.source && <span>· {f.source}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
+                {/* Headline list removed: the card now shows the AI read only.
+                    The same stories remain one click away in the Live Feed, and
+                    duplicating them here pushed the analysis off-screen. */}
+                {!wmn?.summary && (
+                  <DataState loading={!wmn} label="No market-moving activity to summarise yet." />
+                )}
               </div>
             </div>
           </div>
