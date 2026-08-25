@@ -1172,26 +1172,20 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 }
 .feed-chip:hover { border-color: var(--border-strong); color: var(--text-hi); }
 /* Selected chip takes its OWN category colour rather than a single brand
-   highlight, so the active filter is identifiable at a glance and matches the
-   dot you clicked. The colour is held in --chip and drives the dot, the
-   selected border, fill and count — set once per category below. */
+   highlight, so the active filter is identifiable at a glance. The colour is
+   held in --chip and drives the selected border, fill and count — set once per
+   category below. (The per-category dot that used to sit inside each chip has
+   been removed; --chip survives because it still colours the selection, not
+   just that dot.) */
 .feed-chip.on {
   border-color: var(--chip);
   background: color-mix(in srgb, var(--chip) 20%, transparent);
   color: var(--text-hi);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--chip) 22%, transparent);
 }
-.feed-chip.on .feed-chip-dot {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chip) 28%, transparent);
-}
 .feed-chip b { font-family: var(--f-mono); font-weight: 700; color: var(--text-hi); }
 .feed-chip.on b { color: var(--chip); }
-/* A colour per category, so the eye can find a bucket without reading it. */
 .feed-chip { --chip: var(--text-dim-solid); }
-.feed-chip-dot {
-  width: 5px; height: 5px; border-radius: 50%; flex: none;
-  background: var(--chip);
-}
 .feed-chip[data-tag="all"]      { --chip: var(--brand-2); }
 .feed-chip[data-tag="earnings"] { --chip: var(--up); }
 .feed-chip[data-tag="analyst"]  { --chip: #a78bfa; }

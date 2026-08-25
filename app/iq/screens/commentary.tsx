@@ -454,7 +454,17 @@ function GlanceTab({ period, heading }: { period: "weekly" | "monthly"; heading:
                   onClick={() => setOpenKey(isOpen ? "" : it.periodKey)}
                   style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "none", border: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <span className="tkr" style={{ display: "block" }}>
+                    {/* Deliberately NOT .tkr. That class is the fixed-width
+                        ticker-symbol style — `width: 52px` with
+                        `.tkr small { display: block }` — which is right for
+                        "NVDA" and wrong for a date range: it boxed
+                        "Week of Aug 24 – Aug 30, 2026" into 52px and pushed
+                        "· current" onto its own line. Plain styles here, with
+                        nowrap so the range never splits at its en dash. */}
+                    <span style={{
+                      display: "block", fontSize: ".78rem", fontWeight: 700, color: "var(--text-hi)",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>
                       {glanceLabel(it)}
                       {isCurrent && <small style={{ color: "var(--text-dim-solid)", fontWeight: 400 }}> · current</small>}
                     </span>
@@ -509,7 +519,11 @@ export function CommentaryScreen() {
   const [tagFilter,     setTagFilter]     = useState<string>("all");
   /* Default ON: ~26% of the feed is auto-generated 13F notes and listicles,
      mostly from defenseworld.net and Motley Fool syndication. */
-  const [hideFiller,    setHideFiller]    = useState(true);
+  // The "Hide filler" toggle is gone: it defaulted ON and silently dropped
+  // items tagged `filler` (auto-generated 13F notes, ranked-list clickbait),
+  // so the feed never showed everything the backend had. Every item now
+  // renders and the reader decides. `filler` is still written by the news job
+  // and stays on NewsArticleDoc for anything that wants it later.
   /* Which ticker's rolling AI analysis is open. Read-only: the endpoint never
      triggers generation, so opening this cannot incur a model call. */
   const [analysisTicker, setAnalysisTicker] = useState<string | null>(null);
@@ -563,7 +577,6 @@ export function CommentaryScreen() {
       !((n.ticker ?? "").toLowerCase().includes(q) ||
         (n.headline ?? "").toLowerCase().includes(q) ||
         (n.summary ?? "").toLowerCase().includes(q))) return false;
-    if (hideFiller && n.filler) return false;
     if (tagFilter !== "all" && (n.tag ?? "other") !== tagFilter) return false;
     if (effSec !== "All" || capFilter !== "All") {
       const c = companyByTicker.get(n.ticker);
@@ -578,7 +591,6 @@ export function CommentaryScreen() {
      own bucket the moment you clicked it would be useless for comparison. */
   const tagCounts = (() => {
     const base = tabFeed.filter(n => {
-      if (hideFiller && n.filler) return false;
       if (q &&
         !((n.ticker ?? "").toLowerCase().includes(q) ||
           (n.headline ?? "").toLowerCase().includes(q) ||
@@ -664,7 +676,10 @@ export function CommentaryScreen() {
           ))}
         </div>
 
-        {/* Search + sector + market-cap + hide-filler, same line as the tabs. */}
+        {/* Search + sector + market-cap, same line as the tabs. Each label and
+            its select are one inline-flex unit: as loose siblings in a wrapping
+            row they could break apart, leaving "Market cap" stranded on one row
+            with its dropdown on the next. */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <div style={{ position: "relative", flex: "1 1 190px", minWidth: 160, maxWidth: 320 }}>
             <input
@@ -680,21 +695,18 @@ export function CommentaryScreen() {
           {search.trim() && (
             <button className="chip ghost" onClick={() => setSearch("")} title="Clear search">Clear</button>
           )}
-          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Sector</span>
-          <select className="mv-sel" value={effSec} onChange={e => setSecFilter(e.target.value)}>
-            {feedSectors.map(s => <option key={s} value={s}>{titleCaseLabel(s)}</option>)}
-          </select>
-          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Market cap</span>
-          <select className="mv-sel" value={capFilter} onChange={e => setCapFilter(e.target.value)}>
-            {CAP_TIERS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
-            fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", whiteSpace: "nowrap" }}
-            title="Hide auto-generated 13F holdings notes and ranked-list clickbait">
-            <input type="checkbox" checked={hideFiller} onChange={e => setHideFiller(e.target.checked)}
-              style={{ accentColor: "var(--brand)", cursor: "pointer" }} />
-            Hide filler
-          </label>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Sector</span>
+            <select className="mv-sel" value={effSec} onChange={e => setSecFilter(e.target.value)}>
+              {feedSectors.map(s => <option key={s} value={s}>{titleCaseLabel(s)}</option>)}
+            </select>
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Market cap</span>
+            <select className="mv-sel" value={capFilter} onChange={e => setCapFilter(e.target.value)}>
+              {CAP_TIERS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </span>
         </div>
       </div>
 
@@ -722,7 +734,6 @@ export function CommentaryScreen() {
                 onClick={() => setTagFilter(c.key)}
                 data-tag={c.key}
               >
-                <span className="feed-chip-dot" />
                 {c.label}
                 <b>{tagCounts[c.key] ?? 0}</b>
               </button>
