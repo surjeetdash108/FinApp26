@@ -14,6 +14,15 @@ import { TickerAnalysisDrawer } from "../ticker-analysis-drawer";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 
+// Selected-tab styling — the app's active-pill language (brand fill + white),
+// shared by BOTH the primary News/Announcement tabs and the inner sub-tabs so
+// the selection colour is identical at every level.
+const SEL_TAB = {
+  background: "var(--brand)",
+  color: "#fff",
+  boxShadow: "0 1px 8px -2px rgba(0,0,0,.5)",
+} as const;
+
 // Market-cap tiers derived from companies.marketCap (raw USD). Used to filter
 // the feed by the size of the company each news item is about.
 const CAP_TIERS = ["All", "Mega", "Large", "Mid", "Small", "Micro"];
@@ -172,6 +181,7 @@ export function CommentaryScreen() {
   const filingsSorted = [...filingsWire].sort((a, b) => b.filingDate.localeCompare(a.filingDate));
   const { data: regimeList } = useApiList<MacroRegimeDoc>("/market-data/macro-regime");
   const regime = regimeList.find(r => r.id === "current") ?? regimeList[0] ?? null;
+  const [mainTab,       setMainTab]       = useState(0); // 0 = News, 1 = Announcement
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
   const [secFilter,     setSecFilter]     = useState("All");
@@ -306,12 +316,24 @@ export function CommentaryScreen() {
 
   return (
     <>
-      {/* Tabs + all filters on ONE line. flexWrap is a graceful fallback for
-          narrow viewports; on desktop everything sits on a single row. */}
-      <div className="page-head" style={{ flexWrap: "wrap", gap: 10, rowGap: 8, position: "relative" }}>
+      {/* Primary tabs: News vs Announcement. Everything that used to be the Live
+          Feed lives under News; Announcement is a placeholder (content TBD). */}
+      <div className="page-head">
+        <div className="tabs">
+          <button className={`tab${mainTab === 0 ? " on" : ""}`} style={mainTab === 0 ? SEL_TAB : undefined} onClick={() => setMainTab(0)}>News</button>
+          <button className={`tab${mainTab === 1 ? " on" : ""}`} style={mainTab === 1 ? SEL_TAB : undefined} onClick={() => setMainTab(1)}>Announcement</button>
+        </div>
+      </div>
+
+      {mainTab === 0 && (<>
+      {/* Sub-tabs (Live/Premarket/…) + all filters on ONE line. flexWrap is a
+          graceful fallback for narrow viewports. Non-sticky so it doesn't stack
+          under the sticky primary-tab header above. */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, rowGap: 8, padding: "12px 18px", borderBottom: "1px solid var(--border-soft)", position: "relative" }}>
         <div className="tabs">
           {TABS.map((t, i) => (
             <button key={t} className={`tab${i === activeTab ? " on" : ""}`}
+              style={i === activeTab ? SEL_TAB : undefined}
               onClick={() => setActiveTab(i)}>{t}</button>
           ))}
         </div>
@@ -568,6 +590,18 @@ export function CommentaryScreen() {
           </div>
         </div>
       </div>
+      </>)}
+
+      {mainTab === 1 && (
+        <div style={{ padding: 18 }}>
+          <div className="card">
+            <div className="card-b" style={{ textAlign: "center", padding: "48px 18px", color: "var(--text-dim-solid)", fontSize: ".85rem" }}>
+              Announcements — coming soon.
+            </div>
+          </div>
+        </div>
+      )}
+
       {analysisTicker && (
         <TickerAnalysisDrawer sym={analysisTicker} onClose={() => setAnalysisTicker(null)} />
       )}
