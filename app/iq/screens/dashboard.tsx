@@ -580,7 +580,7 @@ export function DashboardScreen() {
             <div className="card-b" style={{ paddingTop: 4 }}>
               {earningsToday.length === 0
                 ? <DataState label="No earnings reported today." height={100} />
-                : earningsToday.slice(0, 5).map(e => (
+                : earningsToday.slice(0, 10).map(e => (
                 <div key={e.ticker} className="minirow" style={{ cursor: "pointer" }}
                   onClick={() => openEarnings(e.ticker)}
                   {...mr(e.ticker, "earnings")}
