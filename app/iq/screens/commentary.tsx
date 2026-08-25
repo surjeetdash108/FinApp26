@@ -78,7 +78,7 @@ function EarningsAnnouncementsTab() {
             <h3>Earnings Announcement</h3><VendorTag v={["polygon", "fmp"]} />
           </div>
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {rows.length} AI analysis{rows.length === 1 ? "" : "es"}
+            {rows.length} AI {rows.length === 1 ? "analysis" : "analyses"}
           </span>
         </div>
         <div className="card-b" style={{ padding: 0, maxHeight: "none" }}>
