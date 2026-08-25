@@ -316,12 +316,14 @@ export function CommentaryScreen() {
 
   return (
     <>
-      {/* Primary tabs: News vs Announcement. Everything that used to be the Live
-          Feed lives under News; Announcement is a placeholder (content TBD). */}
+      {/* Primary tabs: News vs Earnings Announcement. Everything that used to be
+          the Live Feed lives under News; Earnings Announcement will surface the
+          per-ticker `announcement`-type AI reads (ticker_ai_analysis, generated
+          when an earnings result lands). Placeholder until that's wired. */}
       <div className="page-head">
         <div className="tabs">
           <button className={`tab${mainTab === 0 ? " on" : ""}`} style={mainTab === 0 ? SEL_TAB : undefined} onClick={() => setMainTab(0)}>News</button>
-          <button className={`tab${mainTab === 1 ? " on" : ""}`} style={mainTab === 1 ? SEL_TAB : undefined} onClick={() => setMainTab(1)}>Announcement</button>
+          <button className={`tab${mainTab === 1 ? " on" : ""}`} style={mainTab === 1 ? SEL_TAB : undefined} onClick={() => setMainTab(1)}>Earnings Announcement</button>
         </div>
       </div>
 
@@ -596,7 +598,7 @@ export function CommentaryScreen() {
         <div style={{ padding: 18 }}>
           <div className="card">
             <div className="card-b" style={{ textAlign: "center", padding: "48px 18px", color: "var(--text-dim-solid)", fontSize: ".85rem" }}>
-              Announcements — coming soon.
+              Earnings announcements — coming soon.
             </div>
           </div>
         </div>
