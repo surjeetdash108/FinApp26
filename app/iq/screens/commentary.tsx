@@ -379,6 +379,118 @@ function BiggestPctTab() {
   );
 }
 
+// ── Week / Month at a glance ────────────────────────────────────────────────
+type GlanceSentiment = "bullish" | "bearish" | "neutral" | "mixed";
+interface GlanceDoc {
+  period: "weekly" | "monthly";
+  periodKey: string;
+  periodStart: string;
+  periodEnd: string;
+  generatedAt: string;
+  sourceCount: number;
+  model: string;
+  marketTone: string;
+  sentiment: GlanceSentiment;
+  keyThemes: string[];
+  biggestEarnings: string[];
+  notableMovers: string[];
+  summary: string;
+}
+interface GlanceResponse { generating: boolean; items: GlanceDoc[]; }
+
+const SENT_COLOR: Record<GlanceSentiment, string> = {
+  bullish: "var(--up)", bearish: "var(--down)", neutral: "var(--text-dim-solid)", mixed: "var(--warn)",
+};
+
+/** "August 2026" (monthly) or "Week of Aug 24 – 30, 2026" (weekly). All UTC so
+ *  the label matches the period keys the backend wrote. */
+function glanceLabel(d: GlanceDoc): string {
+  const s = new Date(d.periodStart);
+  if (d.period === "monthly") {
+    return s.toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+  }
+  const e = new Date(Date.parse(d.periodEnd) - 24 * 3600 * 1000); // inclusive last day
+  const sM = s.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+  const eM = e.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return `Week of ${sM} – ${eM}`;
+}
+
+/** One market-wide digest per period, newest first, as an expandable list so
+ *  users can open past periods. The current period is generated on demand and
+ *  the tab polls until it appears; past periods are read straight from cache. */
+function GlanceTab({ period, heading }: { period: "weekly" | "monthly"; heading: string }) {
+  // Generation is synchronous server-side: the first view of a stale period
+  // waits (~seconds) while `loading` is true, then this returns the full digest.
+  const { data, loading } = useApiResource<GlanceResponse>(`/live/glance/${period}`);
+  const [openKey, setOpenKey] = useState<string | null>(null); // null = default to first
+  const items = data?.items ?? [];
+  const openEff = openKey === null ? (items[0]?.periodKey ?? null) : (openKey === "" ? null : openKey);
+
+  return (
+    <div style={{ padding: "14px 18px 18px" }}>
+      <div className="card">
+        <div className="card-h">
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <h3>{heading}</h3>
+            <span style={{ fontSize: ".58rem", fontWeight: 700, letterSpacing: ".04em", padding: "2px 5px", borderRadius: 4, background: "var(--ai)", color: "#fff" }}>AI</span>
+          </div>
+          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+            {items.length} {items.length === 1 ? "period" : "periods"}
+          </span>
+        </div>
+        <div className="card-b" style={{ padding: 0, maxHeight: "none" }}>
+          {items.length === 0 ? (
+            <div style={{ padding: "40px 18px", textAlign: "center" }}>
+              <DataState loading={loading}
+                label="No summaries yet — a market-wide digest is built from the period's ticker analyses on first view." />
+            </div>
+          ) : items.map((it) => {
+            const isOpen = it.periodKey === openEff;
+            const isCurrent = Date.parse(it.periodEnd) > Date.now();
+            const noContent = !it.marketTone && it.keyThemes.length === 0 && it.notableMovers.length === 0;
+            return (
+              <div key={it.periodKey} style={{ borderBottom: "1px solid var(--border-soft)" }}>
+                <button
+                  onClick={() => setOpenKey(isOpen ? "" : it.periodKey)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "none", border: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <span className="tkr" style={{ display: "block" }}>
+                      {glanceLabel(it)}
+                      {isCurrent && <small style={{ color: "var(--text-dim-solid)", fontWeight: 400 }}> · current</small>}
+                    </span>
+                    <div style={{ fontSize: ".74rem", color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {it.marketTone || it.summary}
+                    </div>
+                  </div>
+                  {!noContent && (
+                    <span className="pill" style={{ textTransform: "capitalize", flexShrink: 0 }}>
+                      <span style={{ color: SENT_COLOR[it.sentiment] }}>{it.sentiment}</span>
+                    </span>
+                  )}
+                  <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)", flexShrink: 0 }}>{isOpen ? "▲" : "▼"}</span>
+                </button>
+                {isOpen && (
+                  <div style={{ padding: "2px 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {it.marketTone && <p style={{ fontSize: ".85rem", lineHeight: 1.5, margin: 0, fontWeight: 600 }}>{it.marketTone}</p>}
+                    {it.summary && <p style={{ fontSize: ".82rem", lineHeight: 1.55, margin: 0 }}>{it.summary}</p>}
+                    <AnnList title="Key themes" items={it.keyThemes} />
+                    <AnnList title="Biggest earnings" items={it.biggestEarnings} />
+                    <AnnList title="Notable movers" items={it.notableMovers} />
+                    <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)" }}>
+                      AI-generated · not investment advice · {it.sourceCount} {it.sourceCount === 1 ? "analysis" : "analyses"}
+                      {it.generatedAt ? ` · generated ${String(it.generatedAt).slice(0, 16).replace("T", " ")}` : ""}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CommentaryScreen() {
   const router = useRouter();
   const uid = firebaseAuth.currentUser?.uid ?? null;
@@ -533,6 +645,8 @@ export function CommentaryScreen() {
           <button className={`tab${mainTab === 1 ? " on" : ""}`} style={mainTab === 1 ? SEL_TAB : undefined} onClick={() => setMainTab(1)}>Announcement</button>
           <button className={`tab${mainTab === 2 ? " on" : ""}`} style={mainTab === 2 ? SEL_TAB : undefined} onClick={() => setMainTab(2)}>Most Active</button>
           <button className={`tab${mainTab === 3 ? " on" : ""}`} style={mainTab === 3 ? SEL_TAB : undefined} onClick={() => setMainTab(3)}>Biggest %</button>
+          <button className={`tab${mainTab === 4 ? " on" : ""}`} style={mainTab === 4 ? SEL_TAB : undefined} onClick={() => setMainTab(4)}>Week at a Glance</button>
+          <button className={`tab${mainTab === 5 ? " on" : ""}`} style={mainTab === 5 ? SEL_TAB : undefined} onClick={() => setMainTab(5)}>Month at a Glance</button>
         </div>
       </div>
 
@@ -806,6 +920,8 @@ export function CommentaryScreen() {
       {mainTab === 1 && <EarningsAnnouncementsTab />}
       {mainTab === 2 && <MostActiveTab />}
       {mainTab === 3 && <BiggestPctTab />}
+      {mainTab === 4 && <GlanceTab period="weekly" heading="Week at a glance" />}
+      {mainTab === 5 && <GlanceTab period="monthly" heading="Month at a glance" />}
 
       {analysisTicker && (
         <TickerAnalysisDrawer sym={analysisTicker} onClose={() => setAnalysisTicker(null)} />
