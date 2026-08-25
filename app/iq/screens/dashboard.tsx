@@ -11,6 +11,7 @@ import { isoDay } from "../calendar-range";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
+import { useLiveQuotes } from "../live-quotes-context";
 import { pulseFromLive, buildSectorList, tapeItemsToIndexDocs } from "../live-market-indices";
 import type {
   LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
@@ -291,6 +292,10 @@ export function DashboardScreen() {
     }
     return [...map.values()].sort((a, b) => b.count - a.count);
   })();
+  // Live quotes for the searched names so this widget shows a current price even
+  // when the base `companies` doc has a null price (the deep profile sweep hasn't
+  // reached that ticker yet) — same overlay every other screen uses.
+  const searchedLive = useLiveQuotes(searchedDeduped.map((s) => s.ticker));
 
   const pulse = pulseFromLive(liveIndices);
   const movers = mergeMoversData(liveMovers, companies);
@@ -528,6 +533,10 @@ export function DashboardScreen() {
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {searchedDeduped.map(({ ticker, count }) => {
                     const c = companyByTicker.get(ticker);
+                    // Prefer the live quote; fall back to the base companies doc.
+                    const q = searchedLive.get(ticker);
+                    const price = q?.price ?? c?.price ?? null;
+                    const pct = q?.pctChange ?? c?.pctChange ?? null;
                     return (
                       <div key={ticker}
                         onClick={() => openStockDetail(ticker, searchedDeduped.map(x => x.ticker))}
@@ -537,17 +546,17 @@ export function DashboardScreen() {
                           border: "1.5px solid transparent", borderRadius: 10,
                           // Gradient border: the direction colour glows across the
                           // TOP edge and fades to the neutral border down the sides.
-                          background: `linear-gradient(var(--surface-1), var(--surface-1)) padding-box, linear-gradient(180deg, ${pctBorderColor(c?.pctChange)} 0%, var(--border) 55%) border-box`,
+                          background: `linear-gradient(var(--surface-1), var(--surface-1)) padding-box, linear-gradient(180deg, ${pctBorderColor(pct)} 0%, var(--border) 55%) border-box`,
                           padding: "9px 11px", cursor: "pointer", transition: "background .13s",
                         }}
                       >
                         <StockLogo sym={ticker} size={28} />
                         <span className="tkr">{ticker}<small>{c?.name ?? "—"}</small></span>
                         <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                          {c?.price != null ? (
+                          {price != null ? (
                             <>
-                              <div className="mono" style={{ fontSize: ".8rem", color: "var(--text-hi)" }}>{fmt(c.price)}</div>
-                              {c?.pctChange != null && <div className={`mono ${cls(c.pctChange)}`} style={{ fontSize: ".68rem" }}>{sign(c.pctChange)}</div>}
+                              <div className="mono" style={{ fontSize: ".8rem", color: "var(--text-hi)" }}>{fmt(price)}</div>
+                              {pct != null && <div className={`mono ${cls(pct)}`} style={{ fontSize: ".68rem" }}>{sign(pct)}</div>}
                             </>
                           ) : <NotAvailable />}
                         </div>

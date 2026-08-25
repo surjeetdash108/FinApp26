@@ -918,8 +918,18 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const rawLo = data.week52Low, rawHi = data.week52High;
   const range52Reliable =
     rawLo == null || rawHi == null || rawLo <= 0 ? true : rawHi / rawLo <= MAX_52W_RATIO;
-  const lo = range52Reliable ? rawLo : null;
-  const hi = range52Reliable ? rawHi : null;
+  let lo = range52Reliable ? rawLo : null;
+  let hi = range52Reliable ? rawHi : null;
+  // Foreign / on-demand tickers often lack a stored week52High/Low but DO carry
+  // pctFromHigh52 / pctFromLow52 — derive the range from those + the price so the
+  // 52W-Range tile stays consistent with the Off-52W-High/Low stats (which read
+  // those percentages) instead of showing N/A next to real off-high/low values.
+  // Only when the RAW values were missing — never resurrect a ratio-suppressed
+  // (reverse-split-artifact) range.
+  if ((rawLo == null || rawHi == null) && p > 0) {
+    if (hi == null && offHigh52 != null && 1 + offHigh52 / 100 > 0) hi = p / (1 + offHigh52 / 100);
+    if (lo == null && offLow52 != null && 1 + offLow52 / 100 > 0) lo = p / (1 + offLow52 / 100);
+  }
 
   // Trend / MA posture. When the ticker is ranked in the synced universe we use
   // the RS-rank read; otherwise (on-demand tickers with no RS rank) we derive it
