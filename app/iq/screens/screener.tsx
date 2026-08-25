@@ -102,18 +102,20 @@ export function ScreenerScreen() {
   const [priceGt5,   setPriceGt5]   = useState(false);
 
   /* ── Restore the last-used filter set (saved by earlier versions) ── */
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("iq-screener-filters");
-      if (!raw) return;
-      const s = JSON.parse(raw);
-      if (Array.isArray(s.activePresets)) setActivePresets(new Set(s.activePresets));
-      setRs90(!!s.rs90); setRs7090(!!s.rs7090); setRsLt40(!!s.rsLt40);
-      setSalesGt20(!!s.salesGt20); setEpsGt25(!!s.epsGt25); setMarginPos(!!s.marginPos);
-      setRatingBuy(!!s.ratingBuy); setMcGt10(s.mcGt10 ?? true); setRvolGt15(!!s.rvolGt15);
-      setDmaAbove(!!s.dmaAbove); setRsiBand(!!s.rsiBand); setPriceGt5(!!s.priceGt5);
-    } catch { /* ignore malformed saved filters */ }
-  }, []);
+  /*
+   * The screener opens with EVERY filter off.
+   *
+   * There used to be a restore here that read "iq-screener-filters" from
+   * localStorage on mount. Nothing in the app writes that key any more, so all
+   * it did was resurrect state saved by an older build — a user would arrive to
+   * find "Sales growth > 20%" already ticked with no memory of setting it, and
+   * a results list silently narrowed. It also forced the market-cap filter on
+   * via `s.mcGt10 ?? true`, so an absent key still produced an active filter.
+   *
+   * A screener that starts pre-filtered hides most of the universe before the
+   * user has asked for anything, so the default is now a clean slate. The stale
+   * key is simply ignored; nothing needs clearing.
+   */
 
   /* ── Export the SELECTED stock's data as a PDF (browser print → Save as PDF) ── */
   function exportPdf() {
