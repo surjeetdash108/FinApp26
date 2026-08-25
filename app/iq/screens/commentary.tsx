@@ -306,20 +306,19 @@ export function CommentaryScreen() {
 
   return (
     <>
-      <div className="page-head">
+      {/* Tabs + all filters on ONE line. flexWrap is a graceful fallback for
+          narrow viewports; on desktop everything sits on a single row. */}
+      <div className="page-head" style={{ flexWrap: "wrap", gap: 10, rowGap: 8, position: "relative" }}>
         <div className="tabs">
           {TABS.map((t, i) => (
             <button key={t} className={`tab${i === activeTab ? " on" : ""}`}
               onClick={() => setActiveTab(i)}>{t}</button>
           ))}
         </div>
-      </div>
 
-      <div style={{ padding: "0 18px 18px" }}>
-
-        {/* Free-text search — filters the feed by anything typed */}
-        <div className="fbar" style={{ marginBottom: 12, position: "relative", flexWrap: "wrap", gap: 8 }}>
-          <div style={{ position: "relative", minWidth: "16.25rem" }}>
+        {/* Search + sector + market-cap + hide-filler, same line as the tabs. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div style={{ position: "relative", flex: "1 1 190px", minWidth: 160, maxWidth: 320 }}>
             <input
               ref={searchRef}
               className="mv-sel"
@@ -333,10 +332,7 @@ export function CommentaryScreen() {
           {search.trim() && (
             <button className="chip ghost" onClick={() => setSearch("")} title="Clear search">Clear</button>
           )}
-
-          {/* Sector + market-cap filters — narrow the feed to news about
-              companies in a given sector and/or size tier. */}
-          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", marginLeft: 4 }}>Sector</span>
+          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}>Sector</span>
           <select className="mv-sel" value={effSec} onChange={e => setSecFilter(e.target.value)}>
             {feedSectors.map(s => <option key={s} value={s}>{titleCaseLabel(s)}</option>)}
           </select>
@@ -344,16 +340,20 @@ export function CommentaryScreen() {
           <select className="mv-sel" value={capFilter} onChange={e => setCapFilter(e.target.value)}>
             {CAP_TIERS.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
-            fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center" }}
+            fontSize: ".72rem", color: "var(--text-dim-solid)", alignSelf: "center", whiteSpace: "nowrap" }}
             title="Hide auto-generated 13F holdings notes and ranked-list clickbait">
             <input type="checkbox" checked={hideFiller} onChange={e => setHideFiller(e.target.checked)}
               style={{ accentColor: "var(--brand)", cursor: "pointer" }} />
             Hide filler
           </label>
+        </div>
+      </div>
 
-          <div style={{ flex: 1 }} />
+      <div style={{ padding: "0 18px 18px" }}>
+
+        {/* Result count / filter hint — its own slim line under the toolbar. */}
+        <div style={{ display: "flex", justifyContent: "flex-end", margin: "10px 0 12px" }}>
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
             {search.trim() || effSec !== "All" || capFilter !== "All" || tagFilter !== "all"
               ? `Showing ${feed.length} item${feed.length === 1 ? "" : "s"}`
