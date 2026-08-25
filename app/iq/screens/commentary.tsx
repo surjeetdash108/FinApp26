@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { StockLogo, DataState, VendorTag, cls, sign, fmt, titleCaseLabel} from "../utils";
 import { useLiveQuotes } from "../live-quotes-context";
 import { useApiList } from "../hooks/useApiList";
+import { useApiResource } from "../hooks/useApiResource";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
 import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc } from "../types";
@@ -293,6 +294,91 @@ function FeedItem({ item, i, total, onTicker, onAnalysis, marketCap, livePct }: 
 }
 
 /* ── Main commentary / Live Feed screen ── */
+// ── SCANX market scans (Most Active / Biggest %) ────────────────────────────
+interface ScanItem { ticker: string; name: string | null; pctChange: number | null; price?: number | null; volume?: number | null; rvol?: number | null; }
+interface SectorGroup { sector: string; items: ScanItem[]; }
+interface BiggestPctScan { generatedAt: string; gainers: SectorGroup[]; losers: SectorGroup[]; }
+interface MostActiveScan { generatedAt: string; byVolume: SectorGroup[]; byRelVolume: SectorGroup[]; }
+
+const scanTime = (iso?: string) =>
+  iso ? new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+
+/** One sector-categorised scan section — a coloured heading then one line per
+ *  sector: "Sector: TICKER (value), …" (the SCANX layout). */
+function ScanSection({ title, color, groups, render }: {
+  title: string; color: string; groups: SectorGroup[]; render: (it: ScanItem) => string;
+}) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, fontSize: ".8rem", color, marginBottom: 6 }}>{title}</div>
+      {(!groups || groups.length === 0) ? (
+        <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>No data.</div>
+      ) : groups.map((g) => (
+        <div key={g.sector} style={{ fontSize: ".8rem", lineHeight: 1.75 }}>
+          <span style={{ color: "var(--text-dim-solid)" }}>{titleCaseLabel(g.sector)}: </span>
+          {g.items.map((it, i) => (
+            <span key={it.ticker}>
+              <b>{it.ticker}</b>{" "}
+              <span className={cls(it.pctChange ?? 0)}>({render(it)})</span>
+              {i < g.items.length - 1 ? ", " : ""}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Most Active tab — top volume + top relative volume, by sector. */
+function MostActiveTab() {
+  const { data, loading } = useApiResource<MostActiveScan>("/live/scan/most-active");
+  return (
+    <div style={{ padding: "14px 18px 18px" }}>
+      <div className="card">
+        <div className="card-h">
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Today&apos;s most active stocks</h3><VendorTag v="polygon" /></div>
+          {data?.generatedAt && <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>as of {scanTime(data.generatedAt)}</span>}
+        </div>
+        <div className="card-b" style={{ maxHeight: "none" }}>
+          {!data ? <DataState loading={loading} label="Generating scan…" /> : (
+            <>
+              <ScanSection title="Today's top 20 volume" color="var(--text-hi)" groups={data.byVolume}
+                render={(it) => `${it.volume != null ? (it.volume / 1e6).toFixed(2) + " mln" : "—"} ${sign(it.pctChange ?? 0)}`} />
+              <ScanSection title="Today's top 20 relative volume (current vs 1-month avg daily volume)" color="var(--text-hi)" groups={data.byRelVolume}
+                render={(it) => `${it.rvol != null ? it.rvol.toFixed(2) + "x" : "—"} ${sign(it.pctChange ?? 0)}`} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Biggest % tab — top 20 gainers + top 20 losers, by sector. */
+function BiggestPctTab() {
+  const { data, loading } = useApiResource<BiggestPctScan>("/live/scan/biggest-pct");
+  return (
+    <div style={{ padding: "14px 18px 18px" }}>
+      <div className="card">
+        <div className="card-h">
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Today&apos;s biggest % gainers / losers</h3><VendorTag v="polygon" /></div>
+          {data?.generatedAt && <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)" }}>as of {scanTime(data.generatedAt)}</span>}
+        </div>
+        <div className="card-b" style={{ maxHeight: "none" }}>
+          {!data ? <DataState loading={loading} label="Generating scan…" /> : (
+            <>
+              <ScanSection title="Today's top 20 % gainers" color="var(--up)" groups={data.gainers}
+                render={(it) => `${it.price != null ? it.price.toFixed(2) : "—"} ${sign(it.pctChange ?? 0)}`} />
+              <ScanSection title="Today's top 20 % losers" color="var(--down)" groups={data.losers}
+                render={(it) => `${it.price != null ? it.price.toFixed(2) : "—"} ${sign(it.pctChange ?? 0)}`} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CommentaryScreen() {
   const router = useRouter();
   const uid = firebaseAuth.currentUser?.uid ?? null;
@@ -445,6 +531,8 @@ export function CommentaryScreen() {
         <div className="tabs">
           <button className={`tab${mainTab === 0 ? " on" : ""}`} style={mainTab === 0 ? SEL_TAB : undefined} onClick={() => setMainTab(0)}>News</button>
           <button className={`tab${mainTab === 1 ? " on" : ""}`} style={mainTab === 1 ? SEL_TAB : undefined} onClick={() => setMainTab(1)}>Announcement</button>
+          <button className={`tab${mainTab === 2 ? " on" : ""}`} style={mainTab === 2 ? SEL_TAB : undefined} onClick={() => setMainTab(2)}>Most Active</button>
+          <button className={`tab${mainTab === 3 ? " on" : ""}`} style={mainTab === 3 ? SEL_TAB : undefined} onClick={() => setMainTab(3)}>Biggest %</button>
         </div>
       </div>
 
@@ -716,6 +804,8 @@ export function CommentaryScreen() {
       </>)}
 
       {mainTab === 1 && <EarningsAnnouncementsTab />}
+      {mainTab === 2 && <MostActiveTab />}
+      {mainTab === 3 && <BiggestPctTab />}
 
       {analysisTicker && (
         <TickerAnalysisDrawer sym={analysisTicker} onClose={() => setAnalysisTicker(null)} />
