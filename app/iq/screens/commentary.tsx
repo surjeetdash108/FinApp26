@@ -8,7 +8,7 @@ import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
-import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc, FilingsWireDoc, MacroRegimeDoc } from "../types";
+import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc } from "../types";
 import { NEWS_TAGS } from "../types/news";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
 import { TickerAnalysisDrawer } from "../ticker-analysis-drawer";
@@ -496,10 +496,11 @@ export function CommentaryScreen() {
   const uid = firebaseAuth.currentUser?.uid ?? null;
   const { data: liveNews, loading: liveNewsLoading } = useApiList<NewsArticleDoc>("/market-data/news");
   const { data: companies, loading: companiesLoading } = useApiList<CompanyDoc>("/market-data/companies");
-  const { data: filingsWire } = useApiList<FilingsWireDoc>("/market-data/filings-wire");
-  const filingsSorted = [...filingsWire].sort((a, b) => b.filingDate.localeCompare(a.filingDate));
-  const { data: regimeList } = useApiList<MacroRegimeDoc>("/market-data/macro-regime");
-  const regime = regimeList.find(r => r.id === "current") ?? regimeList[0] ?? null;
+  // /market-data/filings-wire and /market-data/macro-regime were fetched here
+  // only to fill the Filings wire and Market regime rail cards. With the rail
+  // gone nothing on this screen reads them, so the two requests go too rather
+  // than loading data that is never rendered. The macro-regime read still has a
+  // home on the Macro & VIX screen.
   const [mainTab,       setMainTab]       = useState(0); // 0 = News, 1 = Announcement
   const [activeTab,     setActiveTab]     = useState(0);
   const [search,        setSearch]        = useState("");
@@ -730,10 +731,11 @@ export function CommentaryScreen() {
 
         <div className="dash">
 
-          {/* col-8: Feed — a flex column so the feed card grows to fill the
-              grid row (which the right rail sizes), squaring off the layout
-              instead of leaving an empty L below a short feed. */}
-          <div className="col-8" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Full width: the right rail that used to sit beside this (Before
+              the Bell, After the Close, Filings wire, Market regime) is gone,
+              so the feed takes all 12 columns instead of 8. Still a flex column
+              so the feed card grows to fill the row. */}
+          <div className="col-12" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {/* Quick lookup — tap a ticker to add it to the feed filter. Sits
                 at the TOP of the column; the feed card below flex-fills. */}
             <div className="card" style={{ flexShrink: 0 }}>
@@ -783,136 +785,6 @@ export function CommentaryScreen() {
             </div>
           </div>
 
-          {/* col-4: side cards */}
-          <div className="col-4" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-            <div className="wmn">
-              <div className="wmn-h">
-                <div className="t">
-                  <div className="wmn-orb">
-                    <svg viewBox="0 0 24 24" fill="none" style={{ width: 16, height: 16 }}>
-                      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z" fill="currentColor" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h2 style={{ fontSize: ".92rem", display: "flex", alignItems: "center", gap: 6 }}>Before the Bell <VendorTag v={["polygon", "fmp"]} /></h2>
-                    <div className="meta">pre-market headlines</div>
-                  </div>
-                </div>
-              </div>
-              <div className="wmn-body" style={{ padding: "6px 18px 14px" }}>
-                {premarket.length === 0 ? (
-                  <DataState label="No pre-market headlines yet this session. Live news for any ticker is available via the feed and filter above." />
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                    {premarket.slice(0, 5).map((n, i) => (
-                      <a
-                        key={n.id ?? `${n.ticker}-${i}`}
-                        href={n.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ textDecoration: "none", color: "inherit", display: "block" }}
-                      >
-                        <div style={{ fontSize: ".8rem", color: "var(--text)", lineHeight: 1.4 }}>
-                          <b style={{ color: "var(--text-hi)" }}>{n.ticker}</b> {n.headline}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: ".64rem", color: "var(--text-dim-solid)" }}>{n.source}</span>
-                          {n.vendor && (
-                            <span className="pill" style={{ fontSize: ".54rem", background: "var(--surface-3)", color: "var(--text-dim-solid)", textTransform: "uppercase", letterSpacing: ".03em" }}>via {n.vendor}</span>
-                          )}
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-h">
-                <h3>After the Close</h3>
-                <span className="pill amc">within 30 min</span>
-              </div>
-              <div className="card-b">
-                <p style={{ fontSize: ".82rem", lineHeight: 1.55, color: "var(--text-dim-solid)" }}>
-                  A pushed summary of final index performance, the day&apos;s top stories, and what&apos;s scheduled for tomorrow will appear here within 30 minutes of the close.
-                </p>
-                <button className="btn ai" style={{ marginTop: 10, width: "100%" }} onClick={() => router.push("/menu/recap")}>
-                  See today&apos;s EOD recap →
-                </button>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-h">
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Filings wire</h3><VendorTag v="sec" /></div>
-                <span className="pill ai" style={{ fontSize: ".68rem" }}>SEC 8-K</span>
-              </div>
-              <div className="card-b">
-                {filingsSorted.length === 0 ? (
-                  <DataState label="No recent 8-K filings synced yet (run the edgar-8k job)." />
-                ) : filingsSorted.slice(0, 12).map(f => (
-                  <a key={f.id} href={f.url} target="_blank" rel="noreferrer"
-                    style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "7px 0", textDecoration: "none", color: "inherit", borderBottom: "1px solid var(--border-soft)" }}>
-                    <span className="mono" style={{ fontWeight: 700, color: "var(--text-hi)", minWidth: 52 }}>{f.ticker}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: ".76rem", color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {f.isEarnings ? "Earnings (8-K 2.02)" : f.description || "8-K"}
-                    </span>
-                    {f.session && <span className="pill" style={{ fontSize: ".6rem" }}>{f.session}</span>}
-                    <span className="mono" style={{ fontSize: ".64rem", color: "var(--text-dim-solid)" }}>{f.filingDate.slice(5)}</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            <div className="card" style={{ flex: 1 }}>
-              <div className="card-h">
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market regime</h3><VendorTag v="fred" /></div>
-                {regime && (
-                  <span className="pill" style={{
-                    background: regime.regime === "Risk-On" ? "var(--up-dim, rgba(47,230,166,.18))"
-                      : regime.regime === "Risk-Off" ? "var(--down-dim, rgba(255,84,112,.18))" : "var(--surface-3)",
-                    color: regime.regime === "Risk-On" ? "var(--up)" : regime.regime === "Risk-Off" ? "var(--down)" : "var(--text)",
-                    fontWeight: 700,
-                  }}>{regime.regime}</span>
-                )}
-              </div>
-              <div className="card-b">
-                {!regime ? (
-                  <DataState label="Regime read populates once the macro-regime job has run (FRED-derived: curve, VIX, credit, trend, jobs)." />
-                ) : (
-                  <>
-                    <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", marginBottom: 8 }}>
-                      Score {regime.score >= 0 ? "+" : ""}{regime.score} / ±{regime.maxScore} · FRED-derived · as of {regime.asOfDate}
-                    </div>
-                    {([
-                      ["Yield curve", regime.components.yieldCurve],
-                      ["Volatility (VIX)", regime.components.volatility],
-                      ["Credit spread", regime.components.credit],
-                      ["Trend vs 200-DMA", regime.components.trend],
-                      ["Employment", regime.components.employment],
-                    ] as [string, MacroRegimeDoc["components"]["credit"]][]).map(([label, c]) => (
-                      <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                        <span style={{ fontSize: ".78rem", color: "var(--text)" }}>{label}</span>
-                        <span style={{
-                          fontSize: ".74rem", fontWeight: 600,
-                          color: c.signal == null ? "var(--text-dim-solid)" : c.signal > 0 ? "var(--up)" : c.signal < 0 ? "var(--down)" : "var(--text-dim-solid)",
-                        }}>
-                          {c.signal == null ? "—" : c.signal > 0 ? "▲" : c.signal < 0 ? "▼" : "•"} {c.label}
-                          {c.value != null && <span style={{ color: "var(--text-dim-solid)", marginLeft: 5 }}>({c.value})</span>}
-                        </span>
-                      </div>
-                    ))}
-                    <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", marginTop: 8 }}>
-                      Rules-based composite of public FRED series — not investment advice.
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-          </div>
         </div>
       </div>
       </>)}
