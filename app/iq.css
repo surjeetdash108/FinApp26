@@ -1159,25 +1159,39 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
    container rather than wrapping or pushing the page wide. */
 .feed-chips {
   display: flex; flex-wrap: nowrap; gap: 5px;
-  padding: 0 0 12px;
+  /* Top padding is load-bearing: overflow-x:auto forces the block axis to
+     `auto` too, so without it the selected chip's 2px focus ring is sheared off
+     along the top edge of the strip. */
+  padding: 3px 0 12px;
   overflow-x: auto; scrollbar-width: none;
 }
 .feed-chips::-webkit-scrollbar { height: 0; }
-.feed-chip {
+/* `.iq-root button.feed-chip`, not `.feed-chip`. These chips are <button>s, and
+   the global reset `.iq-root button { background:none; border:none }` is
+   specificity (0,1,1) against a lone class's (0,1,0) — so every UNSELECTED chip
+   lost its border and fill and rendered as bare text. `.feed-chip.on` is
+   (0,2,0) and did win, which is why only the selected one looked like a pill.
+   Raising the base to (0,2,1) makes them all read as buttons. */
+.iq-root button.feed-chip {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   padding: 4px 9px; border-radius: 20px; cursor: pointer; white-space: nowrap;
-  border: 1px solid var(--border); background: var(--surface-2);
+  border: 1px solid var(--border-strong); background: var(--surface-2);
   color: var(--text-dim-solid); font-size: .64rem; font-weight: 600;
   transition: border-color .13s, color .13s, background .13s;
 }
-.feed-chip:hover { border-color: var(--border-strong); color: var(--text-hi); }
+.iq-root button.feed-chip:hover {
+  border-color: var(--brand-2); background: var(--surface-3); color: var(--text-hi);
+}
 /* Selected chip takes its OWN category colour rather than a single brand
    highlight, so the active filter is identifiable at a glance. The colour is
    held in --chip and drives the selected border, fill and count — set once per
    category below. (The per-category dot that used to sit inside each chip has
    been removed; --chip survives because it still colours the selection, not
    just that dot.) */
-.feed-chip.on {
+/* Must also carry the `.iq-root button` prefix: the base rule above is now
+   (0,2,1), so a bare `.feed-chip.on` at (0,2,0) would lose to it and the
+   selected state would stop rendering. */
+.iq-root button.feed-chip.on {
   border-color: var(--chip);
   background: color-mix(in srgb, var(--chip) 20%, transparent);
   color: var(--text-hi);
