@@ -574,12 +574,12 @@ export function DashboardScreen() {
 
         {/* ── 3. Earnings Today ── */}
         <div className="col-4">
-          <div className="card" style={{ height: "100%" }}>
+          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Earnings Today</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/earnings">View all →</Link>
             </div>
-            <div className="card-b" style={{ paddingTop: 4 }}>
+            <div className="card-b" style={{ paddingTop: 4, flex: 1, minHeight: 0, maxHeight: 440, overflowY: "auto" }}>
               {earningsToday.length === 0
                 ? <DataState label="No earnings reported today." height={100} />
                 : earningsToday.slice(0, 10).map(e => (
@@ -619,7 +619,7 @@ export function DashboardScreen() {
                 >{label}</button>
               ))}
             </div>
-            <div className="card-b" style={{ paddingTop: 8, flex: 1, minHeight: 0, overflowY: "auto" }}>
+            <div className="card-b" style={{ paddingTop: 8, flex: 1, minHeight: 0, maxHeight: 440, overflowY: "auto" }}>
               {(moversTab === 0
                 ? [...movers].filter(m => m.pctChange > 0).sort((a, b) => b.pctChange - a.pctChange)
                 : moversTab === 1
@@ -664,7 +664,7 @@ export function DashboardScreen() {
                 .filter(g => g.stocks.length > 0);
 
               return (
-                <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0, overflowY: "auto" }}>
+                <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0, maxHeight: 440, overflowY: "auto" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                     {groups.map(({ sd, stocks }) => {
                       const hcSect = heatCol(sd.pctChange ?? 0);
