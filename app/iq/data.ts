@@ -28,6 +28,19 @@ export function maPostureLabel(above50?: boolean | null, above200?: boolean | nu
   if (!above50 && !above200) return "Below 50 & 200 DMA";
   return above50 ? "Above 50 · below 200" : "Below 50 · above 200";
 }
+
+// Leveraged / inverse ETF products (e.g. "T-REX 2X Long AXTI Daily ETF",
+// "ProShares UltraPro …") routinely top the raw grouped-daily gainers but aren't
+// stock movers. A normal operating company never carries both a multiplier
+// ("2X"/"3X") and an ETF/ETN/Shares suffix, nor "leveraged/inverse/ultrapro/
+// ultrashort", so the false-positive risk is negligible. Shared by the Movers
+// screen and the Dashboard movers widget so both hide these the same way.
+export function isLeveragedProduct(name: string | null | undefined): boolean {
+  const n = name ?? "";
+  if (/\b(leveraged?|inverse|ultrapro|ultrashort)\b/i.test(n)) return true;
+  if (/\b[1-9](?:\.\d)?x\b/i.test(n) && /\b(etf|etn|shares)\b/i.test(n)) return true;
+  return false;
+}
 export interface FolioItem {
   ticker: string; name: string;
   price: number;

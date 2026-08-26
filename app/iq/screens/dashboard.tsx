@@ -5,7 +5,7 @@ import Link from "next/link";
 import { firebaseAuth } from "../../firebase";
 import { apiGet } from "../backend";
 import { useIQActions, ExpandBtn } from "../shell";
-import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem, maPostureLabel } from "../data";
+import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem, maPostureLabel, isLeveragedProduct } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable, VendorTag } from "../utils";
 import { isoDay } from "../calendar-range";
 import { useApiList } from "../hooks/useApiList";
@@ -86,7 +86,9 @@ function DpRow({ label, children }: { label: string; children: React.ReactNode }
  */
 function mergeMoversData(live: LiveMoverDoc[], companies: CompanyDoc[]): Mover[] {
   const companyByTicker = new Map(companies.map(c => [c.ticker, c]));
-  return live.map(l => {
+  // Drop leveraged/inverse ETFs (same filter as the Movers screen) so the
+  // widget shows real stock movers, not "2X Long …" products.
+  return live.filter(l => !isLeveragedProduct(l.name)).map(l => {
     const c = companyByTicker.get(l.ticker);
     return {
       ticker: l.ticker, name: l.name ?? l.ticker, price: l.price, pctChange: l.pctChange,

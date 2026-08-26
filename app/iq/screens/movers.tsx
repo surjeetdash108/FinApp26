@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { type Mover, maPostureLabel } from "../data";
+import { type Mover, maPostureLabel, isLeveragedProduct } from "../data";
 import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag, titleCaseLabel} from "../utils";
 import { apiGet } from "../backend";
 import { useApiList } from "../hooks/useApiList";
@@ -63,17 +63,6 @@ const SORT_FIRST_DIR: Record<MoverSortKey, "asc" | "desc"> = {
  * (technical-indicators.job), "—" until synced. (Catalyst was removed — Polygon
  * has no catalyst feed, so it only ever showed "—".)
  */
-// Leveraged / inverse ETF products (e.g. "T-REX 2X Long AXTI Daily ETF",
-// "ProShares UltraPro …") routinely top the raw grouped-daily gainers but aren't
-// stock movers. A normal operating company never carries both a multiplier
-// ("2X"/"3X") and an ETF/ETN/Shares suffix, nor "leveraged/inverse/ultrapro/
-// ultrashort", so the false-positive risk is negligible.
-function isLeveragedProduct(name: string | null | undefined): boolean {
-  const n = name ?? "";
-  if (/\b(leveraged?|inverse|ultrapro|ultrashort)\b/i.test(n)) return true;
-  if (/\b[1-9](?:\.\d)?x\b/i.test(n) && /\b(etf|etn|shares)\b/i.test(n)) return true;
-  return false;
-}
 
 function mergeMovers(
   live: LiveMoverDoc[],
