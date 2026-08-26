@@ -278,17 +278,41 @@ export function EarningsGrowthChart({ hist }: { hist: EarnQ[] }) {
   const maxV = Math.max(...vals, 0.01) * 1.25;
   const minV = Math.min(...vals, 0);
   const range = maxV - minV || 1;
-  const n = d.length, gw = iw / n, bw = gw * 0.44;
+  // Bar width matches the EPS history chart's bar (EarnEpsChart uses gw * 0.28
+  // over the same 560-wide / 512-inner geometry and same 10-quarter data), so
+  // the two charts read consistently across every stock-detail screen.
+  const n = d.length, gw = iw / n, bw = gw * 0.28;
   const cy = (v: number) => PADT + ih - ((v - minV) / range) * ih;
   const pts = d.map((x, i) => `${(PADL + gw * i + gw / 2).toFixed(1)},${cy(x.a).toFixed(1)}`).join(" ");
   const yTicks = [minV, minV + range / 2, maxV].map(v => ({
     v, y: cy(v),
     label: v >= 1 ? `$${v.toFixed(1)}` : `$${v.toFixed(2)}`,
   }));
+  // Year-ago comparison matched on the period LABEL, not by stepping back four
+  // entries. "Four back" assumes four filings a year; a foreign private issuer
+  // filing 20-F/6-K reports semi-annually, so four back is two YEARS and the
+  // chart labelled it "YoY" — GFI showed "+358% YoY" where the true year-ago
+  // change was +122%. Labels are "Feb 26" (month + 2-digit year) or, when the
+  // period had no end date, "Q1 2026"; both are matched by name, and positional
+  // stepping remains only for a label that fits neither shape.
+  const byLabel = new Map(d.map((q, i) => [q.q, i]));
+  const yearAgoLabel = (label: string): string | null => {
+    const mon = label.match(/^([A-Za-z]{3})\s*'?(\d{2})$/);
+    if (mon) {
+      const yr = Number(mon[2]);
+      return `${mon[1]} ${String(yr - 1).padStart(2, "0")}`;
+    }
+    const fis = label.match(/^(Q\d|FY)\s+(\d{4})$/);
+    if (fis) return `${fis[1]} ${Number(fis[2]) - 1}`;
+    return null;
+  };
+
   const yoyMap: Record<string, number> = {};
   d.forEach((q, i) => {
-    if (i < 4) return;
-    const base = d[i - 4].a;
+    const lbl = yearAgoLabel(q.q);
+    const j = lbl != null && byLabel.has(lbl) ? (byLabel.get(lbl) as number) : i - 4;
+    if (j < 0 || j >= d.length || j === i) return;
+    const base = d[j].a;
     // Skip an unreliable YoY when the year-ago base is ~0 (a spin-off / first
     // reporting period) or the result is absurd — a near-zero denominator
     // otherwise prints meaningless four-digit percentages (e.g. "+6227% YoY").

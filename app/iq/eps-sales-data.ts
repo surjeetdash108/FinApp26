@@ -67,13 +67,66 @@ export type QuarterRow = {
 };
 
 /** EPS + Sales(M) per period, oldest→newest, for the dual bar charts. Actuals only. */
+/**
+ * The reported-EPS history shaped like QuarterFinancials, for issuers whose
+ * SEC-derived `quarters` series is empty.
+ *
+ * Not every listed company files a 10-Q. A foreign private issuer files 20-F /
+ * 6-K and typically reports SEMI-ANNUALLY, so Polygon's quarterly series is
+ * legitimately empty for it and always will be — GFI (Gold Fields) is one:
+ * `quarters` and `annual` both return 0 rows while FMP's epsHistory carries 39
+ * reported periods back to 2007, only ever Q1 and Q3. The screens read
+ * `quarters`, so all of that was thrown away and the card claimed nothing was
+ * "synced yet".
+ *
+ * Revenue is genuinely absent from this source, so `sales` stays null rather
+ * than being invented — the EPS side populates and the Sales side honestly
+ * shows nothing.
+ */
+export function quartersFromEpsHistory(epsHistory: EpsHistoryRow[]): QuarterFinancials[] {
+  return epsHistory
+    .filter(h => h.epsActual != null && h.date)
+    .map(h => ({
+      fiscalPeriod: h.fiscalPeriod ?? null,
+      fiscalYear: h.fiscalYear != null ? String(h.fiscalYear) : null,
+      // The REPORT date, not the period end — the only date this source has.
+      // It orders and labels correctly, which is all these builders need.
+      endDate: h.date,
+      filingDate: h.date,
+      revenue: null,
+      grossProfit: null, operatingIncome: null, netIncome: null,
+      epsActual: h.epsActual,
+      epsEstimate: h.epsEstimate,
+      epsActualReported: h.epsActual,
+      epsEstimateReported: h.epsEstimate,
+      costOfRevenue: null, operatingExpenses: null, researchAndDevelopment: null,
+      sellingGeneralAndAdministrative: null, incomeTaxExpense: null,
+      dilutedAverageShares: null, totalAssets: null, currentAssets: null,
+      totalLiabilities: null, currentLiabilities: null, equity: null, inventory: null,
+      // Every remaining statement field is listed rather than cast away, so
+      // adding one to QuarterFinancials fails the build here instead of
+      // silently arriving as undefined.
+      longTermDebt: null, netCashFlow: null, operatingCashFlow: null,
+      investingCashFlow: null, financingCashFlow: null,
+      grossMarginPct: null, operatingMarginPct: null, netMarginPct: null,
+      currentRatio: null,
+    }));
+}
+
+/** `quarters` when the filer publishes them, else the reported-EPS history. */
+function quarterSource(doc: FinancialsDoc): QuarterFinancials[] {
+  return doc.quarters.length > 0
+    ? doc.quarters
+    : quartersFromEpsHistory(doc.epsHistory ?? []);
+}
+
 export function epsSalesSeries(
   period: "Q" | "A",
   doc: FinancialsDoc | null,
 ): EpsSalesPt[] {
   if (!doc) return [];
   if (period === "Q") {
-    return [...doc.quarters]
+    return [...quarterSource(doc)]
       .filter(r => r.endDate)
       .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string))
       .slice(-12)
@@ -132,12 +185,33 @@ export function annualEpsSalesRows(
  *  estimate feed, so its surprise column stays "—" rather than fabricated. */
 export function quarterlyEpsSalesRows(
   quarters: QuarterFinancials[],
+  /** Used only when `quarters` is empty — see quartersFromEpsHistory. */
+  epsHistory: EpsHistoryRow[] = [],
 ): QuarterRow[] {
-  const asc = [...quarters]
+  const src = quarters.length > 0 ? quarters : quartersFromEpsHistory(epsHistory);
+  const asc = [...src]
     .filter(r => r.endDate)
     .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string));
+
+  // Year-ago comparison matched on FISCAL LABELS, not by stepping back four
+  // rows. "Four back" assumes four filings a year, which is two YEARS back for
+  // a semi-annual reporter — GFI files only Q1 and Q3, so its %chg column was
+  // comparing across two years while calling it year-on-year. Positional
+  // stepping is kept only for rows with no fiscal labels to match on.
+  const byPeriod = new Map<string, QuarterFinancials>();
+  for (const r of asc) {
+    if (r.fiscalPeriod && r.fiscalYear) byPeriod.set(`${r.fiscalYear}-${r.fiscalPeriod}`, r);
+  }
+  const yearAgoOf = (r: QuarterFinancials, i: number): QuarterFinancials | null => {
+    if (r.fiscalPeriod && r.fiscalYear) {
+      const prevYear = Number(r.fiscalYear) - 1;
+      return byPeriod.get(`${prevYear}-${r.fiscalPeriod}`) ?? null;
+    }
+    return i >= 4 ? asc[i - 4] : null;
+  };
+
   return asc.map((r, i) => {
-    const yoy = i >= 4 ? asc[i - 4] : null;
+    const yoy = yearAgoOf(r, i);
     const eps = reportedQuarterEps(r);
     return {
       // Always show fiscal quarter + year (e.g. "Q3 2026"); fall back to the

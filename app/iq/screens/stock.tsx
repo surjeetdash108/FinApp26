@@ -419,7 +419,9 @@ function EarnPane({ hist10 }: { hist10: EarnQ[] }) {
   const ih = H - PADT - PADB;
   const mid = PADT + ih / 2;
   const gw = iw / hist.length;
-  const bw = Math.min(gw * 0.45, 26);
+  // Same bar width as the EPS history / Earnings-Growth charts (gw * 0.28) so
+  // every earnings histogram reads consistently across the app.
+  const bw = gw * 0.28;
   const maxS = Math.max(8, ...hist.map(x => Math.abs(x.surp)));
 
   return (
@@ -612,6 +614,8 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
   type InnerDrawer = "techrating" | "peers" | "industry" | "insider" | "keylevels" | "earnings" | "financials" | "dividend" | null;
   const [innerDrawer, setInnerDrawer] = useState<InnerDrawer>(null);
+  // Peers list sort by session % change; default desc (best performers first).
+  const [peerSort, setPeerSort] = useState<"desc" | "asc">("desc");
   const [finPeriod,   setFinPeriod]   = useState<"Q" | "A">("Q");
 
   // Watchlists are backend-synced (multiple named lists). The star is "filled"
@@ -1067,6 +1071,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const pcs = peersAll.map(x => x.c);
   const pmx = pcs.length ? Math.max(...pcs) : 0;
   const pmn = pcs.length ? Math.min(...pcs) : 0;
+  // User-controlled ordering by session % change (asc/desc). Leader/Laggard
+  // tags still key off pmx/pmn, so they stay correct regardless of sort.
+  const sortedPeers = [...peersAll].sort((a, b) => (peerSort === "asc" ? a.c - b.c : b.c - a.c));
 
   function selectSym(s: string) {
     setSym(s);
@@ -1498,7 +1505,14 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                     </div>
                   )}
                   {inc.length === 0 ? (
-                    <DataState loading={financialsLoading} label={`No live ${finPeriod === "Q" ? "quarterly" : "annual"} financials synced for ${sym} yet.`} />
+                    <DataState loading={financialsLoading} label={
+                      // Not "not synced yet" — for a foreign private issuer filing
+                      // 20-F/6-K there is no SEC quarterly series to sync and there
+                      // never will be. Saying "yet" sent people looking for a sync bug.
+                      financialsDoc && (financialsDoc.epsHistory?.length ?? 0) > 0
+                        ? `No ${finPeriod === "Q" ? "quarterly" : "annual"} income statement is published for ${sym} — reported EPS is shown above where available.`
+                        : `No ${finPeriod === "Q" ? "quarterly" : "annual"} financials on file for ${sym}.`
+                    } />
                   ) : (
                     <>
                       <div className="ec-legend">
@@ -1619,17 +1633,22 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 </div>
               )}
               {consensusDoc?.recentGrades && consensusDoc.recentGrades.length > 0 && (
-                <div className="trgroup" style={{ marginBottom: 12 }}>
+                <div className="trgroup" style={{ marginBottom: 12, textAlign: "left" }}>
                   <div className="gl">Recent analyst actions</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>
                     {consensusDoc.recentGrades.slice(0, 6).map((g, i) => {
                       const a = (g.action ?? "").toLowerCase();
                       const col = a.includes("upgrade") ? "var(--up)" : a.includes("downgrade") ? "var(--down)" : "var(--text-dim-solid)";
                       return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".72rem" }}>
-                          <span style={{ color: col, fontWeight: 700, minWidth: 62, textTransform: "capitalize" }}>{g.action ?? "—"}</span>
-                          <span style={{ color: "var(--text-hi)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.firm ?? "—"}</span>
-                          {(g.previousGrade || g.newGrade) && <span style={{ color: "var(--text-dim-solid)", whiteSpace: "nowrap" }}>{g.previousGrade ?? "—"} → {g.newGrade ?? "—"}</span>}
+                        // 3 left-aligned columns on a shared grid template, so
+                        // action / firm / grade line up across every row (the
+                        // parent .trgroup centres text — overridden to left here).
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr) minmax(0, 1.35fr)", alignItems: "center", gap: 10, fontSize: ".72rem", textAlign: "left" }}>
+                          <span style={{ color: col, fontWeight: 700, textTransform: "capitalize" }}>{g.action ?? "—"}</span>
+                          <span style={{ color: "var(--text-hi)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.firm ?? "—"}</span>
+                          <span style={{ color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {(g.previousGrade || g.newGrade) ? `${g.previousGrade ?? "—"} → ${g.newGrade ?? "—"}` : ""}
+                          </span>
                         </div>
                       );
                     })}
@@ -1678,14 +1697,29 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
               within the pinned column so Key levels below stays visible. */}
           <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
             <div className="card-h">
-              <h3>Peers · who&apos;s leading{peersTotal > 0 ? ` · ${peersTotal}` : ""}</h3>
+              <h3>Peers</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {peersTotal > 1 && (
+                  <button
+                    onClick={() => setPeerSort(s => (s === "desc" ? "asc" : "desc"))}
+                    title={`Sort by % change — ${peerSort === "desc" ? "highest first" : "lowest first"}`}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                      fontSize: ".62rem", fontWeight: 700, letterSpacing: ".02em",
+                      color: "var(--text-dim-solid)", background: "var(--surface-3)",
+                      border: "1px solid var(--border-soft)", borderRadius: 6,
+                      padding: "3px 7px", cursor: "pointer",
+                    }}
+                  >
+                    % <span style={{ color: "var(--brand-2)" }}>{peerSort === "desc" ? "▼" : "▲"}</span>
+                  </button>
+                )}
                 <VendorTag v="polygon" />
                 {peersTotal > peers.length && <span className="link" onClick={() => setInnerDrawer("peers")}>View all →</span>}
               </div>
             </div>
             <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0, overflowY: "auto" }}>
-              {peers.length ? peers.map(peer => {
+              {sortedPeers.length ? sortedPeers.map(peer => {
                 const tag = peer.c === pmx ? "Leader" : peer.c === pmn ? "Laggard" : "";
                 return (
                   <div key={peer.t} className="minirow"
@@ -2146,9 +2180,9 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                 <button className="closebtn" onClick={() => setInnerDrawer(null)}>✕</button>
               </div>
               <div className="drawer-b">
-                {peersAll.length === 0 ? (
+                {sortedPeers.length === 0 ? (
                   <DataState loading={companiesLoading || liveCompanyLoading} label={`No live peers found for ${sym}.`} />
-                ) : peersAll.map(peer => {
+                ) : sortedPeers.map(peer => {
                   return (
                       <div key={peer.t} className="minirow" style={{ cursor: "pointer" }}
                         onClick={() => { setInnerDrawer(null); openStock(peer.t); }}>
@@ -2362,7 +2396,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             const fb = (v: number) => v >= 1 ? `$${v.toFixed(2)}B` : `$${(v * 1000).toFixed(0)}M`;
             const beats10 = hist10.filter(h => h.surp >= 0).length;
             const annualRows = annualEpsSalesRows(financialsDoc?.annual ?? [], financialsDoc?.epsHistory ?? []);
-            const quarterlyRows = quarterlyEpsSalesRows(financialsDoc?.quarters ?? []);
+            const quarterlyRows = quarterlyEpsSalesRows(financialsDoc?.quarters ?? [], financialsDoc?.epsHistory ?? []);
             return (
               <div className="side-drawer" style={{ zIndex: 52 }}>
                 <div className="drawer-h">

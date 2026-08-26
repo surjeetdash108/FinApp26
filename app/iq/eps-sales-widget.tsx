@@ -133,7 +133,7 @@ export function EpsSalesWidget({ financialsDoc }: { financialsDoc: FinancialsDoc
   const [period, setPeriod] = useState<"Q" | "A">("Q");
   const series = epsSalesSeries(period, financialsDoc);
   const annualRows = annualEpsSalesRows(financialsDoc?.annual ?? [], financialsDoc?.epsHistory ?? []);
-  const quarterlyRows = quarterlyEpsSalesRows(financialsDoc?.quarters ?? []);
+  const quarterlyRows = quarterlyEpsSalesRows(financialsDoc?.quarters ?? [], financialsDoc?.epsHistory ?? []);
 
   // Forward analyst estimates (the `*YYYY` rows) — only present when an estimate
   // vendor is wired. %chg is vs the immediately prior year (last reported year
