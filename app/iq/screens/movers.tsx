@@ -41,6 +41,15 @@ function capFromMarketCap(mc: number | null | undefined): string {
   if (mc >= 300e6) return "Small";
   return "Micro";
 }
+/** Compact USD market cap for the table cell — "$1.24T" / "$12.5B" / "$340M".
+ *  null/≤0 → "—" so an un-synced or out-of-universe ticker reads as unknown. */
+function fmtMcap(mc: number | null | undefined): string {
+  if (mc == null || mc <= 0) return "—";
+  if (mc >= 1e12) return `$${(mc / 1e12).toFixed(2)}T`;
+  if (mc >= 1e9)  return `$${(mc / 1e9).toFixed(1)}B`;
+  if (mc >= 1e6)  return `$${(mc / 1e6).toFixed(0)}M`;
+  return `$${Math.round(mc).toLocaleString()}`;
+}
 // Largest → smallest. The dropdown only offers tiers that actually have movers
 // right now — the day's top movers are almost never mega-caps, so "Mega" would
 // otherwise sit there returning nothing; "Micro" (which the feed does produce)
@@ -49,11 +58,11 @@ const CAP_ORDER = ["Mega", "Large", "Mid", "Small", "Micro"];
 
 /** Sortable columns. `cap` orders by the tier's rank (Mega→Micro), not the
  *  label's alphabet, so the sort reads as a real size ordering. */
-type MoverSortKey = "company" | "price" | "change" | "rvol" | "cap";
+type MoverSortKey = "company" | "price" | "change" | "rvol" | "mcap" | "cap";
 /** Direction a column starts in on first click — text ascends (A→Z), numbers
  *  descend (biggest first), which is what you almost always want. */
 const SORT_FIRST_DIR: Record<MoverSortKey, "asc" | "desc"> = {
-  company: "asc", price: "desc", change: "desc", rvol: "desc", cap: "asc",
+  company: "asc", price: "desc", change: "desc", rvol: "desc", mcap: "desc", cap: "asc",
 };
 
 /**
@@ -81,6 +90,9 @@ function mergeMovers(
       owned: false,
       sector: l.sector ?? "—",
       cap: (l.cap as Mover["cap"]) ?? "Mid",
+      // Prefer the mover doc's own market cap (covers micro-caps outside the
+      // tracked universe); fall back to the companies doc for tracked names.
+      marketCap: l.marketCap ?? c?.marketCap ?? null,
       // Real 5-session change from technical-indicators.job; null → "—".
       weekPct: c?.week5ChangePct ?? null,
       techContext: `Live EOD data as of ${l.asOfDate}.`,
@@ -119,6 +131,7 @@ export function MoversScreen() {
       owned: false,
       sector: c.sector ?? "—",
       cap: capFromMarketCap(c.marketCap) as Mover["cap"],
+      marketCap: c.marketCap ?? null,
       weekPct: c.week5ChangePct as number,
       techContext: "",
       newsContext: "",
@@ -246,6 +259,7 @@ export function MoversScreen() {
         m.price != null ? String(m.price) : "",
         String(m.pctChange),
         m.rvolRatio ? String(m.rvolRatio) : "",
+        m.marketCap != null ? fmtMcap(m.marketCap) : "",
         m.weekPct != null ? String(m.weekPct) : "",
       ].join(" | ").toUpperCase();
       return hay.includes(q);
@@ -267,6 +281,14 @@ export function MoversScreen() {
               : (a.pctChange - b.pctChange) * dir;
           case "rvol":
             return ((a.rvolRatio ?? 0) - (b.rvolRatio ?? 0)) * dir;
+          case "mcap": {
+            // Unknown caps (null) always sort LAST, in either direction — like
+            // the `cap` column — so the "—" rows never lead an ascending sort.
+            if (a.marketCap == null && b.marketCap == null) return 0;
+            if (a.marketCap == null) return 1;
+            if (b.marketCap == null) return -1;
+            return (a.marketCap - b.marketCap) * dir;
+          }
           case "cap": {
             // Unknown tiers sort last in either direction rather than jumping
             // to the top as index -1.
@@ -377,6 +399,7 @@ export function MoversScreen() {
               {sortTh("price",   "Price",  true)}
               {sortTh("change",  isWeekTab(tab) ? "5-day" : "Change", true)}
               {sortTh("rvol",    "RVOL",   true)}
+              {sortTh("mcap",    "Mkt Cap", true)}
               {sortTh("cap",     "Cap · Sector")}
               <th className="num">Intraday</th>
             </tr>
@@ -384,7 +407,7 @@ export function MoversScreen() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: 0 }}>
+                <td colSpan={7} style={{ padding: 0 }}>
                   {moversLoading && movers.length === 0
                     ? <DataState loading label="Loading movers…" />
                     : <div style={{ padding: 16, color: "var(--text-dim-solid)" }}>No stocks match these filters.</div>}
@@ -425,6 +448,11 @@ export function MoversScreen() {
                   <td className="num">
                     {m.rvolRatio > 0
                       ? <b style={{ color: m.rvolRatio > 3 ? "var(--warn)" : "var(--text)" }}>{m.rvolRatio.toFixed(1)}×</b>
+                      : <span style={{ color: "var(--text-dim-solid)" }}>—</span>}
+                  </td>
+                  <td className="num">
+                    {m.marketCap != null
+                      ? <span style={{ color: "var(--text-hi)" }}>{fmtMcap(m.marketCap)}</span>
                       : <span style={{ color: "var(--text-dim-solid)" }}>—</span>}
                   </td>
                   <td>

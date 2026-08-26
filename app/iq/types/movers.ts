@@ -8,6 +8,11 @@ export interface LiveMoverDoc {
   volume: number;
   sector: string | null;
   cap: string | null;
+  /** Raw USD market cap from the movers job's Polygon ticker-details enrichment.
+   *  Present for micro-caps outside the tracked `companies` universe, where the
+   *  companies-doc fallback has nothing. Optional: absent on docs written before
+   *  the field was added, until the next market-movers run repopulates them. */
+  marketCap?: number | null;
   direction: "gainer" | "loser";
   asOfDate: string;
 }

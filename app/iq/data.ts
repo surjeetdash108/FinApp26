@@ -16,6 +16,9 @@ export interface Mover {
   ticker: string; name: string; price: number; pctChange: number; rvolRatio: number; relativeStrength: number;
   maPosture: string; owned: boolean;
   sector: string; cap: 'Mega' | 'Large' | 'Mid' | 'Small';
+  /** Raw USD market cap for the Movers table's "Mkt Cap" column; null when the
+   *  ticker isn't in the tracked `companies` universe (many daily micro-caps). */
+  marketCap: number | null;
   weekPct: number | null; techContext: string; newsContext: string;
 }
 

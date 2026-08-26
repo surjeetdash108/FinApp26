@@ -405,9 +405,45 @@ interface GlanceDoc {
 }
 interface GlanceResponse { generating: boolean; items: GlanceDoc[]; }
 
-const SENT_COLOR: Record<GlanceSentiment, string> = {
-  bullish: "var(--up)", bearish: "var(--down)", neutral: "var(--text-dim-solid)", mixed: "var(--warn)",
+/** Sentiment styling for the glance digests — colour, a friendly label, and a
+ *  glyph so each period reads at a glance instead of as a wall of grey text. */
+const SENT: Record<GlanceSentiment, { color: string; label: string; icon: string }> = {
+  bullish: { color: "var(--up)",             label: "Bullish", icon: "📈" },
+  bearish: { color: "var(--down)",           label: "Bearish", icon: "📉" },
+  mixed:   { color: "var(--warn)",           label: "Mixed",   icon: "🔀" },
+  neutral: { color: "var(--text-dim-solid)", label: "Neutral", icon: "➖" },
 };
+
+/** Engaging replacement for the plain uppercase-bullet AnnList inside a glance
+ *  digest: each item becomes a soft, accent-tinted chip with a colour dot, so
+ *  themes / earnings / movers scan as tags rather than a dense list. */
+function GlanceChips({ title, icon, items, color }: {
+  title: string; icon: string; items?: string[]; color: string;
+}) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
+        <span aria-hidden style={{ fontSize: ".9rem", lineHeight: 1 }}>{icon}</span>
+        <span style={{ fontSize: ".68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--text-dim-solid)" }}>{title}</span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+        {items.map((x, i) => (
+          <span key={i} style={{
+            display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "100%",
+            fontSize: ".78rem", lineHeight: 1.45, color: "var(--text)",
+            background: `color-mix(in srgb, ${color} 9%, var(--surface-2))`,
+            border: `1px solid color-mix(in srgb, ${color} 24%, var(--border-soft))`,
+            borderRadius: 9, padding: "6px 11px",
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
+            <span>{x}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** "August 2026" (monthly) or "Week of Aug 24 – 30, 2026" (weekly). All UTC so
  *  the label matches the period keys the backend wrote. */
@@ -455,11 +491,27 @@ function GlanceTab({ period, heading }: { period: "weekly" | "monthly"; heading:
             const isOpen = it.periodKey === openEff;
             const isCurrent = Date.parse(it.periodEnd) > Date.now();
             const noContent = !it.marketTone && it.keyThemes.length === 0 && it.notableMovers.length === 0;
+            const sc = SENT[it.sentiment];
             return (
-              <div key={it.periodKey} style={{ borderBottom: "1px solid var(--border-soft)" }}>
+              <div key={it.periodKey} style={{
+                borderBottom: "1px solid var(--border-soft)",
+                // Soft sentiment-tinted left rail + wash, brighter when the
+                // period is open so the eye lands on the expanded digest.
+                borderLeft: `3px solid ${isOpen ? sc.color : "transparent"}`,
+                background: isOpen ? `color-mix(in srgb, ${sc.color} 5%, transparent)` : "transparent",
+                transition: "background .18s ease, border-color .18s ease",
+              }}>
                 <button
                   onClick={() => setOpenKey(isOpen ? "" : it.periodKey)}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "none", border: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "none", border: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                  {/* Sentiment glyph in a soft tinted tile — an at-a-glance mood
+                      cue so each period leads with colour, not grey text. */}
+                  <span aria-hidden style={{
+                    width: 34, height: 34, flexShrink: 0, display: "grid", placeItems: "center",
+                    fontSize: "1rem", borderRadius: 10,
+                    background: `color-mix(in srgb, ${sc.color} 15%, var(--surface-2))`,
+                    border: `1px solid color-mix(in srgb, ${sc.color} 28%, var(--border-soft))`,
+                  }}>{sc.icon}</span>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     {/* Deliberately NOT .tkr. That class is the fixed-width
                         ticker-symbol style — `width: 52px` with
@@ -469,32 +521,53 @@ function GlanceTab({ period, heading }: { period: "weekly" | "monthly"; heading:
                         "· current" onto its own line. Plain styles here, with
                         nowrap so the range never splits at its en dash. */}
                     <span style={{
-                      display: "block", fontSize: ".78rem", fontWeight: 700, color: "var(--text-hi)",
+                      display: "block", fontSize: ".84rem", fontWeight: 700, color: "var(--text-hi)",
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                     }}>
                       {glanceLabel(it)}
-                      {isCurrent && <small style={{ color: "var(--text-dim-solid)", fontWeight: 400 }}> · current</small>}
+                      {isCurrent && (
+                        <small style={{
+                          marginLeft: 7, fontSize: ".58rem", fontWeight: 700, letterSpacing: ".05em",
+                          textTransform: "uppercase", color: "var(--up)", verticalAlign: "middle",
+                          background: "color-mix(in srgb, var(--up) 15%, transparent)",
+                          borderRadius: 5, padding: "2px 6px",
+                        }}>● Live</small>
+                      )}
                     </span>
-                    <div style={{ fontSize: ".74rem", color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: ".76rem", color: "var(--text-dim-solid)", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
                       {it.marketTone || it.summary}
                     </div>
                   </div>
                   {!noContent && (
-                    <span className="pill" style={{ textTransform: "capitalize", flexShrink: 0 }}>
-                      <span style={{ color: SENT_COLOR[it.sentiment] }}>{it.sentiment}</span>
+                    <span style={{
+                      flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6,
+                      fontSize: ".7rem", fontWeight: 700, color: sc.color, borderRadius: 20, padding: "4px 11px",
+                      background: `color-mix(in srgb, ${sc.color} 13%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${sc.color} 30%, transparent)`,
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: sc.color }} />
+                      {sc.label}
                     </span>
                   )}
                   <span style={{ fontSize: ".7rem", color: "var(--text-dim-solid)", flexShrink: 0 }}>{isOpen ? "▲" : "▼"}</span>
                 </button>
                 {isOpen && (
-                  <div style={{ padding: "2px 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-                    {it.marketTone && <p style={{ fontSize: ".85rem", lineHeight: 1.5, margin: 0, fontWeight: 600 }}>{it.marketTone}</p>}
-                    {it.summary && <p style={{ fontSize: ".82rem", lineHeight: 1.55, margin: 0 }}>{it.summary}</p>}
-                    <AnnList title="Key themes" items={it.keyThemes} />
-                    <AnnList title="Biggest earnings" items={it.biggestEarnings} />
-                    <AnnList title="Notable movers" items={it.notableMovers} />
-                    <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)" }}>
-                      AI-generated · not investment advice · {it.sourceCount} {it.sourceCount === 1 ? "analysis" : "analyses"}
+                  <div style={{ padding: "4px 16px 18px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+                    {/* Market tone as a lead line with a sentiment-coloured rail —
+                        the headline read, not just another paragraph. */}
+                    {it.marketTone && (
+                      <p style={{
+                        margin: 0, fontSize: ".92rem", lineHeight: 1.55, fontWeight: 600, color: "var(--text-hi)",
+                        borderLeft: `3px solid ${sc.color}`, paddingLeft: 13,
+                      }}>{it.marketTone}</p>
+                    )}
+                    {it.summary && <p style={{ fontSize: ".83rem", lineHeight: 1.6, margin: 0, color: "var(--text)" }}>{it.summary}</p>}
+                    <GlanceChips title="Key themes"       icon="🎯" items={it.keyThemes}       color="var(--brand)" />
+                    <GlanceChips title="Biggest earnings" icon="📊" items={it.biggestEarnings} color="var(--ai)" />
+                    <GlanceChips title="Notable movers"   icon="🚀" items={it.notableMovers}   color={sc.color} />
+                    <div style={{ fontSize: ".64rem", color: "var(--text-dim-solid)", display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
+                      <span style={{ fontSize: ".55rem", fontWeight: 700, letterSpacing: ".04em", padding: "1px 5px", borderRadius: 4, background: "var(--ai)", color: "#fff" }}>AI</span>
+                      Not investment advice · {it.sourceCount} {it.sourceCount === 1 ? "analysis" : "analyses"}
                       {it.generatedAt ? ` · generated ${String(it.generatedAt).slice(0, 16).replace("T", " ")}` : ""}
                     </div>
                   </div>
@@ -734,14 +807,15 @@ export function CommentaryScreen() {
 
       <div style={{ padding: "0 18px 18px" }}>
 
-        {/* Result count / filter hint — its own slim line under the toolbar. */}
-        <div style={{ display: "flex", justifyContent: "flex-end", margin: "10px 0 12px" }}>
-          <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {search.trim() || effSec !== "All" || capFilter !== "All" || tagFilter !== "all"
-              ? `Showing ${feed.length} item${feed.length === 1 ? "" : "s"}`
-              : "Filter the feed — search text, sector, market cap or category"}
-          </span>
-        </div>
+        {/* Result count — a slim line under the toolbar, shown only while a
+            filter is active (no idle hint text when the feed is unfiltered). */}
+        {(search.trim() || effSec !== "All" || capFilter !== "All" || tagFilter !== "all") && (
+          <div style={{ display: "flex", justifyContent: "flex-end", margin: "10px 0 12px" }}>
+            <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+              Showing {feed.length} item{feed.length === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
 
         <div className="dash">
 
