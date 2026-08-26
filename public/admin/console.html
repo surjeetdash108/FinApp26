@@ -1546,7 +1546,7 @@ async function convertFile(file){
     } else {toast('Please upload a .docx or .pdf');return null;}
     toast('Imported '+file.name);
     return {title:file.name.replace(/\.(docx|pdf)$/i,'').replace(/[-_]/g,' '),html};
-  }catch(e){toast('Could not read file: '+e.message);return null;}
+  }catch(e){showResult(false,'Could not read file: '+e.message);return null;}
 }
 /* Articles inside a zone are ordered by rank, lowest first. Rank 1 sits at the
    top of the tray on the live site (and is the featured slot in the centre). */
@@ -1697,7 +1697,8 @@ function wireFileDrop(board){
       const files=Array.from(e.dataTransfer.files||[]);
       if(!files.length)return;
       if(files.length>1)toast('One file at a time — taking '+files[0].name);
-      const d=await convertFile(files[0]);
+      showBusy('Reading '+files[0].name+'…');
+      let d;try{d=await convertFile(files[0]);}finally{hideBusy();}
       if(d){_targetZone=z;openBlogModal(z,null,d);}
     });
   });
@@ -1733,9 +1734,12 @@ function savePublish(){
   if(!confirm('Publish “'+d.title+'”? It will go live on the site immediately.')) return;   // Cancel: keep editing, nothing is saved
   const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status};
   if(_editId)msg.id=_editId;
+  const editing=!!_editId;
   blogPost(msg);
-  toast(_editId?'Saving edit…':'Publishing article…');
   closeBlogModal();
+  // Persistent spinner until the parent answers with a blogSaveResult (hidden in
+  // the message handler below). Big articles take a few seconds to save.
+  showBusy(editing?'Saving edit…':'Publishing article…');
 }
 function deleteBlog(id){
   const p=BLOGS.find(x=>x.id===id);if(!p)return;
@@ -1766,18 +1770,66 @@ function togglePublish(id){
 window.addEventListener('message',function(e){
   const d=e.data||{};
   if(!/^admin:blog(Save|Delete|Publish|Reorder)Result$/.test(d.type||''))return;
+  hideBusy();                                     // the write finished — drop the spinner
   if(Array.isArray(d.blogs)){
     BLOGS=d.blogs.map(normalizeBlog);
     renderBoard();
   }
   if(d.ok===false){
-    toast('Could not save: '+(d.error||'unknown error'));
+    showResult(false,'Could not save: '+(d.error||'unknown error'));
+  } else if(/^admin:blogSaveResult$/.test(d.type||'')){
+    showResult(true,'Article saved successfully');
   }
 });
 
+/* Blocking progress overlay — shown while a (possibly large) Word/PDF is parsed
+   and while an article is being saved (the bridge round-trip can take seconds
+   when embedded images are externalised to Storage). Hidden when the file is
+   ready / the save result returns; a 90s safety timeout clears it if no result
+   comes back so the admin is never stuck behind the spinner. */
+function showBusy(msg){
+  let o=document.getElementById('adBusy');
+  if(!o){
+    if(!document.getElementById('adBusyKf')){
+      const s=document.createElement('style');s.id='adBusyKf';
+      s.textContent='@keyframes adspin{to{transform:rotate(360deg)}}';document.head.appendChild(s);
+    }
+    o=document.createElement('div');o.id='adBusy';
+    o.style.cssText='position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(8,12,20,.62);backdrop-filter:blur(3px);opacity:0;transition:opacity .18s';
+    o.innerHTML='<div style="width:42px;height:42px;border:3px solid rgba(124,108,245,.25);border-top-color:#7c6cf5;border-radius:50%;animation:adspin .8s linear infinite"></div><div id="adBusyMsg" style="color:#e7ecf7;font-weight:600;font-size:14px;letter-spacing:.01em"></div>';
+    document.body.appendChild(o);
+  }
+  document.getElementById('adBusyMsg').textContent=msg||'Working…';
+  o.style.display='flex';requestAnimationFrame(()=>{o.style.opacity='1';});
+  clearTimeout(window._adBusyT);window._adBusyT=setTimeout(hideBusy,90000);
+}
+function hideBusy(){clearTimeout(window._adBusyT);const o=document.getElementById('adBusy');if(o){o.style.opacity='0';setTimeout(()=>{if(o)o.style.display='none';},200);}}
+
+/* Result popup — a centered card shown after a blog write / file import: a green
+   check for success, a red cross for errors. Auto-dismisses (success 2.5s,
+   errors 5s) and click-to-dismiss. Always hides the busy spinner first. */
+function showResult(ok,msg){
+  hideBusy();
+  let o=document.getElementById('adResult');
+  if(!o){
+    o=document.createElement('div');o.id='adResult';
+    o.style.cssText='position:fixed;inset:0;z-index:1001;display:flex;align-items:center;justify-content:center;background:rgba(8,12,20,.55);backdrop-filter:blur(3px);opacity:0;transition:opacity .18s';
+    o.onclick=hideResult;
+    o.innerHTML='<div style="min-width:280px;max-width:440px;background:#141b2b;border:1px solid #2b3858;border-radius:16px;padding:26px 30px 22px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.55)"><div id="adResultIcon"></div><div id="adResultMsg" style="margin-top:14px;color:#f4f7fc;font-weight:600;font-size:15px;line-height:1.45"></div><div style="margin-top:8px;color:#8a97b3;font-size:11.5px">click anywhere to dismiss</div></div>';
+    document.body.appendChild(o);
+  }
+  document.getElementById('adResultIcon').innerHTML = ok
+    ? '<div style="width:52px;height:52px;margin:0 auto;border-radius:50%;background:#2fe6a61e;display:flex;align-items:center;justify-content:center"><svg width="28" viewBox="0 0 24 24" fill="none" stroke="#2fe6a6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>'
+    : '<div style="width:52px;height:52px;margin:0 auto;border-radius:50%;background:#ff5d7a1e;display:flex;align-items:center;justify-content:center"><svg width="28" viewBox="0 0 24 24" fill="none" stroke="#ff5d7a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>';
+  document.getElementById('adResultMsg').textContent=msg;
+  o.style.display='flex';requestAnimationFrame(()=>{o.style.opacity='1';});
+  clearTimeout(window._adResT);window._adResT=setTimeout(hideResult,ok?2500:5000);
+}
+function hideResult(){clearTimeout(window._adResT);const o=document.getElementById('adResult');if(o){o.style.opacity='0';setTimeout(()=>{if(o)o.style.display='none';},200);}}
+
 function initBlogs(){
   const file=bEl('blogFile');
-  file.onchange=async e=>{const f=e.target.files[0];if(f){const d=await convertFile(f);if(d)openBlogModal(_targetZone||'edu',null,d);}};
+  file.onchange=async e=>{const f=e.target.files[0];if(f){showBusy('Reading '+f.name+'…');let d;try{d=await convertFile(f);}finally{hideBusy();}if(d)openBlogModal(_targetZone||'edu',null,d);}};
   bEl('bBody').addEventListener('input',updateBlogWords);
   bEl('bDek').addEventListener('input',()=>{ bEl('bDek').style.borderColor=''; bEl('bDekErr').style.display='none'; });
   bEl('bZone').addEventListener('change',updatePlaceChip);
