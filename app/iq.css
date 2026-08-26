@@ -2995,6 +2995,23 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .iq-root .card:hover::after{ opacity:.85; }
 @keyframes iqCardIn{ from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
 
+/* Light theme — the base `.iq-root .card` above HARD-CODES a dark gradient plus a
+   dark shadow/border, and that selector out-specifies `.card{background:var(--surface-1)}`.
+   So in light mode the panel containers stayed dark while their inner chips — which
+   read --surface-1 directly — went light. Re-point the panel to the light surface
+   tokens (same subtle top→bottom gradient as .wmn) and soften shadow/border to match. */
+.iq-root[data-theme="light"] .card{
+  background:linear-gradient(180deg,var(--surface-1),var(--surface-2));
+  border-color:var(--border);
+  box-shadow:var(--shadow);
+}
+.iq-root[data-theme="light"] .card:hover{
+  border-color:var(--border-strong);
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,
+             0 22px 46px -26px rgba(60,45,30,.35),
+             0 0 26px -16px var(--brand);
+}
+
 /* Crisper headings on the new display font. */
 .iq-root .card-h h2,.iq-root .card-h h3,.iq-root .page-head h1{ letter-spacing:-.4px; }
 
