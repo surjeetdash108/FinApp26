@@ -242,6 +242,13 @@ function FeedItem({ item, i, total, onTicker, onAnalysis, marketCap, livePct }: 
       >
         <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: ".88rem", color: "var(--text)" }}>
+          {/* Category ahead of the ticker: it answers "what kind of story is
+              this" before the reader parses the headline. Colour comes from the
+              same --chip token the old filter chips used, so a category reads
+              identically wherever it appears. */}
+          <span className="row-tag" data-tag={item.tag ?? "other"}>
+            {NEWS_TAGS.find(t => t.key === (item.tag ?? "other"))?.label ?? "Other"}
+          </span>
           <b
             onClick={e => { e.preventDefault(); onTicker(item.ticker); }}
             style={{ cursor: "pointer" }}
@@ -668,14 +675,6 @@ export function CommentaryScreen() {
           graceful fallback for narrow viewports. Non-sticky so it doesn't stack
           under the sticky primary-tab header above. */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, rowGap: 8, padding: "12px 18px", borderBottom: "1px solid var(--border-soft)", position: "relative" }}>
-        <div className="tabs">
-          {TABS.map((t, i) => (
-            <button key={t} className={`tab${i === activeTab ? " on" : ""}`}
-              style={i === activeTab ? SEL_TAB : undefined}
-              onClick={() => setActiveTab(i)}>{t}</button>
-          ))}
-        </div>
-
         {/* Search + sector + market-cap, same line as the tabs. Each label and
             its select are one inline-flex unit: as loose siblings in a wrapping
             row they could break apart, leaving "Market cap" stranded on one row
@@ -699,6 +698,25 @@ export function CommentaryScreen() {
           {search.trim() && (
             <button className="chip ghost" onClick={() => setSearch("")} title="Clear search">Clear</button>
           )}
+          {/* View (was the Live / Premarket / After Hours tab row) and Category
+              (was the chip row) are dropdowns now, so every filter on this
+              screen reads the same way and sits on one line. Counts stay on the
+              category options — the number is the reason to pick one. */}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>View</span>
+            <select className="mv-sel" value={activeTab} onChange={e => setActiveTab(Number(e.target.value))}>
+              {TABS.map((t, i) => <option key={t} value={i}>{t}</option>)}
+            </select>
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Category</span>
+            <select className="mv-sel" value={tagFilter} onChange={e => setTagFilter(e.target.value)}>
+              <option value="all">All ({tagCounts.all ?? 0})</option>
+              {NEWS_TAGS.filter(t => (tagCounts[t.key] ?? 0) > 0).map(t => (
+                <option key={t.key} value={t.key}>{t.label} ({tagCounts[t.key] ?? 0})</option>
+              ))}
+            </select>
+          </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
             <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Sector</span>
             <select className="mv-sel" value={effSec} onChange={e => setSecFilter(e.target.value)}>
@@ -723,25 +741,6 @@ export function CommentaryScreen() {
               ? `Showing ${feed.length} item${feed.length === 1 ? "" : "s"}`
               : "Filter the feed — search text, sector, market cap or category"}
           </span>
-        </div>
-
-        {/* Category chips — one per news tag, with a live count. Counts ignore
-            the chip selection itself so they stay comparable while browsing. */}
-        <div className="feed-chips">
-          {[{ key: "all", label: "All" },
-            ...NEWS_TAGS.map(t => ({ key: t.key, label: t.label }))]
-            .filter(c => c.key === "all" || (tagCounts[c.key] ?? 0) > 0)
-            .map(c => (
-              <button
-                key={c.key}
-                className={`feed-chip${tagFilter === c.key ? " on" : ""}`}
-                onClick={() => setTagFilter(c.key)}
-                data-tag={c.key}
-              >
-                {c.label}
-                <b>{tagCounts[c.key] ?? 0}</b>
-              </button>
-            ))}
         </div>
 
         <div className="dash">

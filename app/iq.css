@@ -1151,63 +1151,30 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .ta-list { margin: 0; padding-left: 16px; }
 .ta-list li { font-size: .8rem; line-height: 1.55; color: var(--text); margin-bottom: 2px; }
 
-/* Live Feed category chips — one per news tag, with a live count. */
+/* Per-row category chip on a feed item. Shares the --chip token below, so a
+   category is the same colour here as anywhere else it appears. */
+.row-tag {
+  display: inline-block; vertical-align: baseline;
+  margin-right: 7px; padding: 1px 7px; border-radius: 20px;
+  font-size: .58rem; font-weight: 700; letter-spacing: .02em;
+  white-space: nowrap; text-transform: uppercase;
+  color: var(--chip); border: 1px solid var(--chip);
+  background: color-mix(in srgb, var(--chip) 14%, transparent);
+  --chip: var(--text-dim-solid);
+}
+.row-tag[data-tag="earnings"] { --chip: var(--up); }
+.row-tag[data-tag="analyst"]  { --chip: #a78bfa; }
+.row-tag[data-tag="ma"]       { --chip: var(--warn); }
+.row-tag[data-tag="legal"]    { --chip: var(--down); }
+.row-tag[data-tag="product"]  { --chip: var(--ai); }
+.row-tag[data-tag="capital"]  { --chip: #60a5fa; }
+.row-tag[data-tag="other"]    { --chip: var(--text-dim-solid); }
+
 /* One line, always. Measured at 1440: the eight chips need 1097px at the old
    .72rem against 1220px of content width, so they fit there but wrapped to two
    rows on anything narrower. At .64rem the row is 932px and holds together
    down to roughly a 1150px window; below that it scrolls sideways INSIDE this
    container rather than wrapping or pushing the page wide. */
-.feed-chips {
-  display: flex; flex-wrap: nowrap; gap: 5px;
-  /* Top padding is load-bearing: overflow-x:auto forces the block axis to
-     `auto` too, so without it the selected chip's 2px focus ring is sheared off
-     along the top edge of the strip. */
-  padding: 3px 0 12px;
-  overflow-x: auto; scrollbar-width: none;
-}
-.feed-chips::-webkit-scrollbar { height: 0; }
-/* `.iq-root button.feed-chip`, not `.feed-chip`. These chips are <button>s, and
-   the global reset `.iq-root button { background:none; border:none }` is
-   specificity (0,1,1) against a lone class's (0,1,0) — so every UNSELECTED chip
-   lost its border and fill and rendered as bare text. `.feed-chip.on` is
-   (0,2,0) and did win, which is why only the selected one looked like a pill.
-   Raising the base to (0,2,1) makes them all read as buttons. */
-.iq-root button.feed-chip {
-  display: inline-flex; align-items: center; gap: 5px; flex: none;
-  padding: 4px 9px; border-radius: 20px; cursor: pointer; white-space: nowrap;
-  border: 1px solid var(--border-strong); background: var(--surface-2);
-  color: var(--text-dim-solid); font-size: .64rem; font-weight: 600;
-  transition: border-color .13s, color .13s, background .13s;
-}
-.iq-root button.feed-chip:hover {
-  border-color: var(--brand-2); background: var(--surface-3); color: var(--text-hi);
-}
-/* Selected chip takes its OWN category colour rather than a single brand
-   highlight, so the active filter is identifiable at a glance. The colour is
-   held in --chip and drives the selected border, fill and count — set once per
-   category below. (The per-category dot that used to sit inside each chip has
-   been removed; --chip survives because it still colours the selection, not
-   just that dot.) */
-/* Must also carry the `.iq-root button` prefix: the base rule above is now
-   (0,2,1), so a bare `.feed-chip.on` at (0,2,0) would lose to it and the
-   selected state would stop rendering. */
-.iq-root button.feed-chip.on {
-  border-color: var(--chip);
-  background: color-mix(in srgb, var(--chip) 20%, transparent);
-  color: var(--text-hi);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--chip) 22%, transparent);
-}
-.feed-chip b { font-family: var(--f-mono); font-weight: 700; color: var(--text-hi); }
-.feed-chip.on b { color: var(--chip); }
-.feed-chip { --chip: var(--text-dim-solid); }
-.feed-chip[data-tag="all"]      { --chip: var(--brand-2); }
-.feed-chip[data-tag="earnings"] { --chip: var(--up); }
-.feed-chip[data-tag="analyst"]  { --chip: #a78bfa; }
-.feed-chip[data-tag="ma"]       { --chip: var(--warn); }
-.feed-chip[data-tag="legal"]    { --chip: var(--down); }
-.feed-chip[data-tag="product"]  { --chip: var(--ai); }
-.feed-chip[data-tag="capital"]  { --chip: #60a5fa; }
-.feed-chip[data-tag="other"]    { --chip: var(--text-dim-solid); }
 
 /* Themes: multi-select sector panel. Sectors are the only multi-select filter
    on that screen — themes stay exclusive, so they keep their pill row. */
