@@ -572,12 +572,19 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
       </section>
 
       <section class="view" id="monitor">
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">
+          <div class="card-h" style="padding:14px 16px">
+            <h3>Jobs &amp; scheduler</h3>
+            <span class="sub">what runs, and what actually triggers it</span>
+          </div>
+          <div id="jobsWrap" style="padding:14px 16px"></div>
+        </div>
         <div class="card" style="padding:0;overflow:hidden">
           <div class="card-h" style="padding:14px 16px">
             <h3>Backend services</h3>
             <span class="sub" id="monitorSrc">market-catalyst-backend</span>
           </div>
-          <div id="monitorWrap" style="height:calc(100vh - 190px);min-height:460px"></div>
+          <div id="monitorWrap" style="height:calc(100vh - 190px);min-height:460px;padding:14px 16px"></div>
         </div>
       </section>
 
@@ -1841,11 +1848,6 @@ initBlogs();
 
 /* ---------- nav ---------- */
 const TITLES={overview:'Overview <span>· last 30 days</span>',users:'Users',subs:'Subscriptions',revenue:'Revenue',usage:'Usage &amp; API',monitor:'Monitor <span>· backend services</span>',studio:'Social Studio <span>· push to Instagram &amp; more</span>',blogs:'Blogs <span>· publish articles to your site</span>'};
-/* The backend monitor is loaded LAZILY, on first visit to the Monitor tab.
-   Mounting its iframe at page load would fire a cross-origin request on every
-   admin session — including the ones that never open this tab — and, since the
-   backend may be unreachable, would surface a console error each time. */
-let monitorLoaded = false;
 /* The Monitor tab lists the backend's API surface (GET /admin/api-health,
    staged in REAL.apiHealth) and health-checks the safely-probeable endpoints.
    The iframe has no Firebase token, so a live Re-check is delegated to the
@@ -1948,7 +1950,132 @@ function paintApiHealth(){
   const btn = document.getElementById('apiRecheck');
   if (btn) btn.onclick = function(){ btn.textContent='Checking…'; btn.disabled=true; parent.postMessage({ type:'admin:apiHealth' }, '*'); };
 }
-function renderMonitor(){ paintApiHealth(); }
+
+/* ── Jobs & scheduler ────────────────────────────────────────────────────────
+   What actually runs, and what actually triggers it. Reads GET
+   /api/admin/jobs (live service) which joins Firestore `sync_meta` run history
+   onto the JOB_MANIFEST — see MarketCatalystBackEnd/src/common/job-manifest.ts.
+
+   The distinction this panel exists to make: a job's `cronExpression` in the
+   registry schedules NOTHING. Only a Cloud Scheduler entry or a premarket phase
+   actually fires one, so jobs are grouped by that and never by their declared
+   cron. */
+var JOBS = null;          /* last payload from the parent bridge */
+var JOBS_ERR = null;
+var JOBS_LOADING = false;
+
+var AH_TRIGGERS = [
+  { key:'scheduler', label:'Cloud Scheduler', color:'#2fe6a6',
+    hint:'own scheduler entry POSTs /sync/&lt;name&gt;/run' },
+  { key:'premarket', label:'Via premarket job', color:'#5bd0ff',
+    hint:'no entry of its own — runs as a phase of premarket-job' },
+  { key:'none',      label:'Not triggered',    color:'#ff5d7a',
+    hint:'nothing fires this — reachable by manual run only' }
+];
+
+function ahAgo(iso){
+  if (!iso) return 'never';
+  var t = Date.parse(iso);
+  if (!isFinite(t)) return ahEsc(iso);
+  var s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return Math.round(s) + 's ago';
+  if (s < 5400) return Math.round(s/60) + 'm ago';
+  if (s < 172800) return Math.round(s/3600) + 'h ago';
+  return Math.round(s/86400) + 'd ago';
+}
+function ahJobRow(j){
+  var mono = 'font-family:var(--f-mono,ui-monospace,monospace)';
+  var stale = j.lastStatus === 'error';
+  var never = !j.lastSyncedAt;
+  var statusColor = never ? 'var(--dim)' : stale ? '#ff5d7a' : '#2fe6a6';
+  var statusText  = never ? 'never run'
+                  : stale ? 'error'
+                  : 'ok' + (j.lastCount != null ? ' · ' + j.lastCount : '');
+  var sched = (j.schedules && j.schedules.length)
+    ? j.schedules.map(function(c){ return '<code style="'+mono+';font-size:11px;color:#9d8dff">'+ahEsc(c)+'</code>'; }).join(' <span style="color:var(--dim)">+</span> ')
+    : '<span style="color:var(--dim);font-size:11px">no schedule</span>';
+  /* lastError is the last error EVER recorded, not the current state — a job
+     that failed once and has succeeded since still carries it. Painting it red
+     beside a green "ok" badge reads as broken. Red only when the job is
+     actually failing now; otherwise amber and labelled as historical. */
+  var err = j.lastError
+    ? '<div style="'+mono+';font-size:11px;color:'+(stale?'#ff5d7a':'#8a7a4a')+';margin-top:4px;'
+      + 'word-break:break-all;max-height:34px;overflow:hidden">'
+      + (stale ? '↳ ' : '<span style="font-family:var(--f-disp),system-ui">last error · recovered</span> ↳ ')
+      + ahEsc(j.lastError)+'</div>'
+    : '';
+  var note = j.note
+    ? '<div style="font-size:11px;color:var(--dim);margin-top:3px">'+ahEsc(j.note)+'</div>'
+    : '';
+  return '<div style="padding:10px 12px;border-bottom:1px solid #1e2a38;font-size:12.5px">'
+    + '<div style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) auto;gap:12px;align-items:baseline">'
+    + '<span style="min-width:0"><b style="color:var(--hi);'+mono+'">'+ahEsc(j.name)+'</b></span>'
+    + '<span style="min-width:0">'+sched+'</span>'
+    + '<span style="text-align:right;white-space:nowrap;color:'+statusColor+'">● '+statusText
+    + ' <span style="color:var(--dim)">· '+ahAgo(j.lastSyncedAt)+'</span></span>'
+    + '</div>' + note + err + '</div>';
+}
+function ahJobsHtml(p){
+  var jobs = p.jobs || [], c = p.counts || {};
+  var head = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0 0 12px">'
+    + ahChip('jobs', c.total||0)
+    + ahChip('scheduler', c.scheduler||0, '#2fe6a6')
+    + ahChip('via premarket', c.premarket||0, '#5bd0ff')
+    + ahChip('not triggered', c.none||0, (c.none?'#ff5d7a':'var(--dim)'))
+    + ahChip('failing', c.failing||0, (c.failing?'#ff5d7a':'var(--dim)'))
+    + ahChip('never run', c.neverRun||0, (c.neverRun?'#ffb547':'var(--dim)'))
+    + '<span style="flex:1"></span>'
+    + '<button id="jobsRecheck" style="font:600 12px/1 var(--f-disp),system-ui;color:#05222a;'
+    + 'background:#38d6e6;border:0;border-radius:8px;padding:8px 14px;cursor:pointer">Refresh</button>'
+    + '</div>';
+  var groups = AH_TRIGGERS.map(function(g){
+    var rows = jobs.filter(function(j){ return j.trigger === g.key; });
+    if (!rows.length) return '';
+    rows.sort(function(a,b){ return a.name < b.name ? -1 : 1; });
+    return '<div style="margin:0 0 14px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin:0 0 6px">'
+      + '<span style="font:700 12px/1 var(--f-disp),system-ui;color:'+g.color+'">'+g.label+'</span>'
+      + '<span style="font-size:11px;color:var(--dim)">'+rows.length+' · '+g.hint+'</span></div>'
+      + '<div style="border:1px solid #1e2a38;border-radius:10px;background:#0d131b;overflow:hidden">'
+      + rows.map(ahJobRow).join('') + '</div></div>';
+  }).join('');
+  var warn = p.metaError
+    ? '<div style="font-size:11.5px;color:#ffb547;padding:0 0 10px">Run history unavailable ('
+      + ahEsc(p.metaError) + ') — schedules below are still accurate.</div>'
+    : '';
+  return head + warn + groups;
+}
+function paintJobs(){
+  var wrap = document.getElementById('jobsWrap');
+  if (!wrap) return;
+  if (JOBS_LOADING && !JOBS){ wrap.innerHTML = '<div style="padding:18px;color:var(--dim);font-size:12.5px">Loading jobs…</div>'; return; }
+  if (!JOBS){
+    wrap.innerHTML = '<div style="padding:18px;color:var(--dim);font-size:12.5px">'
+      + (JOBS_ERR ? 'Could not load jobs: ' + ahEsc(JOBS_ERR) : 'Sign in as the admin to load the job inventory.')
+      + '<br><button id="jobsRecheck" style="margin-top:10px;font:600 12px/1 var(--f-disp),system-ui;'
+      + 'color:#05222a;background:#38d6e6;border:0;border-radius:8px;padding:8px 14px;cursor:pointer">Retry</button>'
+      + '</div>';
+  } else {
+    wrap.innerHTML = ahJobsHtml(JOBS);
+  }
+  var b = document.getElementById('jobsRecheck');
+  if (b) b.onclick = function(){ b.textContent='Loading…'; b.disabled=true; requestJobs(); };
+}
+function requestJobs(){
+  JOBS_LOADING = true;
+  parent.postMessage({ type:'admin:jobs' }, '*');
+}
+window.addEventListener('message', function(e){
+  var d = e.data || {};
+  if (d.type !== 'admin:jobsResult') return;
+  JOBS_LOADING = false;
+  if (d.ok && d.data){ JOBS = d.data; JOBS_ERR = null; }
+  else { JOBS_ERR = d.error || 'error'; }
+  paintJobs();
+});
+
+/* Monitor paints both panels; jobs are fetched once per visit. */
+function renderMonitor(){ paintApiHealth(); paintJobs(); if (!JOBS && !JOBS_LOADING) requestJobs(); }
 window.addEventListener('message', function(e){
   const d = e.data || {};
   if (d.type !== 'admin:apiHealthResult') return;

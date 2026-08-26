@@ -193,6 +193,18 @@ export default function AdminPage() {
           post({ ok: false, error: (err as Error).message });
         }
       }
+      if (d.type === "admin:jobs") {
+        // Job + scheduler inventory for the Monitor tab. Same bridge shape as
+        // admin:apiHealth — the iframe holds no backend token, so it asks here.
+        const post = (m: Record<string, unknown>) =>
+          iframeRef.current?.contentWindow?.postMessage({ type: "admin:jobsResult", ...m }, "*");
+        try {
+          const data = await apiGet("/api/admin/jobs");
+          post({ ok: true, data });
+        } catch (err) {
+          post({ ok: false, error: (err as Error).message });
+        }
+      }
       if (d.type === "admin:changePassword") {
         const post = (m: Record<string, unknown>) =>
           iframeRef.current?.contentWindow?.postMessage({ type: "admin:passwordResult", ...m }, "*");
