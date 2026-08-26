@@ -617,7 +617,7 @@ export function DashboardScreen() {
                 >{label}</button>
               ))}
             </div>
-            <div className="card-b" style={{ paddingTop: 8, flex: 1, minHeight: 0, maxHeight: 440, overflowY: "auto" }}>
+            <div className="card-b" style={{ paddingTop: 8, flex: 1, minHeight: 0, overflowY: "auto" }}>
               {(moversTab === 0
                 ? [...movers].filter(m => m.pctChange > 0).sort((a, b) => b.pctChange - a.pctChange)
                 : moversTab === 1
@@ -640,7 +640,7 @@ export function DashboardScreen() {
 
         {/* ── 5. Market Heatmap ── */}
         <div className="col-4">
-          <div className="card" style={{ height: "100%" }}>
+          <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div className="card-h">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>Market Heatmap</h3><VendorTag v="polygon" /></div>
               <Link className="link" href="/menu/heatmap">Full map →</Link>
@@ -662,7 +662,7 @@ export function DashboardScreen() {
                 .filter(g => g.stocks.length > 0);
 
               return (
-                <div className="card-b" style={{ paddingTop: 6, maxHeight: 420, overflowY: "auto" }}>
+                <div className="card-b" style={{ paddingTop: 6, flex: 1, minHeight: 0, overflowY: "auto" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                     {groups.map(({ sd, stocks }) => {
                       const hcSect = heatCol(sd.pctChange ?? 0);
