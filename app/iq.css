@@ -2059,6 +2059,26 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
    every background / border / colour set on `.ecal-caret` was silently
    stripped and the control rendered as a bare grey glyph — invisible enough
    that the rows did not read as expandable at all. */
+/* Clickable ticker in the Most Active / Biggest % scans — logo, symbol, value.
+   Prefixed with `.iq-root button` for the same reason the caret below is: the
+   global reset at (0,1,1) outranks a lone class and would strip the fill and
+   border, leaving what looks like plain text again. */
+.iq-root button.scan-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 1px 8px 1px 4px; margin: 0; border-radius: 20px;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  color: var(--text-hi); font: inherit; font-size: .8rem; line-height: 1.6;
+  cursor: pointer; white-space: nowrap;
+  transition: border-color .13s, background .13s;
+}
+.iq-root button.scan-chip:hover {
+  background: var(--surface-3); border-color: var(--brand-2);
+}
+.iq-root button.scan-chip:focus-visible {
+  outline: 2px solid var(--brand-2); outline-offset: 1px;
+}
+.iq-root button.scan-chip b { font-weight: 700; color: var(--text-hi); }
+
 .iq-root button.ecal-caret {
   flex: none; width: 26px; height: 26px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -2977,6 +2997,21 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
   box-shadow:0 1px 0 rgba(255,255,255,.6) inset,
              0 22px 46px -26px rgba(60,45,30,.35),
              0 0 26px -16px var(--brand);
+}
+
+/* Recap index tiles — same "box" look as the dashboard .card (gradient + border
+   + soft shadow) so the Daily/Weekly index row reads as distinct boxes, not a
+   flat strip. Static (no hover lift/entrance) since the tiles aren't clickable.
+   Theme-safe: dark uses the card's fixed gradient, light the surface tokens. */
+.iq-root .recap-idx{
+  background:linear-gradient(180deg,#131A25,#10141C);
+  border:1px solid var(--border);
+  border-radius:10px;
+  box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 8px 20px -14px rgba(0,0,0,.7);
+}
+.iq-root[data-theme="light"] .recap-idx{
+  background:linear-gradient(180deg,var(--surface-1),var(--surface-2));
+  box-shadow:var(--shadow);
 }
 
 /* Crisper headings on the new display font. */

@@ -12,6 +12,7 @@ import type { NewsArticleDoc, CompanyDoc, WatchlistDoc, HoldingDoc } from "../ty
 import { NEWS_TAGS } from "../types/news";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
 import { TickerAnalysisDrawer } from "../ticker-analysis-drawer";
+import { StockScreenEmbed } from "../stock-panel";
 
 const TABS = ["Live", "Premarket", "After Hours", "My names", "Macro"];
 
@@ -312,8 +313,38 @@ const scanTime = (iso?: string) =>
 
 /** One sector-categorised scan section — a coloured heading then one line per
  *  sector: "Sector: TICKER (value), …" (the SCANX layout). */
-function ScanSection({ title, color, groups, render }: {
+/**
+ * Stock-detail tray for the scan tabs — the same drawer Movers opens, so a
+ * ticker behaves identically wherever it is clicked.
+ */
+function ScanTray({ sym, onClose }: { sym: string; onClose: () => void }) {
+  return (
+    <>
+      <div className="scrim" onClick={onClose} />
+      <div className="stock-side-drawer">
+        <div className="drawer-h" style={{ paddingTop: 14, paddingBottom: 14 }}>
+          <StockLogo sym={sym} size={32} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)" }}>
+              {sym} · Stock Details
+            </div>
+            <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+              Full analysis · chart · technicals · peers
+            </div>
+          </div>
+          <button className="closebtn" onClick={onClose}>✕</button>
+        </div>
+        <div className="drawer-b">
+          <StockScreenEmbed initialSym={sym} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ScanSection({ title, color, groups, render, onSelect }: {
   title: string; color: string; groups: SectorGroup[]; render: (it: ScanItem) => string;
+  onSelect: (sym: string) => void;
 }) {
   return (
     <div style={{ marginBottom: 16 }}>
@@ -321,14 +352,23 @@ function ScanSection({ title, color, groups, render }: {
       {(!groups || groups.length === 0) ? (
         <div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>No data.</div>
       ) : groups.map((g) => (
-        <div key={g.sector} style={{ fontSize: ".8rem", lineHeight: 1.75 }}>
-          <span style={{ color: "var(--text-dim-solid)" }}>{titleCaseLabel(g.sector)}: </span>
-          {g.items.map((it, i) => (
-            <span key={it.ticker}>
-              <b>{it.ticker}</b>{" "}
+        <div key={g.sector} style={{ fontSize: ".8rem", lineHeight: 2.1, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 4px" }}>
+          <span style={{ color: "var(--text-dim-solid)", marginRight: 2 }}>{titleCaseLabel(g.sector)}:</span>
+          {/* Each ticker is a real button with its logo — these used to be inert
+              bold text, so a name you spotted in the scan could not be opened
+              without going to another screen and searching for it. */}
+          {g.items.map((it) => (
+            <button
+              key={it.ticker}
+              type="button"
+              className="scan-chip"
+              onClick={() => onSelect(it.ticker)}
+              title={`Open ${it.ticker} details`}
+            >
+              <StockLogo sym={it.ticker} size={15} />
+              <b>{it.ticker}</b>
               <span className={cls(it.pctChange ?? 0)}>({render(it)})</span>
-              {i < g.items.length - 1 ? ", " : ""}
-            </span>
+            </button>
           ))}
         </div>
       ))}
@@ -339,6 +379,7 @@ function ScanSection({ title, color, groups, render }: {
 /** Most Active tab — top volume + top relative volume, by sector. */
 function MostActiveTab() {
   const { data, loading } = useApiResource<MostActiveScan>("/live/scan/most-active");
+  const [sel, setSel] = useState<string | null>(null);
   return (
     <div style={{ padding: "14px 18px 18px" }}>
       <div className="card">
@@ -349,14 +390,15 @@ function MostActiveTab() {
         <div className="card-b" style={{ maxHeight: "none" }}>
           {!data ? <DataState loading={loading} label="Generating scan…" /> : (
             <>
-              <ScanSection title="Today's top 20 volume" color="var(--text-hi)" groups={data.byVolume}
+              <ScanSection title="Today's top 20 volume" color="var(--text-hi)" groups={data.byVolume} onSelect={setSel}
                 render={(it) => `${it.volume != null ? (it.volume / 1e6).toFixed(2) + " mln" : "—"} ${sign(it.pctChange ?? 0)}`} />
-              <ScanSection title="Today's top 20 relative volume (current vs 1-month avg daily volume)" color="var(--text-hi)" groups={data.byRelVolume}
+              <ScanSection title="Today's top 20 relative volume (current vs 1-month avg daily volume)" color="var(--text-hi)" groups={data.byRelVolume} onSelect={setSel}
                 render={(it) => `${it.rvol != null ? it.rvol.toFixed(2) + "x" : "—"} ${sign(it.pctChange ?? 0)}`} />
             </>
           )}
         </div>
       </div>
+      {sel && <ScanTray sym={sel} onClose={() => setSel(null)} />}
     </div>
   );
 }
@@ -364,6 +406,7 @@ function MostActiveTab() {
 /** Biggest % tab — top 20 gainers + top 20 losers, by sector. */
 function BiggestPctTab() {
   const { data, loading } = useApiResource<BiggestPctScan>("/live/scan/biggest-pct");
+  const [sel, setSel] = useState<string | null>(null);
   return (
     <div style={{ padding: "14px 18px 18px" }}>
       <div className="card">
@@ -374,14 +417,15 @@ function BiggestPctTab() {
         <div className="card-b" style={{ maxHeight: "none" }}>
           {!data ? <DataState loading={loading} label="Generating scan…" /> : (
             <>
-              <ScanSection title="Today's top 20 % gainers" color="var(--up)" groups={data.gainers}
+              <ScanSection title="Today's top 20 % gainers" color="var(--up)" groups={data.gainers} onSelect={setSel}
                 render={(it) => `${it.price != null ? it.price.toFixed(2) : "—"} ${sign(it.pctChange ?? 0)}`} />
-              <ScanSection title="Today's top 20 % losers" color="var(--down)" groups={data.losers}
+              <ScanSection title="Today's top 20 % losers" color="var(--down)" groups={data.losers} onSelect={setSel}
                 render={(it) => `${it.price != null ? it.price.toFixed(2) : "—"} ${sign(it.pctChange ?? 0)}`} />
             </>
           )}
         </div>
       </div>
+      {sel && <ScanTray sym={sel} onClose={() => setSel(null)} />}
     </div>
   );
 }
@@ -807,15 +851,6 @@ export function CommentaryScreen() {
 
       <div style={{ padding: "0 18px 18px" }}>
 
-        {/* Result count — a slim line under the toolbar, shown only while a
-            filter is active (no idle hint text when the feed is unfiltered). */}
-        {(search.trim() || effSec !== "All" || capFilter !== "All" || tagFilter !== "all") && (
-          <div style={{ display: "flex", justifyContent: "flex-end", margin: "10px 0 12px" }}>
-            <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-              Showing {feed.length} item{feed.length === 1 ? "" : "s"}
-            </span>
-          </div>
-        )}
 
         <div className="dash">
 
@@ -829,7 +864,6 @@ export function CommentaryScreen() {
             <div className="card" style={{ flexShrink: 0 }}>
               <div className="card-h">
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}><h3>{activeTab === 3 ? "Tracked names" : "Quick filter"}</h3><VendorTag v="polygon" /></div>
-                <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>tap to add to filter</span>
               </div>
               <div className="card-b" style={{ paddingTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {(activeTab === 3 ? [...mySymbols] : topSymbols).length === 0 ? (
