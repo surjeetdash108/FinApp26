@@ -389,6 +389,17 @@ function xAxisLabel(t: number, tf: string): string {
   return d.toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "America/New_York" });
 }
 
+/**
+ * The exchange-session date a bar belongs to, as YYYY-MM-DD in New York.
+ *
+ * Daily bars are stamped at ET midnight (04:00 UTC), so a naive UTC date is a
+ * day out for anything stamped in the evening. `en-CA` is used purely because
+ * it formats as YYYY-MM-DD, which compares correctly as a string.
+ */
+function etSessionDate(ms: number): string {
+  return new Date(ms).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
 function _sma(data: OHLCBar[], p: number): (number | null)[] {
   return data.map((_, i) => {
     if (i < p - 1) return null;
@@ -476,16 +487,31 @@ function CandleChartInner({
     // Guaranteed non-empty (>= 2 bars) by the CandleChart wrapper above; the
     // empty fallback is a type-safe no-op that can never fabricate data.
     const base = realBars && realBars.length > 1 ? realBars : [];
-    // Overlay the live price onto the current (last) real bar: its close tracks
-    // the tick and its high/low stretch to include it.
-    if (live && live.price > 0 && realBars && realBars.length > 1) {
-      const last = base[base.length - 1];
-      const c = live.price;
-      const h = Math.max(last.h, live.high ?? c, c);
-      const l = Math.min(last.l, live.low ?? c, c);
-      return [...base.slice(0, -1), { ...last, c, h, l }];
-    }
-    return base;
+    if (!(live && live.price > 0 && base.length > 1)) return base;
+
+    // Overlay the live price onto the last bar ONLY when that bar is the
+    // CURRENT session.
+    //
+    // This used to overlay unconditionally, which silently rewrote a completed
+    // historical candle. Today's daily bar does not exist until the session has
+    // run, so pre-market (and all weekend) the last bar is the PREVIOUS day —
+    // and the overlay gave that finished day today's close, stretching its
+    // high/low to reach a price from a different session. When the live tick
+    // sits on the other side of that day's open it also flips the candle's
+    // colour, so a real up-day renders red. Verified 2026-08-26 04:49 ET:
+    // AAPL's last bar was 08-25 (c=309.45) while the live tick was 309.61.
+    //
+    // Deliberately no synthetic bar when today's is missing: we have a live
+    // price, high and low, but no open, so inventing one would fabricate the
+    // very field candles are read for. The chart shows real sessions only and
+    // today appears once the session bar exists.
+    const last = base[base.length - 1];
+    if (etSessionDate(last.t) !== etSessionDate(Date.now())) return base;
+
+    const c = live.price;
+    const h = Math.max(last.h, live.high ?? c, c);
+    const l = Math.min(last.l, live.low ?? c, c);
+    return [...base.slice(0, -1), { ...last, c, h, l }];
   }, [sym, tf, px, realBars, live]);
 
   // Longer same-granularity series, fetched ONLY while an MA/EMA overlay is on,
