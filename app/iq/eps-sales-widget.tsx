@@ -13,21 +13,58 @@ import { pctChangeStr, epsSalesSeries, annualEpsSalesRows, quarterlyEpsSalesRows
 
 /** One zero-baselined bar chart (EPS or Sales), value labelled on top, period
  *  label angled underneath — the reference layout's headline chart. */
+/**
+ * Round axis ticks covering [min, max].
+ *
+ * Steps snap to 1 / 2 / 5 × a power of ten, so an axis reads 0 · 2 · 4 · 6
+ * rather than 0 · 2.85 · 5.7. The bounds are widened OUT to the nearest step,
+ * which is what gives the tallest bar headroom instead of letting it touch the
+ * top edge with its value label crammed against the frame.
+ */
+function niceTicks(min: number, max: number, target = 5): { ticks: number[]; lo: number; hi: number } {
+  const span = (max - min) || Math.abs(max) || 1;
+  const rough = span / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  const lo = Math.floor(min / step) * step;
+  const hi = Math.ceil(max / step) * step;
+  const ticks: number[] = [];
+  // The epsilon stops a float remainder dropping the final tick.
+  for (let v = lo; v <= hi + step * 1e-9; v += step) ticks.push(v);
+  return { ticks, lo, hi };
+}
+
 function MetricBars({ title, data, fmt }: {
   title: string; data: Array<{ label: string; v: number | null }>; fmt: (v: number) => string;
 }) {
   const gid = "esw-" + title.replace(/\W/g, "");
   const vals = data.map(d => d.v).filter((v): v is number => v != null);
-  const W = 360, H = 260, PADT = 26, PADB = 52, PADX = 6;
+  // PADL is a gutter for the Y-axis tick labels — the chart had no axis at all
+  // before, so every bar's magnitude had to be read from the number printed on
+  // top of it and no two charts could be compared at a glance.
+  const W = 360, H = 260, PADT = 20, PADB = 52, PADL = 38, PADR = 8;
   const LABEL_Y = H - 34;
-  const iw = W - PADX * 2, ih = H - PADT - PADB;
-  const maxV = Math.max(0, ...vals);
-  const minV = Math.min(0, ...vals);
-  const span = (maxV - minV) || 1;
-  const yOf = (v: number) => PADT + ((maxV - v) / span) * ih;
+  const iw = W - PADL - PADR, ih = H - PADT - PADB;
+
+  const { ticks, lo, hi } = niceTicks(Math.min(0, ...vals), Math.max(0, ...vals));
+  const span = (hi - lo) || 1;
+  const yOf = (v: number) => PADT + ((hi - v) / span) * ih;
   const zeroY = yOf(0);
   const gw = iw / Math.max(1, data.length);
-  const bw = Math.min(gw * 0.62, 30);
+  // Slightly slimmer than before: with an axis behind them the bars no longer
+  // have to carry the chart on their own, and the gaps make the gridlines read.
+  const bw = Math.min(gw * 0.56, 26);
+
+  // Print the value on each bar only when every one of them fits its slot.
+  // Five-digit revenue in an 11-bar quarter view does not — the labels ran into
+  // each other and read as "12,79112,702". Showing only some would look
+  // arbitrary, so it is all or nothing, and the Y axis carries the magnitude
+  // when they are dropped. 0.6em per glyph approximates the mono advance width.
+  const VAL_FONT = 9.5;
+  const widest = Math.max(0, ...vals.map(v => fmt(v).length)) * VAL_FONT * 0.6;
+  const showValues = widest <= gw - 3;
+
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }}>
@@ -37,18 +74,42 @@ function MetricBars({ title, data, fmt }: {
             <stop offset="100%" stopColor="var(--brand)" />
           </linearGradient>
         </defs>
+
+        {/* Y axis — gridlines behind the bars, values in the left gutter. */}
+        {ticks.map(t => {
+          const y = yOf(t);
+          const isZero = Math.abs(t) < 1e-9;
+          return (
+            <g key={`t${t}`}>
+              <line
+                x1={PADL} x2={W - PADR} y1={y.toFixed(1)} y2={y.toFixed(1)}
+                stroke={isZero ? "var(--border)" : "var(--border-soft)"}
+                strokeWidth={isZero ? 1 : 0.8}
+              />
+              <text
+                x={(PADL - 6).toFixed(1)} y={(y + 3).toFixed(1)} textAnchor="end" fontSize="8.5"
+                fontFamily="JetBrains Mono,monospace" fill="var(--text-dim-solid)"
+              >{fmt(t)}</text>
+            </g>
+          );
+        })}
+
         {data.map((d, i) => {
           if (d.v == null) return null;
-          const cx = PADX + gw * i + gw / 2;
+          const cx = PADL + gw * i + gw / 2;
           const yv = yOf(d.v);
           const y = Math.min(zeroY, yv);
           const h = Math.max(2, Math.abs(yv - zeroY));
           const above = d.v >= 0;
           return (
             <g key={d.label + i}>
-              <rect x={(cx - bw / 2).toFixed(1)} y={y.toFixed(1)} width={bw.toFixed(1)} height={h.toFixed(1)} rx="2.5" fill={`url(#${gid})`} />
-              <text x={cx.toFixed(1)} y={(above ? y - 5 : y + h + 11).toFixed(1)} textAnchor="middle" fontSize="9.5"
-                fontFamily="JetBrains Mono,monospace" fill="var(--text-hi)">{fmt(d.v)}</text>
+              <rect x={(cx - bw / 2).toFixed(1)} y={y.toFixed(1)} width={bw.toFixed(1)} height={h.toFixed(1)} rx="2.5" fill={`url(#${gid})`}>
+                <title>{`${d.label}: ${fmt(d.v)}`}</title>
+              </rect>
+              {showValues && (
+                <text x={cx.toFixed(1)} y={(above ? y - 5 : y + h + 11).toFixed(1)} textAnchor="middle" fontSize={VAL_FONT}
+                  fontFamily="JetBrains Mono,monospace" fill="var(--text-hi)">{fmt(d.v)}</text>
+              )}
               <text x={cx.toFixed(1)} y={LABEL_Y.toFixed(1)} textAnchor="end" fontSize="9" fill="var(--text-dim-solid)"
                 transform={`rotate(-45 ${cx.toFixed(1)} ${LABEL_Y.toFixed(1)})`}>{d.label}</text>
             </g>
