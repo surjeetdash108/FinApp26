@@ -143,7 +143,9 @@ export default function AdminPage() {
           // Source PDF, present only when the article was imported from one.
           // The backend hoists it to Storage and keeps the URL on the doc; it is
           // never written into Firestore (well past the 1 MB document cap).
-          ...(d.pdfDataUri ? { pdfDataUri: d.pdfDataUri, pdfName: d.pdfName } : {}),
+          ...(d.pdfDataUri
+            ? { pdfDataUri: d.pdfDataUri, pdfName: d.pdfName, pdfPages: d.pdfPages, pdfAspect: d.pdfAspect }
+            : {}),
         };
         await blogWrite("admin:blogSaveResult", async () => {
           if (d.id) {
