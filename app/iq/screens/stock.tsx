@@ -943,18 +943,22 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const aboveEma50 = ema50 != null ? p > ema50 : null;
   const above200   = sma200 != null ? p > sma200 : null;
   const haveMA     = aboveEma50 != null || above200 != null;
-  const trendTxt = rs != null
+  // Built as JSX, not as a string containing <b> tags. These rows render through
+  // {l[1]}, which escapes strings — so markup embedded in one reached the reader
+  // as literal "<b>Range / consolidation.</b>" on the stock page.
+  const lead = (bold: string, rest: string) => (<><b>{bold}</b> {rest}</>);
+  const trendTxt: ReactNode = rs != null
     ? (isUp && rs >= 70
-        ? "<b>Strong uptrend.</b> Higher highs and higher lows; momentum confirmed by recent strength."
+        ? lead("Strong uptrend.", "Higher highs and higher lows; momentum confirmed by recent strength.")
         : rs < 40
-        ? "<b>Downtrend.</b> Lower highs and lower lows; price is below key moving averages."
-        : "<b>Range / consolidation.</b> Choppy two-way action with no decisive trend yet.")
+        ? lead("Downtrend.", "Lower highs and lower lows; price is below key moving averages.")
+        : lead("Range / consolidation.", "Choppy two-way action with no decisive trend yet."))
     : haveMA
     ? (aboveEma50 && above200
-        ? "<b>Uptrend.</b> Price is trading above both its 50-day and 200-day moving averages."
+        ? lead("Uptrend.", "Price is trading above both its 50-day and 200-day moving averages.")
         : aboveEma50 === false && above200 === false
-        ? "<b>Downtrend.</b> Price is below both its 50-day and 200-day moving averages."
-        : "<b>Range / consolidation.</b> Price is mixed around its moving averages.")
+        ? lead("Downtrend.", "Price is below both its 50-day and 200-day moving averages.")
+        : lead("Range / consolidation.", "Price is mixed around its moving averages."))
     : "Trend read not available yet — no price history synced.";
   const maTxt = rs != null
     ? (rs >= 60 ? "Above the 20, 50 and 200-day — bullish alignment."
@@ -1396,9 +1400,11 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             </div>
             <div className="card-b" style={{ maxHeight: "none" }}>
               {([
-                ["Trend",            trendTxt as string],
-                ["Support / Resist.",hi != null ? `52-week high <b>$${nf(hi)}</b>${lo != null ? `; 52-week low <b>$${nf(lo)}</b>` : ""}.` : "Support/resistance levels not available."],
-                ["MA posture",       maTxt as string],
+                ["Trend",            trendTxt],
+                ["Support / Resist.", hi != null
+                  ? (<>52-week high <b>${nf(hi)}</b>{lo != null ? <>; 52-week low <b>${nf(lo)}</b></> : null}.</>)
+                  : "Support/resistance levels not available."],
+                ["MA posture",       maTxt],
                 ["Rel. strength",    rs != null
                   ? (<>Relative-strength rank <b className={rs >= 70 ? "up" : rs < 40 ? "down" : ""}>{rs}/99</b> vs the market — {rs >= 70 ? "group leader." : rs < 40 ? "lagging the tape." : "roughly in line."}</>)
                   : "Not ranked yet — this ticker isn't in the synced RS universe."],

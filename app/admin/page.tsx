@@ -40,8 +40,9 @@ export default function AdminPage() {
         // renders once at module scope, so anything delivered after its load
         // would be ignored — see the hand-off comment in console.html.
         //
-        // Reads happen here, as the signed-in admin, so Firestore rules apply:
-        // isAdmin() is what permits the cross-user `users` read.
+        // Reads go through the backend's AdminGuard-protected API, not the
+        // Firestore client SDK — this app bundles Firebase Auth only, so
+        // Firestore rules never see these reads. The guard is the control.
         try {
           const dataset = await buildAdminDataset();
           sessionStorage.setItem(ADMIN_DATA_KEY, JSON.stringify(dataset));
@@ -72,8 +73,9 @@ export default function AdminPage() {
         window.location.replace("/auth/login");
       }
       if (d.type === "admin:setPlanFlag") {
-        // The console iframe has no Firebase SDK, so it delegates the write
-        // here, where the admin session lives and Firestore rules authorise it.
+        // The console iframe holds no backend token, so it delegates the write
+        // here, where the admin session lives; the backend's AdminGuard
+        // authorises it.
         const reply = (m: Record<string, unknown>) =>
           iframeRef.current?.contentWindow?.postMessage(
             { type: "admin:setPlanFlagResult", planId: d.planId, key: d.key, value: d.value, ...m },
