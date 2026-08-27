@@ -1866,6 +1866,15 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 /* The overflow control under a day column's chips, centred rather than left in
    the first grid cell — it counts the whole column, not one chip. */
 .ec-more-row { display: flex; justify-content: center; margin-top: 2px; }
+/* The Day view's single card sits in the middle column of the same five-column
+   grid the week uses, so it is centred AND exactly a week column wide. Centring
+   with justify-content instead would have had to restate that width. */
+.ec-grid > .ec-day-solo { grid-column: 3; }
+/* A fifth of a narrow screen is unreadably thin, so below the split breakpoint
+   the card takes the full row. */
+@media (max-width: 900px) {
+  .ec-grid > .ec-day-solo { grid-column: 1 / -1; }
+}
 /* Earnings month grid (full weekday earnings calendar) — emc- prefix to avoid
    colliding with the pre-existing macro month-calendar (.ecm-*) classes below. */
 .emc-head { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 8px; }

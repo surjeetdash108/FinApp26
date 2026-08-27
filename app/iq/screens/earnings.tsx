@@ -890,7 +890,7 @@ export function EarningsScreen() {
     const isToday = anchor === isoDay(new Date());
     calNode = visibleRows.length > 0 ? (
       <div className="ec-grid">
-        <div className={`ec-day${isToday ? " is-today" : ""}`}>
+        <div className={`ec-day ec-day-solo${isToday ? " is-today" : ""}`}>
           <div className="ec-dh">
             {DOW3[anchorDate.getUTCDay()]} {anchorDate.getUTCDate()}{isToday ? " · Today" : ""}
           </div>
