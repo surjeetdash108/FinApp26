@@ -105,6 +105,11 @@ export interface ConsoleBlogRow {
   status: string;
   /** Display date string, as stored. */
   date: string;
+  /** Source document, when the post was published from a PDF or Word file.
+   *  The editor shows the document itself instead of an editable body. */
+  pdfUrl: string | null;
+  pdfName: string | null;
+  sourceKind: string | null;
 }
 
 export interface ApiHealthEndpoint {
@@ -230,6 +235,9 @@ interface BackendBlog {
   html?: string;
   status?: string;
   date?: string;
+  pdfUrl?: string | null;
+  pdfName?: string | null;
+  sourceKind?: string | null;
 }
 
 /** Presentation mapping for one backend blog row → the console's shape. Missing
@@ -247,6 +255,9 @@ function toConsoleBlog(b: BackendBlog): ConsoleBlogRow {
     html: b.html ?? "",
     status: b.status ?? "Published",
     date: b.date ?? "",
+    pdfUrl: b.pdfUrl ?? null,
+    pdfName: b.pdfName ?? null,
+    sourceKind: b.sourceKind ?? null,
   };
 }
 
