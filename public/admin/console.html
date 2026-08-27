@@ -696,6 +696,12 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
       <div><label class="fl">Read time</label><input id="bRead" class="inp" placeholder="4 min"></div>
       <div><label class="fl">Rank</label><input id="bRank" class="inp" type="number" min="1" step="1" placeholder="1"></div>
     </div>
+    <!-- The daily recap job writes a four-line summary here, and the article
+         page and board card both show it. Editable so it can be corrected
+         before publishing; optional, because a manually uploaded document
+         often has nothing worth saying above it. -->
+    <label class="fl">Summary <span class="cc">shown above the document and on the board card</span></label>
+    <textarea id="bDek" class="inp" rows="3" placeholder="Generated automatically for the daily recap. Leave blank to show nothing."></textarea>
     <label class="fl" id="bBodyLabel">Body <span class="cc" id="bWords"></span></label>
     <!-- A post published from a document shows the document itself: that IS the
          article on the site, and there is nothing here worth editing. Posts
@@ -1820,7 +1826,7 @@ function openBlogModal(zone,editId,draft){
   const p=editId?(BLOGS.find(x=>x.id===editId)||{}):{zone,kick:'',title:draft?draft.title:'',dek:'',author:'',read:'',html:draft?draft.html:''};
   const z=p.zone||zone;
   bEl('bmTitle').textContent=editId?'Edit article':'New article';
-  bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';bEl('bBody').innerHTML=p.html||'';
+  bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';bEl('bBody').innerHTML=p.html||'';
   bEl('bRank').value=p.rank||nextRank(z,editId);
   renderDocView(p);
   updatePlaceChip();updateBlogWords();
@@ -1908,10 +1914,10 @@ function publishImportedFile(zone,draft){
 /* Modal save = write straight to the backend through the bridge. The parent
    POSTs (new) or PATCHes (edit), then posts the refreshed list back. */
 function savePublish(){
-  /* The summary field is gone: a document post shows the document, which opens
-     with its own headline and standfirst, so a separate dek was never read.
-     An empty string keeps the stored shape unchanged. */
-  const d={zone:bEl('bZone').value||'edu',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:'',author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
+  /* The summary is carried through as typed. It is optional — the daily recap
+     job fills it automatically, a manual upload usually leaves it blank — so
+     there is no required-field check on it. */
+  const d={zone:bEl('bZone').value||'edu',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value.trim(),author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
   if(!d.title){toast('Add a title first');return;}
   const typed=parseInt(bEl('bRank').value,10);
   d.rank=(typed&&typed>0)?typed:nextRank(d.zone,_editId);
