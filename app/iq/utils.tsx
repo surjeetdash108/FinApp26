@@ -237,7 +237,10 @@ export function TrGauge({ val, label }: { val: number; label: string }) {
   };
   const tone = TR_TONE[label] ?? "var(--text-dim-solid)";
   return (
-    <svg viewBox="0 0 180 104" width="190">
+    // Centred by its own margin, not by the parent's text-align: Tailwind's
+    // preflight sets `svg { display: block }`, so a text-align on .trgroup has
+    // nothing inline to centre and the gauge sat against the left edge.
+    <svg viewBox="0 0 180 104" width="190" className="tr-gauge">
       <path d={arc(0, .2)} fill="none" stroke="#FF5470" strokeWidth="13" strokeLinecap="butt" />
       <path d={arc(.2, .4)} fill="none" stroke="#ff9aab" strokeWidth="13" strokeLinecap="butt" />
       <path d={arc(.4, .6)} fill="none" stroke="#697486" strokeWidth="13" strokeLinecap="butt" />

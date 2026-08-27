@@ -1797,6 +1797,10 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .fin-row-bar .v { font-family: var(--f-mono); text-align: right; color: var(--text-hi); font-weight: 600; }
 
 /* ---- Technical rating ---- */
+/* The gauge is a block element (Tailwind preflight), so the surrounding
+   text-align: center cannot move it — it centres on its own margins. max-width
+   keeps it inside the card when the rail is narrower than the gauge's 190px. */
+.tr-gauge { display: block; margin-inline: auto; max-width: 100%; height: auto; }
 .trseg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .trgroup { background: var(--surface-0); border: 1px solid var(--border-soft); border-radius: 11px; padding: 13px; text-align: center; }
 .trgroup .gl { font-size: .64rem; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim-solid); font-weight: 600; margin-bottom: 6px; }
