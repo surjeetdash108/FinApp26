@@ -1198,7 +1198,10 @@ export function EarningsScreen() {
             {/* top row: what company does + AI summary */}
             <div className="ew-toprow">
               <div className="card">
-                <div className="card-h" style={{ gap: 10, flexWrap: "wrap" }}>
+                {/* One line: wrapping put the buttons on a row of their own under
+                    the price, which read as two separate headers. Nothing here
+                    is long enough to need to wrap. */}
+                <div className="card-h" style={{ gap: 10, flexWrap: "nowrap" }}>
                   <StockLogo sym={sel} size={45} />
                   <span style={{ fontWeight: 700, fontFamily: "var(--f-mono)", color: "var(--text-hi)", fontSize: ".95rem" }}>{sel}</span>
                   {liveCompanySel?.price != null && (
@@ -1234,7 +1237,6 @@ export function EarningsScreen() {
                       <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19V5m0 14h16M8 15l3-4 3 3 4-6"/></svg>
                       Analysis
                     </button>
-                    <VendorTag v="polygon" />
                   </span>
                 </div>
                 <div className="card-b">
