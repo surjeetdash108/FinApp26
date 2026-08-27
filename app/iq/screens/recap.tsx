@@ -1,17 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useIQActions } from "../shell";
 import { cls, sign, StockLogo, DataState, NotAvailable, VendorTag, titleCaseLabel} from "../utils";
 import { useApiList } from "../hooks/useApiList";
 import { useTapeStream } from "../hooks/useTapeStream";
-import { tapeItemsToIndexDocs } from "../live-market-indices";
+import { tapeItemsToIndexDocs, pulseFromLive } from "../live-market-indices";
 import type { SectorApiDoc, LiveEarningsDoc, NewsArticleDoc, MacroEventDoc, RecapDoc, CompanyDoc, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
 import { surprisePct } from "../types";
 
+// Same embedded stock detail the IPO / Movers drawers use.
+const StockScreenEmbed = dynamic<{ initialSym?: string }>(
+  () => import("./stock").then(m => ({ default: m.StockScreen })),
+  { ssr: false, loading: () => <div style={{ padding: 40, textAlign: "center", color: "var(--text-dim-solid)" }}>Loading…</div> },
+);
+
 const SEC_PAGE = 10;
-const MAJOR_INDEX_LABELS = ["S&P 500", "Nasdaq", "Dow", "Russell 2000"];
 
 // Compact volume/number formatter for the internals block (e.g. 1.2B, 340M).
 function fmtVol(n: number | null | undefined): string {
@@ -86,9 +92,12 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
   // Daily vs weekly is now chosen by the menu route (two separate options),
   // not an in-screen tab.
   const activeTab = mode === "weekly" ? 1 : 0;
+  // Local stock-detail drawer for headline ticker icons — same self-contained
+  // sliding drawer the IPO screen uses (StockScreenEmbed), independent of the
+  // shell's openStock action.
+  const [selectedSym, setSelectedSym] = useState<string | null>(null);
   const [recapPage, setRecapPage] = useState(0);
   const [drawer, setDrawer] = useState<"earn-movers" | null>(null);
-  const [audioMsg, setAudioMsg] = useState(false);
 
   const { data: sectorsLive, loading: sectorsLoading } = useApiList<SectorApiDoc>("/market-data/sectors");
   const { data: liveEarnings, loading: earningsLoading } = useApiList<LiveEarningsDoc>("/market-data/earnings");
@@ -116,8 +125,12 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
     .sort((a, b) => Math.abs(b.reactionPct as number) - Math.abs(a.reactionPct as number))
     .slice(0, 8);
   const { frame: tapeFrame } = useTapeStream();
+  // Daily indices now mirror the weekly recap's full macro set (equities + VIX,
+  // 10Y, WTI, Gold, Bitcoin, DXY) instead of only the 4 equity majors.
+  // `pulseFromLive` is the same 10-index display config the dashboard/shell tape
+  // uses, so daily and weekly show the same names.
   const liveIndices = tapeFrame
-    ? tapeItemsToIndexDocs(tapeFrame.items).filter(i => MAJOR_INDEX_LABELS.includes(i.label))
+    ? pulseFromLive(tapeItemsToIndexDocs(tapeFrame.items)).map(p => ({ label: p.label, pctChange: p.change }))
     : [];
 
   const sortedSectors = [...sectorsLive].sort((a, b) => a.sector.localeCompare(b.sector));
@@ -292,7 +305,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
         {items.map(idx => {
           const fg = idx.pctChange >= 0 ? "var(--up)" : "var(--down)";
           return (
-            <div key={idx.label} style={{ background: "var(--surface-2)", borderRadius: 10, padding: "8px 14px", minWidth: 90 }}>
+            <div key={idx.label} className="recap-idx" style={{ padding: "9px 14px", minWidth: 96 }}>
               <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginBottom: 3 }}>{idx.label}</div>
               <div style={{ fontSize: "1.1rem", fontWeight: 700, fontFamily: "var(--f-mono)", color: fg }}>
                 {sign(idx.pctChange)}
@@ -449,20 +462,6 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               {heroTitle}
             </div>
             <VendorTag v="polygon" />
-            <div style={{ marginLeft: "auto" }}>
-              <button className="btn ai" title="Audio recap isn't connected to a live TTS service yet"
-                onClick={() => setAudioMsg(true)}>
-                <svg viewBox="0 0 24 24" fill="none" style={{ width: 14, height: 14 }}>
-                  <path d="M8 5v14l11-7z" fill="currentColor" />
-                </svg>
-                60-sec audio recap
-              </button>
-              {audioMsg && (
-                <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 6, textAlign: "right" }}>
-                  Not connected to a live TTS service yet.
-                </div>
-              )}
-            </div>
           </div>
           {renderIndicesRow(indicesList, indicesEmpty, !tapeFrame)}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0 4px" }}>
@@ -475,8 +474,8 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <button className="btn" onClick={() => downloadRecap(dateLabel, todayHeadlines, todaySurprises, todayGrades, "today")}>{DL_ICON} Today (EOD)</button>
             )}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 14 }}>
-            <div>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.9fr) minmax(0, 1fr)", gap: 22, marginTop: 14 }}>
+            <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <div className="eyebrow">Top headlines</div>
                 <span className="link" onClick={() => router.push("/menu/commentary")}>View all →</span>
@@ -484,9 +483,17 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               {heroHeadlines.length === 0 ? (
                 <DataState loading={liveNewsLoading} label={isWeek ? "No live news synced this week yet." : "No live news synced yet today."} />
               ) : heroHeadlines.map(n => (
-                <div key={n.id} style={{ display: "flex", gap: 8, padding: "6px 0", fontSize: ".84rem" }}>
-                  <span className="bullet" style={{ marginTop: 6, flexShrink: 0 }} />
-                  <span><b>{n.ticker}</b> {n.headline}</span>
+                <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 0", fontSize: ".84rem", minWidth: 0 }}>
+                  {/* Ticker icon — click opens the sliding stock-detail drawer
+                      (same StockScreenEmbed drawer the IPO screen uses). */}
+                  <span onClick={() => setSelectedSym(n.ticker)} title={`${n.ticker} · view details`}
+                    style={{ cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center" }}>
+                    <StockLogo sym={n.ticker} size={20} />
+                  </span>
+                  {/* Widened column + ellipsis keep each headline on ONE row. */}
+                  <span title={n.headline} style={{ minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                    <b onClick={() => setSelectedSym(n.ticker)} style={{ cursor: "pointer", color: "var(--text-hi)" }}>{n.ticker}</b> {n.headline}
+                  </span>
                 </div>
               ))}
             </div>
@@ -588,6 +595,31 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
                   </span>
                 </div>
               ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Stock detail drawer for headline ticker icons (same StockScreenEmbed
+             sliding drawer the IPO screen uses). ── */}
+      {selectedSym !== null && (
+        <>
+          <div className="scrim" onClick={() => setSelectedSym(null)} />
+          <div className="stock-side-drawer">
+            <div className="drawer-h" style={{ paddingTop: 14, paddingBottom: 14 }}>
+              <StockLogo sym={selectedSym} size={32} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "var(--f-display)", fontWeight: 700, fontSize: "1rem", color: "var(--text-hi)" }}>
+                  {selectedSym} · Stock Details
+                </div>
+                <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
+                  Full analysis · chart · technicals · peers
+                </div>
+              </div>
+              <button className="closebtn" onClick={() => setSelectedSym(null)}>✕</button>
+            </div>
+            <div className="drawer-b">
+              <StockScreenEmbed initialSym={selectedSym} />
             </div>
           </div>
         </>

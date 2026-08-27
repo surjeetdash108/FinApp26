@@ -116,44 +116,6 @@ export function ThemesScreen() {
             <VendorTag v="polygon" />
           </div>
         </div>
-
-        {/* Sectors are multi-select. A native <select multiple> renders a tall
-            list box inline, so this is a button + checkbox panel instead. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }} ref={secRef}>
-          <span style={{
-            fontSize: ".66rem", letterSpacing: ".05em", textTransform: "uppercase",
-            color: "var(--text-dim-solid)", fontWeight: 600,
-          }}>Sectors</span>
-          <div style={{ position: "relative" }}>
-            <button
-              className="iq-select"
-              onClick={() => setSecOpen(o => !o)}
-              style={{ width: "auto", minWidth: 160, padding: "4px 10px", fontSize: ".72rem",
-                textAlign: "left", cursor: "pointer" }}
-            >
-              {sectorSel.length === 0
-                ? "All sectors"
-                : sectorSel.length === 1
-                  ? titleCaseLabel(sectorSel[0])
-                  : `${sectorSel.length} selected`} ▾
-            </button>
-            {secOpen && (
-              <div className="theme-secpanel">
-                <div className="theme-secpanel-h">
-                  <span>{sectorSel.length} of {allSectors.length}</span>
-                  <button onClick={() => setSectorSel([])} disabled={sectorSel.length === 0}>Clear</button>
-                </div>
-                {allSectors.map(name => (
-                  <label key={name} className="theme-secrow">
-                    <input type="checkbox" checked={sectorSel.includes(name)}
-                      onChange={() => toggleSector(name)} />
-                    <span>{titleCaseLabel(name)}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       <div style={{ padding: "0 18px 18px" }}>
@@ -192,26 +154,68 @@ export function ThemesScreen() {
 
         {/* Theme quick-access pills — MULTI-select (toggle in/out); the list
             shows the union of the selected themes. Sector chips above are the
-            alternate multi-select mode. */}
-        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
-          {THEMES.map(t => (
-            <button
-              key={t.id}
-              onClick={() => pick(t.name)}
-              style={{
-                padding: "5px 13px", borderRadius: 20, border: "1px solid",
-                fontSize: ".72rem", fontWeight: 700, cursor: "pointer", transition: "all .15s",
-                // activeThemes (not the raw selection): a pill lights up only
-                // when it's actually driving the list — i.e. no sector filter is
-                // active. Multi-select, so any number of pills can be lit.
-                borderColor: activeThemes.some(a => a.name === t.name) ? "var(--brand)" : "var(--border)",
-                background:  activeThemes.some(a => a.name === t.name) ? "var(--brand)" : "var(--surface-2)",
-                color:       activeThemes.some(a => a.name === t.name) ? "#fff" : "var(--text-dim-solid)",
-              }}
-            >
-              {t.name}
-            </button>
-          ))}
+            alternate multi-select mode. The Sectors dropdown sits at the right
+            end of THIS row (moved off the page header) so it lines up with the
+            theme pills. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", flex: "1 1 auto", minWidth: 0 }}>
+            {THEMES.map(t => (
+              <button
+                key={t.id}
+                onClick={() => pick(t.name)}
+                style={{
+                  padding: "5px 13px", borderRadius: 20, border: "1px solid",
+                  fontSize: ".72rem", fontWeight: 700, cursor: "pointer", transition: "all .15s",
+                  // activeThemes (not the raw selection): a pill lights up only
+                  // when it's actually driving the list — i.e. no sector filter is
+                  // active. Multi-select, so any number of pills can be lit.
+                  borderColor: activeThemes.some(a => a.name === t.name) ? "var(--brand)" : "var(--border)",
+                  background:  activeThemes.some(a => a.name === t.name) ? "var(--brand)" : "var(--surface-2)",
+                  color:       activeThemes.some(a => a.name === t.name) ? "#fff" : "var(--text-dim-solid)",
+                }}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Sectors multi-select — a button + checkbox panel (a native
+              <select multiple> renders a tall inline list box). */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: "auto" }} ref={secRef}>
+            <span style={{
+              fontSize: ".66rem", letterSpacing: ".05em", textTransform: "uppercase",
+              color: "var(--text-dim-solid)", fontWeight: 600,
+            }}>Sectors</span>
+            <div style={{ position: "relative" }}>
+              <button
+                className="iq-select"
+                onClick={() => setSecOpen(o => !o)}
+                style={{ width: "auto", minWidth: 160, padding: "4px 10px", fontSize: ".72rem",
+                  textAlign: "left", cursor: "pointer" }}
+              >
+                {sectorSel.length === 0
+                  ? "All sectors"
+                  : sectorSel.length === 1
+                    ? titleCaseLabel(sectorSel[0])
+                    : `${sectorSel.length} selected`} ▾
+              </button>
+              {secOpen && (
+                <div className="theme-secpanel" style={{ left: "auto", right: 0 }}>
+                  <div className="theme-secpanel-h">
+                    <span>{sectorSel.length} of {allSectors.length}</span>
+                    <button onClick={() => setSectorSel([])} disabled={sectorSel.length === 0}>Clear</button>
+                  </div>
+                  {allSectors.map(name => (
+                    <label key={name} className="theme-secrow">
+                      <input type="checkbox" checked={sectorSel.includes(name)}
+                        onChange={() => toggleSector(name)} />
+                      <span>{titleCaseLabel(name)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {stocks.length === 0 ? (

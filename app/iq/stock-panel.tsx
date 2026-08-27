@@ -40,7 +40,9 @@ function EarnPane({ hist, loading }: { hist: EarnQ[]; loading: boolean }) {
   const ih = H - PADT - PADB;
   const mid = PADT + ih / 2;
   const gw = iw / hist.length;
-  const bw = Math.min(gw * 0.45, 26);
+  // Bar width matches the EPS history / Earnings-Growth charts (gw * 0.28) so
+  // the earnings histogram reads the same across every screen that shows it.
+  const bw = gw * 0.28;
   const maxS = Math.max(8, ...hist.map(x => Math.abs(x.surp)));
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
