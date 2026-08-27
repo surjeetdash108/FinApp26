@@ -492,7 +492,26 @@
   color: var(--text-dim-solid);
   line-height: 1.5;
   z-index: 4;
+  /* The disclaimer takes the space it needs and the links sit to its right,
+     on one line. `align-items: flex-end` keeps them on the last line of the
+     text rather than floating beside its middle when it wraps. */
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
 }
+.disclaimer-text { flex: 1 1 auto; min-width: 0; }
+.disclaimer-links {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 14px;
+  white-space: nowrap;
+}
+.disclaimer-links a {
+  color: var(--brand-2);
+  text-decoration: none;
+  font-weight: 600;
+}
+.disclaimer-links a:hover { text-decoration: underline; }
 .page-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px;
@@ -2739,6 +2758,11 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
     padding: 6px 12px;
     font-size: .6rem;
     line-height: 1.45;
+    /* Side by side there is no room for both on a phone: the links take their
+       own line under the text, still on the right. */
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
   }
 
   /* The fixed footer overlaps the end of scrollable content; .main's 40px is

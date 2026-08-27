@@ -1154,7 +1154,17 @@ export function IQShell({ children }: { children: React.ReactNode }) {
             <main className="main">
               {children}
               <footer className="disclaimer-bar">
-                MarketCatalyst LLC is not a registered investment advisor and does not manage client assets. Information and tools on this platform are for informational and educational purposes only and do not constitute investment advice. MarketCatalyst is a data provider, not a stock-picks or alert service. Trading stocks and options carries risk — consult your own financial advisor.
+                <span className="disclaimer-text">
+                  MarketCatalyst LLC is not a registered investment advisor and does not manage client assets. Information and tools on this platform are for informational and educational purposes only and do not constitute investment advice. MarketCatalyst is a data provider, not a stock-picks or alert service. Trading stocks and options carries risk — consult your own financial advisor.
+                </span>
+                {/* Blogs and FAQs live on the marketing site, which is a
+                    separate origin from this app — so these are absolute links
+                    that open in a new tab rather than router navigations, and a
+                    signed-in reader keeps their session here. */}
+                <nav className="disclaimer-links">
+                  <a href="https://marketcatalyst.ai/posts" target="_blank" rel="noopener noreferrer">Blogs</a>
+                  <a href="https://marketcatalyst.ai/faqs" target="_blank" rel="noopener noreferrer">FAQs</a>
+                </nav>
               </footer>
             </main>
           </div>
