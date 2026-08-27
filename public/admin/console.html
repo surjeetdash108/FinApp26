@@ -1538,6 +1538,9 @@ let _targetZone='edu', _editId=null;
    when the modal closes. */
 let _pendingPdf=null;
 let _pdfPages=null,_pdfAspect=null;
+/* Name of the PDF in the save currently in flight, or null for a save with no
+   file attached. Drives the wording of the progress dialog and its result. */
+let _uploadName=null;
 
 async function convertFile(file){
   const name=(file.name||'').toLowerCase();
@@ -1555,7 +1558,9 @@ async function convertFile(file){
          — do not assume Letter, research decks are often A4 or landscape. */
       _pdfPages=pdf.numPages;
       try{const vp=(await pdf.getPage(1)).getViewport({scale:1});_pdfAspect=vp.height/vp.width;}catch(_){_pdfAspect=null;}
-      for(let i=1;i<=pdf.numPages;i++){const tc=await (await pdf.getPage(i)).getTextContent();let line='',lastY=null;const paras=[];
+      for(let i=1;i<=pdf.numPages;i++){
+        showBusy('Reading '+file.name+' — page '+i+' of '+pdf.numPages,(i/pdf.numPages)*100);
+        const tc=await (await pdf.getPage(i)).getTextContent();let line='',lastY=null;const paras=[];
         tc.items.forEach(it=>{const y=it.transform[5];if(lastY!==null&&Math.abs(y-lastY)>6){if(line.trim())paras.push(line.trim());line='';}line+=it.str+' ';lastY=y;});
         if(line.trim())paras.push(line.trim());
         html+=paras.map(p=>`<p>${xesc(p)}</p>`).join('');}
@@ -1766,11 +1771,15 @@ function savePublish(){
   if(_pendingPdf){msg.pdfDataUri=_pendingPdf.dataUri;msg.pdfName=_pendingPdf.name;msg.pdfPages=_pendingPdf.pages;msg.pdfAspect=_pendingPdf.aspect;}
   if(_editId)msg.id=_editId;
   const editing=!!_editId;
+  /* Remembered across the round-trip so the progress dialog and the result can
+     name the PDF: closeBlogModal() clears _pendingPdf immediately below. */
+  _uploadName=_pendingPdf?_pendingPdf.name:null;
   blogPost(msg);
   closeBlogModal();
   // Persistent spinner until the parent answers with a blogSaveResult (hidden in
   // the message handler below). Big articles take a few seconds to save.
-  showBusy(editing?'Saving edit…':'Publishing article…');
+  showBusy(_uploadName?('Uploading '+_uploadName+'…'):(editing?'Saving edit…':'Publishing article…'),
+           _uploadName?0:undefined);
 }
 function deleteBlog(id){
   const p=BLOGS.find(x=>x.id===id);if(!p)return;
@@ -1800,6 +1809,22 @@ function togglePublish(id){
    matching the true backend state — reverting any optimistic edit that failed. */
 window.addEventListener('message',function(e){
   const d=e.data||{};
+  /* Bytes on their way up. The bar tracks the request body, which is the part
+     that actually takes time on a big import; once it is all sent the server
+     still has to store the file and write the doc, and that stretch has nothing
+     to measure — so the bar gives way to a plain spinner rather than sitting at
+     100% looking stuck. */
+  if(/^admin:blogSaveProgress$/.test(d.type||'')){
+    if(!d.total)return;
+    const pct=(d.loaded/d.total)*100;
+    const what=d.name||_uploadName;
+    if(d.loaded>=d.total){
+      showBusy(what?('Saving '+what+'…'):'Saving…');
+    } else {
+      showBusy(what?('Uploading '+what+'… '+Math.round(pct)+'%'):('Uploading… '+Math.round(pct)+'%'),pct);
+    }
+    return;
+  }
   if(!/^admin:blog(Save|Delete|Publish|Reorder)Result$/.test(d.type||''))return;
   hideBusy();                                     // the write finished — drop the spinner
   if(Array.isArray(d.blogs)){
@@ -1809,8 +1834,9 @@ window.addEventListener('message',function(e){
   if(d.ok===false){
     showResult(false,'Could not save: '+(d.error||'unknown error'));
   } else if(/^admin:blogSaveResult$/.test(d.type||'')){
-    showResult(true,'Article saved successfully');
+    showResult(true,_uploadName?(_uploadName+' uploaded successfully'):'Article saved successfully');
   }
+  if(/^admin:blogSaveResult$/.test(d.type||''))_uploadName=null;
 });
 
 /* Blocking progress overlay — shown while a (possibly large) Word/PDF is parsed
@@ -1818,7 +1844,7 @@ window.addEventListener('message',function(e){
    when embedded images are externalised to Storage). Hidden when the file is
    ready / the save result returns; a 90s safety timeout clears it if no result
    comes back so the admin is never stuck behind the spinner. */
-function showBusy(msg){
+function showBusy(msg,pct){
   let o=document.getElementById('adBusy');
   if(!o){
     if(!document.getElementById('adBusyKf')){
@@ -1827,10 +1853,19 @@ function showBusy(msg){
     }
     o=document.createElement('div');o.id='adBusy';
     o.style.cssText='position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(8,12,20,.62);backdrop-filter:blur(3px);opacity:0;transition:opacity .18s';
-    o.innerHTML='<div style="width:42px;height:42px;border:3px solid rgba(124,108,245,.25);border-top-color:#7c6cf5;border-radius:50%;animation:adspin .8s linear infinite"></div><div id="adBusyMsg" style="color:#e7ecf7;font-weight:600;font-size:14px;letter-spacing:.01em"></div>';
+    o.innerHTML='<div style="width:42px;height:42px;border:3px solid rgba(124,108,245,.25);border-top-color:#7c6cf5;border-radius:50%;animation:adspin .8s linear infinite"></div><div id="adBusyMsg" style="color:#e7ecf7;font-weight:600;font-size:14px;letter-spacing:.01em"></div><div id="adBusyBar" style="display:none;width:260px;height:6px;border-radius:99px;background:rgba(124,108,245,.2);overflow:hidden"><div id="adBusyFill" style="height:100%;width:0;border-radius:99px;background:#7c6cf5;transition:width .18s"></div></div>';
     document.body.appendChild(o);
   }
   document.getElementById('adBusyMsg').textContent=msg||'Working…';
+  /* A number shows the bar; omitting it leaves the spinner alone, so a step
+     with nothing to measure does not display a bar frozen at zero. */
+  const bar=document.getElementById('adBusyBar');
+  if(typeof pct==='number'){
+    bar.style.display='block';
+    document.getElementById('adBusyFill').style.width=Math.max(0,Math.min(100,pct))+'%';
+  } else {
+    bar.style.display='none';
+  }
   o.style.display='flex';requestAnimationFrame(()=>{o.style.opacity='1';});
   clearTimeout(window._adBusyT);window._adBusyT=setTimeout(hideBusy,90000);
 }

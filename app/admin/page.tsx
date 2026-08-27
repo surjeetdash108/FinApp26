@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { signOut, updatePassword } from "firebase/auth";
 import { firebaseAuth } from "../firebase";
-import { apiGet, apiPatch, apiPost, apiDelete } from "../iq/backend";
+import { apiGet, apiPatch, apiDelete, apiUpload } from "../iq/backend";
 import { buildAdminDataset, fetchAdminBlogs, ADMIN_DATA_KEY, ADMIN_EMAIL } from "./admin-data";
 import type { ConsoleBlogRow } from "./admin-data";
 
@@ -147,11 +147,29 @@ export default function AdminPage() {
             ? { pdfDataUri: d.pdfDataUri, pdfName: d.pdfName, pdfPages: d.pdfPages, pdfAspect: d.pdfAspect }
             : {}),
         };
+        // Saves go over XHR rather than fetch so the console can show real
+        // progress: an imported PDF is carried inline as a data URI and a Word
+        // import can drag in externalised images, so this body is the one place
+        // in the admin that is routinely megabytes.
+        const onProgress = (progress: { loaded: number; total: number }) =>
+          iframeRef.current?.contentWindow?.postMessage(
+            {
+              type: "admin:blogSaveProgress",
+              loaded: progress.loaded,
+              total: progress.total,
+              pdf: Boolean(d.pdfDataUri),
+              name: d.pdfName ?? null,
+            },
+            "*",
+          );
         await blogWrite("admin:blogSaveResult", async () => {
           if (d.id) {
-            await apiPatch(`/api/admin/blogs/${encodeURIComponent(String(d.id))}`, body);
+            await apiUpload(`/api/admin/blogs/${encodeURIComponent(String(d.id))}`, body, {
+              method: "PATCH",
+              onProgress,
+            });
           } else {
-            await apiPost("/api/admin/blogs", body);
+            await apiUpload("/api/admin/blogs", body, { onProgress });
           }
         });
       }
