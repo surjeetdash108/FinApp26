@@ -1544,11 +1544,22 @@ let _uploadName=null;
 
 async function convertFile(file){
   const name=(file.name||'').toLowerCase();
+  /* Cleared per import: these are only meaningful for a PDF, and left over
+     from a previous one they would tell the post page to reserve the wrong
+     length for a Word file. */
+  _pdfPages=null;_pdfAspect=null;
   try{
     let html='';
     if(name.endsWith('.docx')){
       if(typeof mammoth==='undefined'){toast('Converter still loading — try again in a moment');return null;}
+      showBusy('Reading '+file.name+'…');
       html=(await mammoth.convertToHtml({arrayBuffer:await file.arrayBuffer()})).value||'<p>(empty document)</p>';
+      /* Drop the images mammoth inlines as base64. The post page now renders
+         the ORIGINAL document, so this HTML is only the text behind it — for
+         search engines and previews. Keeping the images here would send every
+         picture twice (a 9 MB Word file becomes ~3 MB of extra data URIs) and
+         push the request toward the 32 MB body cap for nothing. */
+      html=html.replace(/<img\b[^>]*>/gi,'');
     } else if(name.endsWith('.pdf')){
       if(typeof pdfjsLib==='undefined'){toast('PDF reader still loading — try again in a moment');return null;}
       const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
@@ -1573,8 +1584,20 @@ async function convertFile(file){
        the document's tables and KPI cards cannot survive extraction. The post
        page embeds this file and keeps the text below it for search engines. */
     let pdfDataUri=null,pdfName=null;
-    if(name.endsWith('.pdf')){
+    /* Word files travel too, not just PDFs: the post page renders whichever it
+       was given, so the original has to reach Storage either way. */
+    if(name.endsWith('.pdf')||name.endsWith('.docx')){
+      showBusy('Preparing '+file.name+' for upload…');
       pdfDataUri=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(file);});
+      /* Rewrite the media type from the EXTENSION rather than trusting the one
+         the OS reported. Windows in particular hands .docx over as
+         application/octet-stream, and the backend only stores types it
+         recognises — so the document would be dropped and the post would
+         publish with nothing to show. */
+      const mime=name.endsWith('.pdf')
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      pdfDataUri=pdfDataUri.replace(/^data:[^;]*;base64,/,'data:'+mime+';base64,');
       pdfName=file.name;
     }
     return {title:file.name.replace(/\.(docx|pdf)$/i,'').replace(/[-_]/g,' '),html,pdfDataUri,pdfName,pdfPages:_pdfPages,pdfAspect:_pdfAspect};
@@ -1730,8 +1753,12 @@ function wireFileDrop(board){
       if(!files.length)return;
       if(files.length>1)toast('One file at a time — taking '+files[0].name);
       showBusy('Reading '+files[0].name+'…');
-      let d;try{d=await convertFile(files[0]);}finally{hideBusy();}
-      if(d){_targetZone=z;openBlogModal(z,null,d);}
+      let d;try{d=await convertFile(files[0]);}catch(err){hideBusy();throw err;}
+      _targetZone=z;
+      // An imported document publishes straight away; only a non-document
+      // import (or a failure) falls back to the editor.
+      if(d&&d.pdfDataUri){publishImportedFile(z,d);}
+      else{hideBusy();if(d)openBlogModal(z,null,d);}
     });
   });
 }
@@ -1753,6 +1780,35 @@ function openBlogModal(zone,editId,draft){
   bEl('blogModal').classList.add('on');bEl('blogScrim').classList.add('on');
 }
 function closeBlogModal(){_pendingPdf=null;bEl('blogModal').classList.remove('on');bEl('blogScrim').classList.remove('on');_editId=null;}
+
+/* Publish an imported PDF/Word file straight away, with no editor step.
+   The post page shows the document itself and no longer prints a heading or
+   summary above it, so there was nothing left on that form worth filling in:
+   it asked for a kicker, dek and body that the reader would never see. The
+   title still comes from the filename because it names the post everywhere it
+   is referenced — the board, the browser tab, link previews and JSON-LD. */
+function publishImportedFile(zone,draft){
+  if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to save'); return; }
+  const z=zone||'edu';
+  _uploadName=draft.pdfName||null;
+  blogPost({
+    type:'admin:blogSave',
+    zone:z,
+    rank:nextRank(z,null),
+    kick:'MarketCatalyst',
+    title:draft.title,
+    dek:'',
+    author:'Desk',
+    read:'',
+    html:draft.html,
+    status:'Published',
+    pdfDataUri:draft.pdfDataUri,
+    pdfName:draft.pdfName,
+    pdfPages:draft.pdfPages,
+    pdfAspect:draft.pdfAspect,
+  });
+  showBusy('Uploading '+(_uploadName||draft.title)+'…',0);
+}
 /* Modal save = write straight to the backend through the bridge. The parent
    POSTs (new) or PATCHes (edit), then posts the refreshed list back. */
 function savePublish(){
@@ -1895,7 +1951,16 @@ function hideResult(){clearTimeout(window._adResT);const o=document.getElementBy
 
 function initBlogs(){
   const file=bEl('blogFile');
-  file.onchange=async e=>{const f=e.target.files[0];if(f){showBusy('Reading '+f.name+'…');let d;try{d=await convertFile(f);}finally{hideBusy();}if(d)openBlogModal(_targetZone||'edu',null,d);}};
+  file.onchange=async e=>{
+    const f=e.target.files[0];
+    if(!f)return;
+    showBusy('Reading '+f.name+'…');
+    let d;try{d=await convertFile(f);}catch(err){hideBusy();throw err;}
+    // Same rule as the drop handler: a document publishes without an editor step.
+    if(d&&d.pdfDataUri){publishImportedFile(_targetZone||'edu',d);}
+    else{hideBusy();if(d)openBlogModal(_targetZone||'edu',null,d);}
+    e.target.value='';   // so re-picking the same file fires change again
+  };
   bEl('bBody').addEventListener('input',updateBlogWords);
   bEl('bDek').addEventListener('input',()=>{ bEl('bDek').style.borderColor=''; bEl('bDekErr').style.display='none'; });
   bEl('bZone').addEventListener('change',updatePlaceChip);
