@@ -752,6 +752,8 @@ export function EarningsScreen() {
   const liveEarningsData = liveEarnings;
 
   const [mode, setMode]     = useState<"day" | "week" | "month">("day");
+  // Day view caps at MAX_CAL_LOGOS like every other view; this opens it out.
+  const [dayExpanded, setDayExpanded] = useState(false);
   const [anchor, setAnchor] = useState<string>(() => isoDay(new Date()));
   // At-a-glance snapshot: a Nasdaq-style results table (actual vs consensus,
   // surprise, revenue, year-ago) for the selected day/week/month, toggled from
@@ -787,6 +789,10 @@ export function EarningsScreen() {
   const { data: financialsDoc, loading: financialsLoading } = useApiResource<FinancialsDoc>(sel ? `/live/financials?ticker=${encodeURIComponent(sel)}` : null);
   const [selectedCall,   setSelectedCall]   = useState<string | null>(null);
   const [aiModalSym,      setAiModalSym]      = useState<string | null>(null);
+
+  // Stepping to another day starts collapsed again — an expansion belongs to
+  // the day it was opened on, not to the view.
+  useEffect(() => { setDayExpanded(false); }, [anchor, mode]);
 
   const weekMon   = mondayOf(new Date(`${anchor}T00:00:00Z`));
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
@@ -875,13 +881,37 @@ export function EarningsScreen() {
   let calNode: React.ReactNode;
 
   if (mode === "day") {
-    // Icon grid (same chips as a week-view day column) — clicking opens detail.
-    // The snapshot/results view is the separate "At a glance" toggle.
+    // One column, built exactly like a day in the week view — same card, same
+    // two-up chips, same +N. Spreading the whole list across the full width
+    // made a day look like a different product from the week it belongs to,
+    // and with no cap a heavy reporting day ran to hundreds of tiles.
+    const shown  = dayExpanded ? visibleRows : visibleRows.slice(0, MAX_CAL_LOGOS);
+    const extra  = visibleRows.length - shown.length;
+    const isToday = anchor === isoDay(new Date());
     calNode = visibleRows.length > 0 ? (
-      <div className="ec-sess" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-        {visibleRows.map(r => (
-          <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={s => openStockDetail(s, anchor)} />
-        ))}
+      <div className="ec-grid">
+        <div className={`ec-day${isToday ? " is-today" : ""}`}>
+          <div className="ec-dh">
+            {DOW3[anchorDate.getUTCDay()]} {anchorDate.getUTCDate()}{isToday ? " · Today" : ""}
+          </div>
+          <div className="ec-sess">
+            {shown.map(r => (
+              <EcChip key={r.s} sym={r.s} selected={sel === r.s} onSelect={s => openStockDetail(s, anchor)} />
+            ))}
+          </div>
+          {/* In the week and month views +N opens the day; here it IS the day,
+              so it expands in place — and offers the way back. */}
+          {extra > 0 && (
+            <div className="ec-more-row">
+              <button className="emc-more" title={`Show ${extra} more`} onClick={() => setDayExpanded(true)}>+{extra}</button>
+            </div>
+          )}
+          {dayExpanded && visibleRows.length > MAX_CAL_LOGOS && (
+            <div className="ec-more-row">
+              <button className="emc-more" onClick={() => setDayExpanded(false)}>Show less</button>
+            </div>
+          )}
+        </div>
       </div>
     ) : (
       <div className="ecal-empty">
