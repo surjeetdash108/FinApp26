@@ -377,6 +377,10 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .zdrop:hover,.zdrop.drag{border-color:var(--brand);color:var(--brand2);background:#7c6cf50e}
 .zdrop svg{display:block;margin:0 auto 5px;color:var(--brand2)}
 .zdrop b{color:var(--hi);font-weight:600}
+/* The size limit, on its own line under the prompt: it is a constraint to know
+   BEFORE picking a file, not an error to discover after waiting for a 30 MB
+   one to encode. */
+.zdrop-limit{display:block;margin-top:3px;font-size:10.5px;letter-spacing:.02em;opacity:.75}
 .zlist{display:flex;flex-direction:column;gap:9px;overflow-y:auto;overflow-x:hidden;max-height:470px}
 .z-b .zlist{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-height:none}
 /* drag to reorder / move between zones */
@@ -634,7 +638,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
       </section>
 
       <section class="view" id="blogs">
-        <div class="board-note">Drop a <b>Word</b> or <b>PDF</b> file anywhere on a section below — it converts, you confirm the details, and it saves straight to your site. Use each card's <b>Live / Draft</b> toggle to control whether it shows publicly. <b>Drag cards</b> to reorder them or move them between sections; the order here is the order on the site. This board mirrors <span class="cash">marketcatalyst.ai</span> · the newspaper page.</div>
+        <div class="board-note">Drop a <b>Word</b> or <b>PDF</b> file (up to <b id="noteLimit">20</b> MB) anywhere on a section below — the document itself becomes the article and publishes straight to your site. Use each card's <b>Live / Draft</b> toggle to control whether it shows publicly. <b>Drag cards</b> to reorder them or move them between sections; the order here is the order on the site. This board mirrors <span class="cash">marketcatalyst.ai</span> · the newspaper page.</div>
         <div class="blogboard" id="blogboard"></div>
         <input type="file" id="blogFile" accept=".docx,.pdf" hidden>
       </section>
@@ -1536,14 +1540,35 @@ const bEl=id=>document.getElementById(id);
 let _targetZone='edu', _editId=null;
 /* Source PDF awaiting upload with the next save — set by a PDF import, cleared
    when the modal closes. */
+/* Largest file that can be imported.
+   The document travels to the backend inside a JSON body as a base64 data URI,
+   and base64 inflates it by 4/3 — so 20 MB of file is ~26.7 MB on the wire,
+   against the backend's 32 MB body cap. The rest is headroom for the extracted
+   text and the other fields. Raise this and the request is rejected by the
+   server with a far less obvious error than the one below. The same number is
+   enforced again in the backend, which is the side that actually has to hold
+   the body in memory. */
+const MAX_UPLOAD_MB=20;
+const MAX_UPLOAD_BYTES=MAX_UPLOAD_MB*1024*1024;
+
 let _pendingPdf=null;
 let _pdfPages=null,_pdfAspect=null;
 /* Name of the PDF in the save currently in flight, or null for a save with no
    file attached. Drives the wording of the progress dialog and its result. */
 let _uploadName=null;
 
+/** "9.4 MB" — for messages about a specific file. */
+function fileSizeMB(bytes){ return (bytes/1024/1024).toFixed(1)+' MB'; }
+
 async function convertFile(file){
   const name=(file.name||'').toLowerCase();
+  /* Checked before anything is read. Parsing a file that cannot be uploaded
+     wastes the admin's time and, for a big one, hangs the tab on a pointless
+     base64 encode before the server rejects it. */
+  if(file.size>MAX_UPLOAD_BYTES){
+    showResult(false,file.name+' is '+fileSizeMB(file.size)+' — the limit is '+MAX_UPLOAD_MB+' MB. Compress the file or split it, then try again.');
+    return null;
+  }
   /* Cleared per import: these are only meaningful for a PDF, and left over
      from a previous one they would tell the post page to reserve the wrong
      length for a Word file. */
@@ -1653,7 +1678,7 @@ function renderBoard(){
       :`<div class="zempty">No articles here yet</div>`;
     return `<div class="bzone ${m.area}" data-zone="${z}">
       <div class="zh"><span class="zdot" style="background:${m.dot}"></span><h4>${m.label}</h4><span class="zpos">${m.pos}</span><span class="zn">${posts.length}</span></div>
-      <div class="zdrop" data-zone="${z}">${zdropSVG()}<b>Drop .docx / .pdf</b> anywhere here, or click</div>
+      <div class="zdrop" data-zone="${z}">${zdropSVG()}<b>Drop .docx / .pdf</b> anywhere here, or click<span class="zdrop-limit">up to ${MAX_UPLOAD_MB} MB</span></div>
       <div class="zlist">${cards}</div></div>`;
   }).join('');
   board.querySelectorAll('.zdrop').forEach(dz=>{
@@ -1950,6 +1975,10 @@ function showResult(ok,msg){
 function hideResult(){clearTimeout(window._adResT);const o=document.getElementById('adResult');if(o){o.style.opacity='0';setTimeout(()=>{if(o)o.style.display='none';},200);}}
 
 function initBlogs(){
+  // The board note carries the limit in static markup; this keeps it honest
+  // against MAX_UPLOAD_BYTES rather than leaving two numbers to drift apart.
+  const noteLimit=document.getElementById('noteLimit');
+  if(noteLimit)noteLimit.textContent=MAX_UPLOAD_MB;
   const file=bEl('blogFile');
   file.onchange=async e=>{
     const f=e.target.files[0];
