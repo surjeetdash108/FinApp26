@@ -1534,6 +1534,9 @@ const BLOG_BRIDGE=!IS_DEMO;
 function blogPost(msg){ try{ parent.postMessage(msg,'*'); }catch(e){} }
 const bEl=id=>document.getElementById(id);
 let _targetZone='edu', _editId=null;
+/* Source PDF awaiting upload with the next save — set by a PDF import, cleared
+   when the modal closes. */
+let _pendingPdf=null;
 
 async function convertFile(file){
   const name=(file.name||'').toLowerCase();
@@ -1552,7 +1555,17 @@ async function convertFile(file){
       html=html||'<p>(No selectable text — this PDF looks scanned. Try a Word file for formatting.)</p>';
     } else {toast('Please upload a .docx or .pdf');return null;}
     toast('Imported '+file.name);
-    return {title:file.name.replace(/\.(docx|pdf)$/i,'').replace(/[-_]/g,' '),html};
+    /* Carry the ORIGINAL pdf through, not just the extracted text. The loop
+       above groups text by Y position and emits one <p> per visual line, so a
+       table row collapses into a paragraph and a wrapped cell into the next —
+       the document's tables and KPI cards cannot survive extraction. The post
+       page embeds this file and keeps the text below it for search engines. */
+    let pdfDataUri=null,pdfName=null;
+    if(name.endsWith('.pdf')){
+      pdfDataUri=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(file);});
+      pdfName=file.name;
+    }
+    return {title:file.name.replace(/\.(docx|pdf)$/i,'').replace(/[-_]/g,' '),html,pdfDataUri,pdfName};
   }catch(e){showResult(false,'Could not read file: '+e.message);return null;}
 }
 /* Articles inside a zone are ordered by rank, lowest first. Rank 1 sits at the
@@ -1714,6 +1727,9 @@ function updateBlogWords(){const t=(bEl('bBody').innerText||'').trim();bEl('bWor
 function updatePlaceChip(){const z=bEl('bZone').value||'edu',m=ZONES[z]||ZONES.edu;bEl('bmPlace').className='bm-place '+m.cls;bEl('bmPlace').innerHTML=`<span style="width:8px;height:8px;border-radius:3px;background:${m.dot};display:inline-block"></span>${m.label} · ${m.pos}`;}
 function openBlogModal(zone,editId,draft){
   _editId=editId||null;
+  /* Only set when this modal was opened from a PDF import; cleared otherwise so
+     an unrelated edit never re-uploads a previous document. */
+  _pendingPdf=draft&&draft.pdfDataUri?{dataUri:draft.pdfDataUri,name:draft.pdfName}:null;
   const p=editId?(BLOGS.find(x=>x.id===editId)||{}):{zone,kick:'',title:draft?draft.title:'',dek:'',author:'',read:'',html:draft?draft.html:''};
   const z=p.zone||zone;
   bEl('bmTitle').textContent=editId?'Edit article':'New article';
@@ -1724,7 +1740,7 @@ function openBlogModal(zone,editId,draft){
   bEl('bPublish').textContent=editId?'Update':'Publish';
   bEl('blogModal').classList.add('on');bEl('blogScrim').classList.add('on');
 }
-function closeBlogModal(){bEl('blogModal').classList.remove('on');bEl('blogScrim').classList.remove('on');_editId=null;}
+function closeBlogModal(){_pendingPdf=null;bEl('blogModal').classList.remove('on');bEl('blogScrim').classList.remove('on');_editId=null;}
 /* Modal save = write straight to the backend through the bridge. The parent
    POSTs (new) or PATCHes (edit), then posts the refreshed list back. */
 function savePublish(){
@@ -1740,6 +1756,7 @@ function savePublish(){
   if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to save'); closeBlogModal(); return; }
   if(!confirm('Publish “'+d.title+'”? It will go live on the site immediately.')) return;   // Cancel: keep editing, nothing is saved
   const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status};
+  if(_pendingPdf){msg.pdfDataUri=_pendingPdf.dataUri;msg.pdfName=_pendingPdf.name;}
   if(_editId)msg.id=_editId;
   const editing=!!_editId;
   blogPost(msg);
