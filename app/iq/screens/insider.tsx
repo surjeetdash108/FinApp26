@@ -30,6 +30,9 @@ interface PositionDoc { id: string; cusip: string; nameOfIssuer: string; value: 
 // institutional-ownership.job.ts, market-data/institutional-ownership.controller.ts).
 interface InstOwnDoc {
   id: string; ticker: string;
+  /** Reporting period these figures are filed for — 13-F carries a quarter,
+   *  not a date, and the backend has always written it. */
+  year?: number | null; quarter?: number | null;
   investorsHolding: number | null; lastInvestorsHolding: number | null;
   investorsHoldingChange: number | null;
   numberOf13Fshares: number | null; numberOf13FsharesChange: number | null;
@@ -546,7 +549,12 @@ export function InsiderScreen() {
                 <table className="tbl">
                   <thead>
                     <tr>
-                      <th>Ticker</th><th className="num">13F filers</th><th className="num">Inst. %</th>
+                      {/* Which filing period the row's figures are FROM. 13-F is
+                          filed up to 45 days after quarter end, so a reader
+                          needs the period to judge how current the numbers are
+                          — the quarter columns to the right are history, not
+                          the as-of date of the headline figures. */}
+                      <th>Ticker</th><th>As of</th><th className="num">13F filers</th><th className="num">Inst. %</th>
                       {instQuarters.map(q => (
                         <th key={q} className="num" style={{ whiteSpace: "nowrap", fontWeight: 500 }}>{q}</th>
                       ))}
@@ -558,6 +566,12 @@ export function InsiderScreen() {
                       <tr key={d.ticker} data-sym={d.ticker} onClick={() => openStockFull(d.ticker)} style={{ cursor: "pointer" }}>
                         <td>
                           <div className="co"><span className="s"><StockLogo sym={d.ticker} size={20} />{d.ticker}</span></div>
+                        </td>
+                        <td style={{ whiteSpace: "nowrap", color: "var(--text-dim-solid)" }}
+                            title={d.year != null && d.quarter != null
+                              ? `Positions as filed for Q${d.quarter} ${d.year}. 13-F is filed up to 45 days after quarter end and excludes short positions.`
+                              : "No reporting period on this record"}>
+                          {d.year != null && d.quarter != null ? qLabel(d.year, d.quarter) : <NotAvailable />}
                         </td>
                         <td className="num">{fmtCount(d.investorsHolding)}</td>
                         <td className="num">{d.ownershipPercent != null ? `${d.ownershipPercent.toFixed(1)}%` : <NotAvailable />}</td>
