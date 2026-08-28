@@ -1646,14 +1646,23 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
                       const a = (g.action ?? "").toLowerCase();
                       const col = a.includes("upgrade") ? "var(--up)" : a.includes("downgrade") ? "var(--down)" : "var(--text-dim-solid)";
                       return (
-                        // 3 left-aligned columns on a shared grid template, so
-                        // action / firm / grade line up across every row (the
-                        // parent .trgroup centres text — overridden to left here).
-                        <div key={i} style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr) minmax(0, 1.35fr)", alignItems: "center", gap: 10, fontSize: ".72rem", textAlign: "left" }}>
+                        // 4 columns on a shared grid template, so action / firm /
+                        // grade / target line up across every row (the parent
+                        // .trgroup centres text — overridden to left here). The
+                        // target is THIS firm's own, not the ticker consensus,
+                        // and is right-aligned with tabular figures so the
+                        // amounts read as a column.
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "60px minmax(0, 1fr) minmax(0, 1.15fr) 46px", alignItems: "center", gap: 8, fontSize: ".72rem", textAlign: "left" }}>
                           <span style={{ color: col, fontWeight: 700, textTransform: "capitalize" }}>{g.action ?? "—"}</span>
                           <span style={{ color: "var(--text-hi)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.firm ?? "—"}</span>
                           <span style={{ color: "var(--text-dim-solid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {(g.previousGrade || g.newGrade) ? `${g.previousGrade ?? "—"} → ${g.newGrade ?? "—"}` : ""}
+                          </span>
+                          <span
+                            title={g.priceTarget != null ? `${g.firm ?? "This firm"}'s price target` : "No price target posted with this action"}
+                            style={{ color: g.priceTarget != null ? "var(--text-hi)" : "var(--text-dim-solid)", fontFamily: "var(--f-mono)", fontWeight: 600, textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+                          >
+                            {g.priceTarget != null ? `$${Math.round(g.priceTarget)}` : "—"}
                           </span>
                         </div>
                       );
