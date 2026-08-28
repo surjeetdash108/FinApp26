@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { mapEarningsToBars, type ChartEarnings } from "./chart-earnings";
 export type { ChartEarnings };
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useId } from "react";
 import { backendUrl } from "./backend";
 // useBackendBars imports OHLCBar back from this file, but as `import type`,
 // which is erased before it reaches the bundler — so this pair does not form a
@@ -150,6 +150,20 @@ const _LP = ['#6366f1','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#ef444
  */
 export const TICKER_LOGO_SCALE = 1.5;
 
+/**
+ * Global size multiplier for every chart and gauge in the app.
+ *
+ * Applied to HEIGHTS (and to the gauges' fixed widths); chart widths stay at
+ * 100% of their container, so shrinking the height widens the aspect and the
+ * rendered chart gets shorter without losing horizontal detail. One number so
+ * the price chart, the earnings bars and both gauges stay in proportion with
+ * each other — the same reason TICKER_LOGO_SCALE exists above.
+ */
+export const CHART_SCALE = 0.85;
+/** Rounds a scaled dimension to a whole pixel; SVG geometry is easier to reason
+ *  about in integers. */
+const cs = (n: number) => Math.round(n * CHART_SCALE);
+
 export function StockLogo({ sym, size = 22 }: { sym: string; size?: number }) {
   const idx = sym.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % _LP.length;
   const px = Math.round(size * TICKER_LOGO_SCALE);
@@ -196,7 +210,7 @@ export function SemiGauge({ val, label, id = "sg" }: { val: number; label: strin
   const color = val >= 60 ? "var(--up)" : val >= 40 ? "var(--warn)" : "var(--down)";
   const gradId = `${id}-grad`;
   return (
-    <svg viewBox="0 0 140 90" width={150} style={{ display: "block" }}>
+    <svg viewBox="0 0 140 90" width={cs(150)} style={{ display: "block" }}>
       <defs>
         <linearGradient id={gradId} x1="0" x2="1">
           <stop offset="0" stopColor="#FF5470" />
@@ -240,7 +254,7 @@ export function TrGauge({ val, label }: { val: number; label: string }) {
     // Centred by its own margin, not by the parent's text-align: Tailwind's
     // preflight sets `svg { display: block }`, so a text-align on .trgroup has
     // nothing inline to centre and the gauge sat against the left edge.
-    <svg viewBox="0 0 180 104" width="190" className="tr-gauge">
+    <svg viewBox="0 0 180 104" width={cs(190)} className="tr-gauge">
       <path d={arc(0, .2)} fill="none" stroke="#FF5470" strokeWidth="13" strokeLinecap="butt" />
       <path d={arc(.2, .4)} fill="none" stroke="#ff9aab" strokeWidth="13" strokeLinecap="butt" />
       <path d={arc(.4, .6)} fill="none" stroke="#697486" strokeWidth="13" strokeLinecap="butt" />
@@ -275,7 +289,7 @@ export interface EarnQ { q: string; e: number; a: number; surp: number; mv: numb
 
 export function EarningsGrowthChart({ hist }: { hist: EarnQ[] }) {
   const d = [...hist].slice(0, 12).reverse();
-  const W = 560, H = 190, PADL = 36, PADR = 12, PADT = 28, PADB = 26;
+  const W = 560, H = cs(190), PADL = 36, PADR = 12, PADT = cs(28), PADB = cs(26);
   const iw = W - PADL - PADR, ih = H - PADT - PADB;
   const vals = d.map(x => x.a);
   const maxV = Math.max(...vals, 0.01) * 1.25;
@@ -496,7 +510,7 @@ type CandleChartProps = {
  */
 export function CandleChart(props: CandleChartProps) {
   if (!props.realBars || props.realBars.length < 2) {
-    return <DataState label="Not enough price history to plot a chart yet." height={264} />;
+    return <DataState label="Not enough price history to plot a chart yet." height={cs(264)} />;
   }
   return <CandleChartInner {...props} />;
 }
@@ -556,7 +570,7 @@ function CandleChartInner({
   }, [warmupTf, warmupSource, data]);
 
   const n = data.length;
-  const W = 720, PH = 224, VH = showVol ? 54 : 0, GAP = showVol ? 10 : 0, PADT = 12, PADB = 26, axisW = 46;
+  const W = 720, PH = cs(224), VH = showVol ? cs(54) : 0, GAP = showVol ? 10 : 0, PADT = 12, PADB = cs(26), axisW = 46;
   const H = PADT + PH + GAP + VH + PADB;
   const plotW = W - axisW - 8;
   const cw = plotW / n;
@@ -594,6 +608,15 @@ function CandleChartInner({
   const erMarks = mapEarningsToBars(data, earnings);
 
   const ct = chartType.toLowerCase();
+  /**
+   * Unique per chart instance. SVG ids are DOCUMENT-global, and this component
+   * mounts twice at once — the inline chart and the expanded one — so a
+   * hardcoded id meant both charts declared the same gradient and every
+   * `url(#…)` in the document resolved to whichever appeared first. A red
+   * chart could render the green chart's area fill: the reported "wrong
+   * colour". The gauge above already generates its id this way.
+   */
+  const areaGradId = `${useId()}-carea`;
   const trendUp = data[n - 1].c >= data[0].c;
   const lineColor = trendUp ? 'var(--up)' : 'var(--down)';
   const linePts = data.map((d, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(d.c).toFixed(1)}`).join(' ');
@@ -713,12 +736,12 @@ function CandleChartInner({
         {ct === 'area' && (
           <>
             <defs>
-              <linearGradient id="cArea" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={areaGradId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0" stopColor={lineColor} stopOpacity={0.28} />
                 <stop offset="1" stopColor={lineColor} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <path d={areaFill} fill="url(#cArea)" stroke="none" />
+            <path d={areaFill} fill={`url(#${areaGradId})`} stroke="none" />
           </>
         )}
         {/* Line / Area line */}
