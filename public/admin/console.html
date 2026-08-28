@@ -382,6 +382,69 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .blog-doc-view iframe{display:block;width:100%;height:420px;border:0}
 .blog-doc-view .bdv-note{padding:16px 18px;background:var(--surface2);color:var(--dim2);font-size:12.5px;line-height:1.5}
 .blog-doc-view .bdv-note a{color:var(--brand2);font-weight:600}
+/* ---- authoring: format chooser, rich editor, preview ------------------- */
+/* The board's own header row. "Add blog" sits at the top right, where a
+   compose action belongs — the dashed drop strips remain, but they only ever
+   accepted a file, so writing a post had no entry point at all. */
+.bl-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.bl-head h2{font-family:var(--f-disp);font-size:16px;font-weight:600;margin:0;color:var(--hi)}
+.bl-head .btn-add{margin-left:auto}
+.btn-add{display:inline-flex;align-items:center;gap:7px;background:var(--brand);border:0;color:#fff;font:600 12.5px var(--f-ui,inherit);padding:9px 15px;border-radius:9px;cursor:pointer;transition:filter .15s}
+.btn-add:hover{filter:brightness(1.12)}
+.btn-add svg{width:15px;height:15px}
+/* Four formats, chosen before anything is typed: the fields a post needs are
+   entirely different for a document and for authored text, so asking first is
+   what keeps the editor from showing boxes that do not apply. */
+.fmt-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.fmt-tile{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:13px 14px;cursor:pointer;color:var(--text);transition:border-color .15s,background .15s}
+.fmt-tile:hover{border-color:var(--brand);background:#7c6cf50e}
+.fmt-tile b{font-size:13.5px;color:var(--hi)}
+.fmt-tile span{font-size:11.5px;color:var(--dim2);line-height:1.45}
+/* Rich / HTML source switch, for an html post that was designed elsewhere. */
+.bl-tabs{display:inline-flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:2px;margin-left:auto}
+.bl-tabs button{background:none;border:0;color:var(--dim2);font:600 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;padding:5px 10px;border-radius:6px;cursor:pointer}
+.bl-tabs button.on{background:var(--brand);color:#fff}
+.fl-row{display:flex;align-items:center;gap:8px;margin:15px 0 7px}
+/* The label keeps the full width it had before it shared a row, so the
+   word count (.cc, float:right) still sits at the right edge instead of
+   butting up against the word "Body". */
+.fl-row .fl{margin:0;flex:1}
+.bl-src{width:100%;min-height:200px;max-height:340px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;color:var(--text);font:12.5px/1.55 var(--f-mono);outline:none;resize:vertical}
+.bl-src:focus{border-color:var(--brand)}
+/* Tiptap mounts its own contenteditable inside this box, so the frame styling
+   lives here and the ProseMirror child only carries typography. */
+.tt-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.tt-wrap.focus{border-color:var(--brand)}
+.tt-bar{display:flex;flex-wrap:wrap;gap:3px;padding:6px;border-bottom:1px solid var(--border)}
+.tt-bar button{background:none;border:1px solid transparent;color:var(--dim);font:600 11.5px var(--f-mono);min-width:26px;height:26px;padding:0 7px;border-radius:6px;cursor:pointer}
+.tt-bar button:hover{background:var(--surface);color:var(--hi)}
+.tt-bar button.on{background:var(--brand);color:#fff}
+.tt-bar .sep{width:1px;background:var(--border);margin:3px 3px}
+.tt-wrap .ProseMirror{min-height:190px;max-height:330px;overflow:auto;padding:14px 16px;color:var(--text);font-size:14px;line-height:1.6;outline:none}
+.tt-wrap .ProseMirror h1,.tt-wrap .ProseMirror h2,.tt-wrap .ProseMirror h3{font-family:var(--f-disp);color:var(--hi);margin:14px 0 8px}
+.tt-wrap .ProseMirror h2{font-size:18px}.tt-wrap .ProseMirror h3{font-size:16px}
+.tt-wrap .ProseMirror p{margin:0 0 12px}
+.tt-wrap .ProseMirror ul,.tt-wrap .ProseMirror ol{padding-left:20px;margin:0 0 12px}
+.tt-wrap .ProseMirror blockquote{border-left:3px solid var(--border2);padding-left:12px;margin:0 0 12px;color:var(--dim)}
+.tt-wrap .ProseMirror img{max-width:100%;border-radius:8px}
+.tt-wrap .ProseMirror a{color:var(--brand2);text-decoration:underline}
+.tt-wrap .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--dim2);float:left;height:0;pointer-events:none}
+/* Preview: the post as the site will draw it, on the site's own light page
+   rather than the console's dark chrome — a dark backdrop would misrepresent
+   every colour the post picked. */
+.prev-stage{background:#fff;color:#181713;border-radius:10px;max-height:70vh;overflow:auto;padding:26px 28px 34px}
+.prev-stage .prev-hero{width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin-bottom:16px;display:block}
+.prev-stage .prev-title{font-family:var(--f-disp);font-size:26px;font-weight:800;line-height:1.15;margin:0 0 8px;color:#12100c}
+.prev-stage .prev-dek{font-size:14.5px;line-height:1.6;color:#4a463d;margin:0 0 14px}
+.prev-stage .prev-rule{border:0;border-top:1px solid #e2ddd2;margin:0 0 18px}
+.prev-body{font-size:15px;line-height:1.7}
+.prev-body :where(h1,h2,h3,h4){margin:20px 0 8px;line-height:1.25}
+.prev-body :where(p){margin:0 0 14px}
+.prev-body :where(ul,ol){margin:0 0 14px;padding-left:24px}
+.prev-body :where(img){max-width:100%;height:auto}
+.prev-body :where(table){border-collapse:collapse;width:100%;margin:0 0 14px}
+.prev-body :where(th,td){border:1px solid #e2ddd2;padding:7px 10px;text-align:left}
+.prev-body :where(a){color:#2f4bd8;text-decoration:underline}
 /* Delete sits where Cancel did, so it is coloured as the destructive action it
    is rather than looking like the neutral dismiss it replaced. */
 .btn-danger{color:#ff5d7a;border-color:rgba(255,93,122,.45)}
@@ -648,8 +711,15 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 
       <section class="view" id="blogs">
         <div class="board-note">Drop a <b>Word</b> or <b>PDF</b> file (up to <b id="noteLimit">20</b> MB) anywhere on a section below — the document itself becomes the article and publishes straight to your site. Use each card's <b>Live / Draft</b> toggle to control whether it shows publicly. <b>Drag cards</b> to reorder them or move them between sections; the order here is the order on the site. This board mirrors <span class="cash">marketcatalyst.ai</span> · the newspaper page.</div>
+        <div class="bl-head">
+          <h2>Articles</h2>
+          <button class="btn-add" onclick="openAddBlog()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add blog</button>
+        </div>
         <div class="blogboard" id="blogboard"></div>
         <input type="file" id="blogFile" accept=".docx,.pdf" hidden>
+        <!-- An html post is usually designed elsewhere and arrives as a file;
+             its <style> blocks are split into the CSS field on import. -->
+        <input type="file" id="htmlFile" accept=".html,.htm" hidden>
       </section>
 
       <!-- SETTINGS -->
@@ -679,6 +749,32 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
   <div class="mf"><button class="btn" style="flex:none" onclick="testEndpoint()">Test connection</button><button class="btn-pub" style="flex:none;padding:11px 20px" onclick="saveSetup()">Save</button></div>
 </div>
 
+<!-- NEW ARTICLE: FORMAT CHOOSER -->
+<div class="scrim" id="fmtScrim" onclick="closeFormatPicker()"></div>
+<div class="modal" id="fmtModal" style="width:520px">
+  <div class="mh"><h3>New article</h3><button class="x" onclick="closeFormatPicker()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
+  <div class="mb">
+    <label class="fl">Placement</label>
+    <select id="fmtZone" class="inp">
+      <option value="edu">Educational — left</option><option value="recap">Recap — center</option><option value="research">Research desk — right</option>
+    </select>
+    <label class="fl">What are you publishing?</label>
+    <div class="fmt-tiles">
+      <button class="fmt-tile" onclick="chooseFormat('text')"><b>Text</b><span>Write it here. Formatted with the site's own styling.</span></button>
+      <button class="fmt-tile" onclick="chooseFormat('html')"><b>HTML</b><span>Bring your own markup and CSS — the design is kept.</span></button>
+      <button class="fmt-tile" onclick="chooseFormat('pdf')"><b>PDF</b><span>The document itself becomes the article.</span></button>
+      <button class="fmt-tile" onclick="chooseFormat('doc')"><b>Word</b><span>Same, from a .docx file.</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ARTICLE PREVIEW -->
+<div class="scrim" id="prevScrim" onclick="closePreview()" style="z-index:70"></div>
+<div class="modal" id="prevModal" style="width:760px;z-index:80">
+  <div class="mh"><h3>Preview</h3><button class="x" onclick="closePreview()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
+  <div class="mb"><div class="prev-stage" id="prevStage"></div></div>
+</div>
+
 <!-- BLOG PUBLISH / EDIT MODAL (ported) -->
 <div class="scrim" id="blogScrim" onclick="closeBlogModal()"></div>
 <div class="modal" id="blogModal" style="width:600px">
@@ -702,14 +798,44 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
          often has nothing worth saying above it. -->
     <label class="fl">Summary <span class="cc">shown above the document and on the board card</span></label>
     <textarea id="bDek" class="inp" rows="3" placeholder="Generated automatically for the daily recap. Leave blank to show nothing."></textarea>
-    <label class="fl" id="bBodyLabel">Body <span class="cc" id="bWords"></span></label>
+    <!-- Authored posts only: a document post's own first page is its hero. -->
+    <div id="bHeroRow" style="display:none">
+      <label class="fl">Hero image URL <span class="cc">shown above the article and on the board card</span></label>
+      <input id="bHero" class="inp" placeholder="https://… (optional)">
+    </div>
+    <div class="fl-row">
+      <label class="fl" id="bBodyLabel">Body <span class="cc" id="bWords"></span></label>
+      <!-- html only: the same post seen as its rendered form or as the markup
+           it was designed as. Switching writes through, so neither view goes
+           stale behind the other. -->
+      <div class="bl-tabs" id="bTabs" style="display:none">
+        <button id="bTabRich" class="on" onclick="setSourceMode(false)">Rich</button>
+        <button id="bTabSrc" onclick="setSourceMode(true)">HTML</button>
+      </div>
+    </div>
     <!-- A post published from a document shows the document itself: that IS the
          article on the site, and there is nothing here worth editing. Posts
          without one keep the editable body below. -->
     <div id="bDocView" class="blog-doc-view" style="display:none"></div>
+    <!-- Tiptap mounts here when it loads. If the CDN module fails, this stays
+         empty and the contenteditable below takes over — the editor is a
+         convenience, and losing it must not cost the admin the ability to
+         write a post. -->
+    <div id="bRich" class="tt-wrap" style="display:none">
+      <div class="tt-bar" id="bBar"></div>
+      <div id="bRichMount"></div>
+    </div>
     <div id="bBody" class="blog-body-edit" contenteditable="true" data-ph="Drop a file to fill this, or type your article here…"></div>
+    <textarea id="bSrc" class="bl-src" style="display:none" spellcheck="false" placeholder="<article>…</article> — paste the markup, or load a file below."></textarea>
+    <div id="bCssRow" style="display:none">
+      <div class="fl-row">
+        <label class="fl">CSS <span class="cc">applied to this article only</span></label>
+        <button class="btn" style="flex:none;margin-left:auto;padding:5px 11px;font-size:11.5px" onclick="pickHtmlFile()">Load .html file</button>
+      </div>
+      <textarea id="bCss" class="bl-src" style="min-height:110px" spellcheck="false" placeholder=".kpi{display:grid} — &lt;style&gt; blocks from an imported file land here."></textarea>
+    </div>
   </div>
-  <div class="mf"><button class="btn btn-danger" style="flex:none" id="bDelete">Delete</button><button class="btn-pub sch" style="flex:none;padding:11px 22px" id="bPublish">Publish</button></div>
+  <div class="mf"><button class="btn btn-danger" style="flex:none" id="bDelete">Delete</button><button class="btn" style="flex:none" id="bPreview" onclick="openPreview()">Preview</button><button class="btn-pub sch" style="flex:none;padding:11px 22px" id="bPublish">Publish</button></div>
 </div>
 
 
@@ -719,6 +845,44 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- Tiptap, as ES modules from a CDN. This console is a single static file with
+     no build step, so there is nothing to bundle it into.
+
+     `?deps=` pins every extension to ONE copy of @tiptap/core — without it the
+     CDN resolves a separate core for each package and the editor is assembled
+     from extensions that belong to a different instance than it does.
+
+     Failure is expected and handled: if the network or the CDN is unavailable
+     this script exits quietly, window.__tiptap stays undefined, and the editor
+     falls back to the contenteditable the console has always had. -->
+<script type="module">
+  /* Pinned to the last 2.x. The extensions and the core must be the SAME
+     version, not merely compatible ranges: mixing them resolves a core that is
+     missing helpers the extensions import, and the whole editor fails to load
+     (which is survivable — see the catch — but leaves the admin on the plain
+     editor for no reason). */
+  const V='2.27.2', D='?deps=@tiptap/core@'+V;
+  const cdn=(pkg,q)=>'https://esm.sh/@tiptap/'+pkg+'@'+V+(q||'');
+  try{
+    const [core,kit,link,image,placeholder]=await Promise.all([
+      import(cdn('core')),
+      import(cdn('starter-kit',D)),
+      import(cdn('extension-link',D)),
+      import(cdn('extension-image',D)),
+      import(cdn('extension-placeholder',D)),
+    ]);
+    window.__tiptap={
+      Editor:core.Editor,
+      StarterKit:kit.default||kit.StarterKit,
+      Link:link.default||link.Link,
+      Image:image.default||image.Image,
+      Placeholder:placeholder.default||placeholder.Placeholder,
+    };
+    window.dispatchEvent(new Event('tiptap:ready'));
+  }catch(e){
+    console.warn('Tiptap unavailable — the plain editor is in use',e);
+  }
+</script>
 
 <!-- Blog articles are read/written through the postMessage bridge to the React
      parent (app/admin/page.tsx), which owns the admin token and calls the
@@ -1546,7 +1710,13 @@ function normalizeBlog(p){
     // Carried so the editor can show the document instead of a body field.
     pdfUrl:p.pdfUrl||null,
     pdfName:p.pdfName||null,
-    sourceKind:p.sourceKind||null
+    sourceKind:p.sourceKind||null,
+    /* How the body is authored. The backend derives one for posts written
+       before the field existed, so the fallback here is only for an older
+       deploy answering. */
+    format:p.format||(p.pdfUrl?((p.sourceKind==='docx')?'doc':'pdf'):'text'),
+    css:Array.isArray(p.css)?p.css:[],
+    heroImageUrl:p.heroImageUrl||null
   };
 }
 /* The live working set. Seeded from the staged dataset; replaced wholesale by
@@ -1704,7 +1874,8 @@ function renderBoard(){
   }).join('');
   board.querySelectorAll('.zdrop').forEach(dz=>{
     const z=dz.dataset.zone;
-    dz.onclick=()=>{_targetZone=z;const f=bEl('blogFile');f.value='';f.click();};
+    // accept is narrowed by the format picker, so reset it here.
+    dz.onclick=()=>{_targetZone=z;const f=bEl('blogFile');f.accept='.docx,.pdf';f.value='';f.click();};
   });
   wireCardDrag(board);
   wireFileDrop(board);
@@ -1814,20 +1985,285 @@ function wireFileDrop(board){
 function updateBlogWords(){
   const words=document.getElementById('bWords');
   if(!words)return;
-  const t=(bEl('bBody').innerText||'').trim();
+  const t=(_tt?_tt.state.doc.textContent:(bEl('bBody').innerText||'')).trim();
   words.textContent=t?(t.split(/\s+/).length+' words'):'';
 }
+/* ================= AUTHORING (format-aware editor) =================
+   The board could only ever accept a dropped document. These four formats
+   split that in two: a PDF or Word file still publishes as itself, while
+   `text` and `html` are written here — `text` in a rich editor the site
+   styles, `html` as markup that keeps the CSS it was designed with.
+
+   `format` is not the zone. The zone (edu/recap/research) decides WHERE a post
+   appears on the site; the format decides HOW it is drawn. */
+const FORMATS={text:'Text',html:'HTML',pdf:'PDF',doc:'Word'};
+let _format='text';    // format of the post currently open in the editor
+let _srcMode=false;    // html only: editing the markup rather than the rendered form
+let _tt=null;          // the Tiptap editor, when the CDN module loaded
+
+/* ---- new-article flow: choose the format before anything is typed ---- */
+function openAddBlog(){
+  bEl('fmtZone').value=_targetZone||'edu';
+  bEl('fmtModal').classList.add('on');bEl('fmtScrim').classList.add('on');
+}
+function closeFormatPicker(){
+  bEl('fmtModal').classList.remove('on');bEl('fmtScrim').classList.remove('on');
+}
+function chooseFormat(f){
+  const z=bEl('fmtZone').value||'edu';
+  closeFormatPicker();
+  _targetZone=z;
+  /* A document goes down the path that already exists: pick the file, import
+     it, publish it. Nothing about that flow changes. */
+  if(f==='pdf'||f==='doc'){
+    const inp=bEl('blogFile');
+    inp.accept=(f==='pdf')?'.pdf':'.docx';
+    inp.value='';inp.click();
+    return;
+  }
+  openBlogModal(z,null,null,f);
+}
+
+/* ---- Tiptap ----
+   Loaded from a CDN as an ES module (see the module script near the bottom).
+   It is a convenience, not a dependency: if the module does not load, the
+   plain contenteditable that was always here takes over, and every other part
+   of the editor — including saving — works unchanged. */
+const TT_BTNS=[
+  {l:'B',t:'Bold',run:e=>e.chain().focus().toggleBold().run(),on:e=>e.isActive('bold')},
+  {l:'I',t:'Italic',run:e=>e.chain().focus().toggleItalic().run(),on:e=>e.isActive('italic')},
+  {sep:true},
+  {l:'H2',t:'Heading',run:e=>e.chain().focus().toggleHeading({level:2}).run(),on:e=>e.isActive('heading',{level:2})},
+  {l:'H3',t:'Subheading',run:e=>e.chain().focus().toggleHeading({level:3}).run(),on:e=>e.isActive('heading',{level:3})},
+  {sep:true},
+  {l:'•',t:'Bullet list',run:e=>e.chain().focus().toggleBulletList().run(),on:e=>e.isActive('bulletList')},
+  {l:'1.',t:'Numbered list',run:e=>e.chain().focus().toggleOrderedList().run(),on:e=>e.isActive('orderedList')},
+  {l:'❝',t:'Quote',run:e=>e.chain().focus().toggleBlockquote().run(),on:e=>e.isActive('blockquote')},
+  {l:'—',t:'Divider',run:e=>e.chain().focus().setHorizontalRule().run()},
+  {sep:true},
+  {l:'link',t:'Link',run:e=>{
+    const prev=e.getAttributes('link').href||'';
+    const url=prompt('Link URL (leave empty to remove)',prev);
+    if(url===null)return;
+    if(!url){e.chain().focus().extendMarkRange('link').unsetLink().run();return;}
+    e.chain().focus().extendMarkRange('link').setLink({href:url}).run();
+  },on:e=>e.isActive('link')},
+  {l:'img',t:'Image',run:e=>{
+    const url=prompt('Image URL');
+    if(url)e.chain().focus().setImage({src:url}).run();
+  }},
+  {sep:true},
+  {l:'↺',t:'Undo',run:e=>e.chain().focus().undo().run()},
+  {l:'↻',t:'Redo',run:e=>e.chain().focus().redo().run()},
+];
+function buildBar(){
+  const bar=bEl('bBar');bar.innerHTML='';
+  TT_BTNS.forEach((b,i)=>{
+    if(b.sep){const d=document.createElement('div');d.className='sep';bar.appendChild(d);return;}
+    const el=document.createElement('button');
+    el.type='button';el.textContent=b.l;el.title=b.t;el.dataset.i=i;
+    /* mousedown, not click: the editor loses its selection on blur, and a
+       click fires after that — so "bold the selected words" would apply to an
+       empty selection instead. */
+    el.addEventListener('mousedown',ev=>{ev.preventDefault();if(_tt)b.run(_tt);syncBar();});
+    bar.appendChild(el);
+  });
+}
+function syncBar(){
+  if(!_tt)return;
+  bEl('bBar').querySelectorAll('button').forEach(el=>{
+    const b=TT_BTNS[+el.dataset.i];
+    if(b&&b.on){try{el.classList.toggle('on',!!b.on(_tt));}catch(e){}}
+  });
+}
+function mountRich(html){
+  const T=window.__tiptap,wrap=bEl('bRich');
+  if(!T){
+    /* No editor: the original contenteditable, which is still in the page for
+       exactly this reason. */
+    wrap.style.display='none';
+    bEl('bBody').innerHTML=html||'';
+    return false;
+  }
+  destroyRich();
+  _tt=new T.Editor({
+    element:bEl('bRichMount'),
+    extensions:[
+      T.StarterKit,
+      T.Link.configure({openOnClick:false,autolink:true}),
+      T.Image,
+      T.Placeholder.configure({placeholder:'Write the article…'}),
+    ],
+    content:html||'',
+    onUpdate:()=>{updateBlogWords();syncBar();},
+    onSelectionUpdate:syncBar,
+    onFocus:()=>wrap.classList.add('focus'),
+    onBlur:()=>wrap.classList.remove('focus'),
+  });
+  buildBar();syncBar();
+  return true;
+}
+function destroyRich(){
+  if(_tt){try{_tt.destroy();}catch(e){}_tt=null;}
+  bEl('bRichMount').innerHTML='';
+}
+/* The editor may finish loading while a post is already open — mount it then,
+   rather than leaving the admin on the fallback for the rest of the session. */
+window.addEventListener('tiptap:ready',()=>{
+  if(!bEl('blogModal').classList.contains('on'))return;
+  if(_format!=='text'&&!(_format==='html'&&!_srcMode))return;
+  const html=bEl('bBody').innerHTML;
+  if(mountRich(html))applyBodyView();
+});
+
+/* ---- which body editor is on screen ---- */
+function applyBodyView(){
+  const doc=(_format==='pdf'||_format==='doc');
+  const src=(_format==='html'&&_srcMode);
+  const rich=!doc&&!src;
+  bEl('bSrc').style.display=src?'':'none';
+  bEl('bRich').style.display=(rich&&_tt)?'':'none';
+  bEl('bBody').style.display=(rich&&!_tt)?'':'none';
+  bEl('bTabRich').classList.toggle('on',!_srcMode);
+  bEl('bTabSrc').classList.toggle('on',_srcMode);
+}
+function setSourceMode(on){
+  if(_format!=='html')return;
+  if(on){
+    /* Rich → markup. The rich editor understands a document model, not
+       arbitrary markup: round-tripping a designed page through it drops the
+       containers and attributes its schema has no node for. So the edits are
+       offered, never forced. */
+    if(_tt){
+      const rich=_tt.getHTML(),cur=bEl('bSrc').value;
+      if(rich.trim()&&rich!==cur){
+        if(!cur.trim()||confirm('Replace the markup with what the rich editor produced?\n\nStructure the editor does not support (custom containers, attributes, inline styles) will be simplified.')){
+          bEl('bSrc').value=rich;
+        }
+      }
+    }
+  } else {
+    mountRich(bEl('bSrc').value);
+  }
+  _srcMode=!!on;
+  applyBodyView();
+}
+/* The single place that answers "what is the body right now" — the answer
+   depends on which of three editors is on screen. */
+function bodyHtml(){
+  if(_format==='html'&&_srcMode)return bEl('bSrc').value;
+  if(_tt)return _tt.getHTML();
+  return bEl('bBody').innerHTML;
+}
+
+/* ---- import a designed .html file ---- */
+function pickHtmlFile(){const f=bEl('htmlFile');f.value='';f.click();}
+function loadHtmlSource(text){
+  /* Parsed rather than regexed so a full document contributes only its body:
+     keeping <head> would publish the title and meta as loose text. */
+  const doc=new DOMParser().parseFromString(text,'text/html');
+  const css=[...doc.querySelectorAll('style')].map(n=>n.textContent.trim()).filter(Boolean);
+  /* <link> and <script> cannot survive the site's sanitizer anyway; dropping
+     them here means the admin sees the markup that will actually publish. */
+  doc.querySelectorAll('style,script,link').forEach(n=>n.remove());
+  bEl('bSrc').value=(doc.body?doc.body.innerHTML:text).trim();
+  const existing=bEl('bCss').value.trim();
+  bEl('bCss').value=existing?(existing+'\n\n'+css.join('\n\n')):css.join('\n\n');
+  if(!bEl('bTitle').value.trim()){
+    const h1=doc.querySelector('h1');
+    bEl('bTitle').value=(doc.title||(h1&&h1.textContent)||'').trim().slice(0,120);
+  }
+  _srcMode=true;applyBodyView();
+  toast(css.length?('Loaded · '+css.length+' stylesheet'+(css.length>1?'s':'')+' extracted'):'Loaded');
+}
+
+/* ---- preview ----
+   Mirrors lib/blog/scope-css.ts on the site, which is the authoritative pass:
+   this one exists so the admin sees the post confined to its own container the
+   same way the reader will, instead of the CSS restyling the console. */
+function scopeCssPreview(css,scope){
+  let out=String(css||'').replace(/\/\*[\s\S]*?\*\//g,'').replace(/@import[^;]+;/gi,'');
+  out=out.replace(/url\(\s*([^)]+?)\s*\)/gi,(m,r)=>/^(['"]?)(https?:)?\/\//i.test(r.trim())?'none':m);
+  let res='',i=0;
+  while(i<out.length){
+    const open=out.indexOf('{',i);if(open<0)break;
+    const head=out.slice(i,open).trim();
+    let depth=1,j=open+1;
+    while(j<out.length&&depth>0){if(out[j]==='{')depth++;else if(out[j]==='}')depth--;j++;}
+    const body=out.slice(open+1,j-1);
+    if(head.startsWith('@')){
+      res+=/^@(media|supports|layer|container)\b/i.test(head)
+        ? head+'{'+scopeCssPreview(body,scope)+'}'
+        : head+'{'+body+'}';
+    } else if(head){
+      res+=head.split(',').map(x=>{
+        const t=x.trim();
+        if(!t)return '';
+        if(/^(html|body|:root|\*)$/i.test(t))return scope;
+        return t.startsWith(scope)?t:(scope+' '+t);
+      }).filter(Boolean).join(', ')+'{'+body+'}';
+    }
+    i=j;
+  }
+  return res;
+}
+function openPreview(){
+  const stage=bEl('prevStage');
+  const title=bEl('bTitle').value.trim()||'Untitled';
+  const dek=bEl('bDek').value.trim();
+  const hero=bEl('bHero').value.trim();
+  const html=bodyHtml();
+  const css=(_format==='html')?bEl('bCss').value:'';
+  const scoped=css.trim()?scopeCssPreview(css,'.prev-body'):'';
+  stage.innerHTML=
+    (hero?'<img class="prev-hero" src="'+xesc(hero)+'" alt="">':'')+
+    '<h1 class="prev-title">'+xesc(title)+'</h1>'+
+    (dek?'<p class="prev-dek">'+xesc(dek)+'</p>':'')+
+    '<hr class="prev-rule">'+
+    (scoped?'<style>'+scoped.replace(/<\/?(style|script)/gi,'')+'</style>':'')+
+    '<div class="prev-body">'+html+'</div>';
+  bEl('prevModal').classList.add('on');bEl('prevScrim').classList.add('on');
+}
+function closePreview(){
+  bEl('prevModal').classList.remove('on');bEl('prevScrim').classList.remove('on');
+  bEl('prevStage').innerHTML='';   // don't leave the post's CSS mounted
+}
 function updatePlaceChip(){const z=bEl('bZone').value||'edu',m=ZONES[z]||ZONES.edu;bEl('bmPlace').className='bm-place '+m.cls;bEl('bmPlace').innerHTML=`<span style="width:8px;height:8px;border-radius:3px;background:${m.dot};display:inline-block"></span>${m.label} · ${m.pos}`;}
-function openBlogModal(zone,editId,draft){
+/* Shows the fields this format actually uses. A document post asks for none
+   of them — its own pages are the article — so leaving them on screen only
+   invited the admin to fill in boxes the reader would never see. */
+function applyFormatUI(html){
+  const doc=(_format==='pdf'||_format==='doc'),htmlFmt=(_format==='html');
+  bEl('bHeroRow').style.display=doc?'none':'';
+  bEl('bCssRow').style.display=htmlFmt?'':'none';
+  bEl('bTabs').style.display=htmlFmt?'':'none';
+  bEl('bPreview').style.display=doc?'none':'';
+  destroyRich();
+  /* html opens on its markup: that is the artifact being published, and the
+     rich editor cannot represent all of it. */
+  _srcMode=htmlFmt;
+  bEl('bSrc').value=htmlFmt?(html||''):'';
+  bEl('bBody').innerHTML=(!doc&&!htmlFmt)?(html||''):'';
+  if(!doc&&!htmlFmt)mountRich(html||'');
+  applyBodyView();
+}
+function openBlogModal(zone,editId,draft,format){
   _editId=editId||null;
   /* Only set when this modal was opened from a PDF import; cleared otherwise so
      an unrelated edit never re-uploads a previous document. */
   _pendingPdf=draft&&draft.pdfDataUri?{dataUri:draft.pdfDataUri,name:draft.pdfName,pages:draft.pdfPages,aspect:draft.pdfAspect}:null;
   const p=editId?(BLOGS.find(x=>x.id===editId)||{}):{zone,kick:'',title:draft?draft.title:'',dek:'',author:'',read:'',html:draft?draft.html:''};
   const z=p.zone||zone;
-  bEl('bmTitle').textContent=editId?'Edit article':'New article';
-  bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';bEl('bBody').innerHTML=p.html||'';
+  /* Explicit choice first (the new-article picker), then what the post already
+     is, then what was imported. A post edited before formats existed has one
+     derived by normalizeBlog, so this is never blank. */
+  _format=format||p.format||(_pendingPdf?((/\.docx$/i.test(_pendingPdf.name||''))?'doc':'pdf'):'text');
+  bEl('bmTitle').textContent=(editId?'Edit article':'New article')+' · '+(FORMATS[_format]||_format);
+  bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';
+  bEl('bHero').value=p.heroImageUrl||'';
+  bEl('bCss').value=(Array.isArray(p.css)?p.css:[]).join('\n\n');
   bEl('bRank').value=p.rank||nextRank(z,editId);
+  applyFormatUI(p.html||'');
   renderDocView(p);
   updatePlaceChip();updateBlogWords();
   // Always "Publish": this dialog's job is to put the article live, whether it
@@ -1843,14 +2279,17 @@ function openBlogModal(zone,editId,draft){
    none). Word has no inline viewer in any browser, so that case offers the file
    instead of pretending to preview it. */
 function renderDocView(p){
-  const view=bEl('bDocView'), body=bEl('bBody'), label=bEl('bBodyLabel');
+  const view=bEl('bDocView'), label=bEl('bBodyLabel');
   const url=p&&p.pdfUrl, name=(p&&p.pdfName)||'the document';
   if(!url){
     view.style.display='none';view.innerHTML='';
-    body.style.display='';label.innerHTML='Body <span class="cc" id="bWords"></span>';
+    label.innerHTML='Body <span class="cc" id="bWords"></span>';
+    /* Which body editor is on screen depends on the format, not on whether
+       there is a document — applyBodyView owns that decision. Setting it here
+       as well put the plain editor back underneath the rich one. */
+    applyBodyView();
     return;
   }
-  body.style.display='none';
   label.textContent='Document';
   const kind=(p.sourceKind||'pdf').toLowerCase();
   view.innerHTML = kind==='docx'
@@ -1864,6 +2303,9 @@ function closeBlogModal(){
   _pendingPdf=null;
   // Drop the embed so a closed dialog is not still holding a PDF in memory.
   bEl('bDocView').innerHTML='';
+  // Same for the editor: a live ProseMirror instance per opened post would
+  // accumulate for the life of the session.
+  destroyRich();
   bEl('blogModal').classList.remove('on');bEl('blogScrim').classList.remove('on');_editId=null;
 }
 
@@ -1904,6 +2346,7 @@ function publishImportedFile(zone,draft){
     read:'',
     html:draft.html,
     status:'Published',
+    format:/\.docx$/i.test(draft.pdfName||'')?'doc':'pdf',
     pdfDataUri:draft.pdfDataUri,
     pdfName:draft.pdfName,
     pdfPages:draft.pdfPages,
@@ -1917,7 +2360,7 @@ function savePublish(){
   /* The summary is carried through as typed. It is optional — the daily recap
      job fills it automatically, a manual upload usually leaves it blank — so
      there is no required-field check on it. */
-  const d={zone:bEl('bZone').value||'edu',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value.trim(),author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bEl('bBody').innerHTML};
+  const d={zone:bEl('bZone').value||'edu',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value.trim(),author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bodyHtml()};
   if(!d.title){toast('Add a title first');return;}
   const typed=parseInt(bEl('bRank').value,10);
   d.rank=(typed&&typed>0)?typed:nextRank(d.zone,_editId);
@@ -1926,7 +2369,15 @@ function savePublish(){
   d.status='Published';
   if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to save'); closeBlogModal(); return; }
   if(!confirm('Publish “'+d.title+'”? It will go live on the site immediately.')) return;   // Cancel: keep editing, nothing is saved
-  const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status};
+  const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status,format:_format,heroImageUrl:bEl('bHero').value.trim()||null};
+  /* Sent as its own field because the body sanitizer does not allow a <style>
+     tag: CSS left inline would be deleted and the post would publish unstyled.
+     The backend also pulls any <style> still in the markup, so an admin who
+     pastes a whole document into the source box keeps its design either way. */
+  if(_format==='html'){
+    const css=bEl('bCss').value.trim();
+    msg.css=css?[css]:[];
+  }
   if(_pendingPdf){msg.pdfDataUri=_pendingPdf.dataUri;msg.pdfName=_pendingPdf.name;msg.pdfPages=_pendingPdf.pages;msg.pdfAspect=_pendingPdf.aspect;}
   if(_editId)msg.id=_editId;
   const editing=!!_editId;
@@ -2067,6 +2518,14 @@ function initBlogs(){
     if(d&&d.pdfDataUri){publishImportedFile(_targetZone||'edu',d);}
     else{hideBusy();if(d)openBlogModal(_targetZone||'edu',null,d);}
     e.target.value='';   // so re-picking the same file fires change again
+  };
+  const hf=bEl('htmlFile');
+  hf.onchange=async e=>{
+    const f=e.target.files[0];
+    if(!f)return;
+    try{loadHtmlSource(await f.text());}
+    catch(err){showResult(false,'Could not read '+f.name+': '+err.message);}
+    e.target.value='';
   };
   bEl('bBody').addEventListener('input',updateBlogWords);
   bEl('bDelete').onclick=deleteFromModal;

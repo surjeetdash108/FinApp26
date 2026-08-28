@@ -110,6 +110,13 @@ export interface ConsoleBlogRow {
   pdfUrl: string | null;
   pdfName: string | null;
   sourceKind: string | null;
+  /** How the body is authored: "html" | "text" | "pdf" | "doc". Decides which
+   *  editor the console opens and how the site renders the post. */
+  format: string;
+  /** Stylesheets for an html post, split out of the body by the backend. */
+  css: string[];
+  /** Hero image shown above the article on the site. */
+  heroImageUrl: string | null;
 }
 
 export interface ApiHealthEndpoint {
@@ -238,6 +245,9 @@ interface BackendBlog {
   pdfUrl?: string | null;
   pdfName?: string | null;
   sourceKind?: string | null;
+  format?: string;
+  css?: string[];
+  heroImageUrl?: string | null;
 }
 
 /** Presentation mapping for one backend blog row → the console's shape. Missing
@@ -258,6 +268,11 @@ function toConsoleBlog(b: BackendBlog): ConsoleBlogRow {
     pdfUrl: b.pdfUrl ?? null,
     pdfName: b.pdfName ?? null,
     sourceKind: b.sourceKind ?? null,
+    // The backend derives a format for posts written before the field existed,
+    // so this is only defensive against an older deploy answering.
+    format: b.format ?? (b.pdfUrl ? "pdf" : "text"),
+    css: Array.isArray(b.css) ? b.css : [],
+    heroImageUrl: b.heroImageUrl ?? null,
   };
 }
 
