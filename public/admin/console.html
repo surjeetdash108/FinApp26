@@ -431,7 +431,18 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .tt-wrap .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--dim2);float:left;height:0;pointer-events:none}
 /* Preview: the post as the site will draw it, on the site's own light page
    rather than the console's dark chrome — a dark backdrop would misrepresent
-   every colour the post picked. */
+   every colour the post picked.
+
+   The WHOLE popup is white, frame included. A white page inside a dark window
+   still reads as a swatch sitting on the console; the point of a preview is to
+   judge the article against the background it will actually publish onto, with
+   nothing of the admin's own palette left around the edges. */
+#prevModal{background:#fff;border-color:#e4dfd4}
+#prevModal .mh{border-bottom-color:#ece7dc}
+#prevModal .mh h3{color:#181713}
+#prevModal .mh .x{background:#f4f1ea;border-color:#e4dfd4;color:#5a564d}
+#prevModal .mh .x:hover{background:#ece7dc}
+#prevModal .mb{background:#fff}
 .prev-stage{background:#fff;color:#181713;border-radius:10px;max-height:70vh;overflow:auto;padding:26px 28px 34px}
 .prev-stage .prev-hero{width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin-bottom:16px;display:block}
 .prev-stage .prev-title{font-family:var(--f-disp);font-size:26px;font-weight:800;line-height:1.15;margin:0 0 8px;color:#12100c}
@@ -445,6 +456,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .prev-body :where(table){border-collapse:collapse;width:100%;margin:0 0 14px}
 .prev-body :where(th,td){border:1px solid #e2ddd2;padding:7px 10px;text-align:left}
 .prev-body :where(a){color:#2f4bd8;text-decoration:underline}
+.prev-body :where(blockquote){border-left:3px solid #e2ddd2;padding-left:14px;margin:0 0 14px;color:#4a463d}
 /* Delete sits where Cancel did, so it is coloured as the destructive action it
    is rather than looking like the neutral dismiss it replaced. */
 .btn-danger{color:#ff5d7a;border-color:rgba(255,93,122,.45)}
