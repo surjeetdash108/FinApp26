@@ -448,6 +448,9 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .prev-stage .prev-dek{font-size:14.5px;line-height:1.6;color:#4a463d;margin:0 0 14px}
 .prev-stage .prev-rule{border:0;border-top:1px solid #e2ddd2;margin:0 0 18px}
 .prev-body{font-size:15px;line-height:1.7}
+/* Mirrors the site: prose is capped and centred, a document or html post uses
+   the whole sheet. Set per format when the preview is built. */
+.prev-body.narrow{max-width:820px;margin:0 auto}
 .prev-body :where(h1,h2,h3,h4){margin:20px 0 8px;line-height:1.25}
 .prev-body :where(p){margin:0 0 14px}
 .prev-body :where(ul,ol){margin:0 0 14px;padding-left:24px}
@@ -781,7 +784,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 
 <!-- ARTICLE PREVIEW -->
 <div class="scrim" id="prevScrim" onclick="closePreview()" style="z-index:70"></div>
-<div class="modal" id="prevModal" style="width:760px;z-index:80">
+<div class="modal" id="prevModal" style="width:1000px;z-index:80">
   <div class="mh"><h3>Preview</h3><button class="x" onclick="closePreview()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
   <div class="mb"><div class="prev-stage" id="prevStage"></div></div>
 </div>
@@ -2232,7 +2235,7 @@ function openPreview(){
     (dek?'<p class="prev-dek">'+xesc(dek)+'</p>':'')+
     '<hr class="prev-rule">'+
     (scoped?'<style>'+scoped.replace(/<\/?(style|script)/gi,'')+'</style>':'')+
-    '<div class="prev-body">'+html+'</div>';
+    '<div class="prev-body'+((_format==='html')?'':' narrow')+'">'+html+'</div>';
   bEl('prevModal').classList.add('on');bEl('prevScrim').classList.add('on');
 }
 function closePreview(){
