@@ -431,6 +431,23 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .tt-wrap .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--dim2);float:left;height:0;pointer-events:none}
 /* Hero image preview — the picked file or the pasted URL, drawn as the board
    card will draw it so a wrong or broken image is obvious before publishing. */
+/* Gallery — a contact sheet of everything in the library. */
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;
+  max-height:60vh;overflow-y:auto}
+.gal-empty{grid-column:1/-1;padding:34px 0;text-align:center;color:var(--dim2);font-size:13px}
+.gal-item{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface2);
+  display:flex;flex-direction:column}
+.gal-item.on{border-color:var(--brand)}
+.gal-item img{width:100%;height:96px;object-fit:cover;display:block;background:var(--surface)}
+.gal-name{padding:7px 9px 0;font-size:11px;color:var(--hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gal-meta{padding:1px 9px 7px;font-size:10px;color:var(--dim2)}
+.gal-acts{display:flex;gap:4px;padding:0 7px 7px;margin-top:auto}
+.gal-acts button{flex:1;border:1px solid var(--border);background:transparent;color:var(--dim);
+  border-radius:6px;padding:4px 0;font:600 10.5px inherit;cursor:pointer}
+.gal-acts button:hover{color:var(--hi);border-color:var(--brand)}
+.gal-acts button.del{flex:0 0 26px;color:#ff5d7a;border-color:rgba(255,93,122,.4)}
+.theme-note{margin-top:8px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:9px;color:var(--dim2);font-size:11.5px;line-height:1.5}
 .hero-prev{display:flex;align-items:center;gap:12px;margin-top:9px;padding:9px 11px;
   background:var(--surface2);border:1px solid var(--border);border-radius:10px}
 .hero-prev img{width:96px;height:60px;object-fit:cover;border-radius:7px;flex:none;background:var(--surface)}
@@ -744,6 +761,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
              its <style> blocks are split into the CSS field on import. -->
         <input type="file" id="htmlFile" accept=".html,.htm" hidden>
         <input type="file" id="heroFile" accept="image/*" hidden>
+        <input type="file" id="galFile" accept="image/*" multiple hidden>
       </section>
 
       <!-- SETTINGS -->
@@ -786,9 +804,25 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
     <div class="fmt-tiles">
       <button class="fmt-tile" onclick="chooseFormat('text')"><b>Text</b><span>Write it here. Formatted with the site's own styling.</span></button>
       <button class="fmt-tile" onclick="chooseFormat('html')"><b>HTML</b><span>Bring your own markup and CSS — the design is kept.</span></button>
-      <button class="fmt-tile" onclick="chooseFormat('pdf')"><b>PDF</b><span>The document itself becomes the article.</span></button>
-      <button class="fmt-tile" onclick="chooseFormat('doc')"><b>Word</b><span>Same, from a .docx file.</span></button>
+      <!-- PDF and Word are hidden for now, not deleted: the import, upload and
+           viewer paths behind them all still work, so bringing them back means
+           removing this one style attribute from each. -->
+      <button class="fmt-tile" style="display:none" onclick="chooseFormat('pdf')"><b>PDF</b><span>The document itself becomes the article.</span></button>
+      <button class="fmt-tile" style="display:none" onclick="chooseFormat('doc')"><b>Word</b><span>Same, from a .docx file.</span></button>
     </div>
+  </div>
+</div>
+
+<!-- IMAGE GALLERY -->
+<div class="scrim" id="galScrim" onclick="closeGallery()" style="z-index:70"></div>
+<div class="modal" id="galModal" style="width:860px;z-index:80">
+  <div class="mh">
+    <h3>Image gallery</h3>
+    <button class="btn" style="flex:none;margin-left:auto;padding:6px 13px;font-size:12px" onclick="pickGalleryFiles()">Upload images</button>
+    <button class="x" style="margin-left:10px" onclick="closeGallery()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+  </div>
+  <div class="mb">
+    <div id="galGrid" class="gal-grid"><div class="gal-empty">Loading…</div></div>
   </div>
 </div>
 
@@ -825,10 +859,14 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
     <!-- Authored posts only: a document post's own first page is its hero. -->
     <div id="bHeroRow" style="display:none">
       <div class="fl-row">
-        <label class="fl">Hero image <span class="cc">shown above the article and on the board card</span></label>
-        <button class="btn" style="flex:none;margin-left:auto;padding:5px 11px;font-size:11.5px" onclick="pickHeroFile()">Upload image</button>
+        <label class="fl">Hero image <span class="cc">required · also the board thumbnail</span></label>
+        <button class="btn" style="flex:none;margin-left:auto;padding:5px 11px;font-size:11.5px" onclick="openGallery()">Gallery</button>
+        <button class="btn" style="flex:none;padding:5px 11px;font-size:11.5px" onclick="pickHeroFile()">Upload</button>
       </div>
-      <input id="bHero" class="inp" placeholder="https://… — or upload an image">
+      <!-- Either source: an address typed straight in, or an image from our own
+           library. Upload puts the file in the library first and then fills this
+           box with its URL, so both routes end at the same kind of value. -->
+      <input id="bHero" class="inp" placeholder="https://… or pick from the gallery">
       <!-- Shows what will actually be published: the pasted URL or the picked
            file, drawn from the same value the save will send. -->
       <div id="bHeroPrev" class="hero-prev" style="display:none">
@@ -861,13 +899,13 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
     </div>
     <div id="bBody" class="blog-body-edit" contenteditable="true" data-ph="Drop a file to fill this, or type your article here…"></div>
     <textarea id="bSrc" class="bl-src" style="display:none" spellcheck="false" placeholder="<article>…</article> — paste the markup, or load a file below."></textarea>
-    <div id="bCssRow" style="display:none">
-      <div class="fl-row">
-        <label class="fl">CSS <span class="cc">applied to this article only</span></label>
-        <button class="btn" style="flex:none;margin-left:auto;padding:5px 11px;font-size:11.5px" onclick="pickHtmlFile()">Load .html file</button>
+      <div id="bCssRow" style="display:none">
+        <div class="fl-row">
+          <label class="fl">Design <span class="cc">shared by every blog</span></label>
+          <button class="btn" style="flex:none;margin-left:auto;padding:5px 11px;font-size:11.5px" onclick="pickHtmlFile()">Load .html file</button>
+        </div>
+        <div id="bThemeNote" class="theme-note">Load a document and its &lt;style&gt;, fonts and scripts become the design every blog uses. Only what sits inside &lt;body&gt; is saved as this post.</div>
       </div>
-      <textarea id="bCss" class="bl-src" style="min-height:110px" spellcheck="false" placeholder=".kpi{display:grid} — &lt;style&gt; blocks from an imported file land here."></textarea>
-    </div>
   </div>
   <div class="mf"><button class="btn btn-danger" style="flex:none" id="bDelete">Delete</button><button class="btn" style="flex:none" id="bPreview" onclick="openPreview()">Preview</button><button class="btn-pub sch" style="flex:none;padding:11px 22px" id="bPublish">Publish</button></div>
 </div>
@@ -2194,21 +2232,124 @@ function bodyHtml(){
 function pickHtmlFile(){const f=bEl('htmlFile');f.value='';f.click();}
 function loadHtmlSource(text){
   /* Parsed rather than regexed so a full document contributes only its body:
-     keeping <head> would publish the title and meta as loose text. */
+     keeping <head> would publish the title and meta as loose text.
+
+     The <style>, fonts and scripts are NOT this post — they are the blog's
+     shared design, and the server stores them once for every post to use
+     (see extractTheme / saveTheme). They travel with the save so the server
+     can lift them out; nothing about them is edited here. */
   const doc=new DOMParser().parseFromString(text,'text/html');
   const css=[...doc.querySelectorAll('style')].map(n=>n.textContent.trim()).filter(Boolean);
-  /* <link> and <script> cannot survive the site's sanitizer anyway; dropping
-     them here means the admin sees the markup that will actually publish. */
+  const links=[...doc.querySelectorAll('link[rel~="stylesheet"]')].map(n=>n.getAttribute('href')).filter(Boolean);
+  const scripts=[...doc.querySelectorAll('script[src]')].map(n=>n.getAttribute('src')).filter(Boolean);
+  /* The whole document is what the server parses, so the source box keeps the
+     body and the theme rides along in _themeSource. */
+  _themeSource=text;
   doc.querySelectorAll('style,script,link').forEach(n=>n.remove());
   bEl('bSrc').value=(doc.body?doc.body.innerHTML:text).trim();
-  const existing=bEl('bCss').value.trim();
-  bEl('bCss').value=existing?(existing+'\n\n'+css.join('\n\n')):css.join('\n\n');
   if(!bEl('bTitle').value.trim()){
     const h1=doc.querySelector('h1');
     bEl('bTitle').value=(doc.title||(h1&&h1.textContent)||'').trim().slice(0,120);
   }
+  const note=bEl('bThemeNote');
+  if(note){
+    const bits=[];
+    if(css.length) bits.push(css.length+' stylesheet'+(css.length>1?'s':''));
+    if(links.length) bits.push(links.length+' font/CSS link'+(links.length>1?'s':''));
+    if(scripts.length) bits.push(scripts.length+' script'+(scripts.length>1?'s':''));
+    note.textContent = bits.length
+      ? 'Design taken from this file: '+bits.join(', ')+'. It becomes the design for every blog.'
+      : 'This file carried no design — the blog keeps the one already saved.';
+  }
   _srcMode=true;applyBodyView();
-  toast(css.length?('Loaded · '+css.length+' stylesheet'+(css.length>1?'s':'')+' extracted'):'Loaded');
+  toast('Loaded'+(css.length||links.length||scripts.length?' · design captured':''));
+}
+
+/* ---- image gallery ----
+   The library is shared with the Website's admin (one `media` collection), so
+   an image uploaded in either console shows up in both. Reads and writes go
+   through the parent, which holds the admin session — the same delegation the
+   blog board uses. */
+let _media = [];          // last list we were given
+let _mediaLoaded = false;
+
+function openGallery(){
+  bEl('galModal').classList.add('on');bEl('galScrim').classList.add('on');
+  renderGallery();
+  if(!_mediaLoaded) requestMedia();
+}
+function closeGallery(){
+  bEl('galModal').classList.remove('on');bEl('galScrim').classList.remove('on');
+}
+function requestMedia(){
+  if(!BLOG_BRIDGE){ renderGallery('Not connected — sign in as the admin to load the gallery'); return; }
+  blogPost({type:'admin:mediaList'});
+}
+function pickGalleryFiles(){ const f=bEl('galFile'); f.value=''; f.click(); }
+
+function fmtKb(n){ return n>=1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB'; }
+
+function renderGallery(msg){
+  const grid=bEl('galGrid');
+  if(msg){ grid.innerHTML='<div class="gal-empty">'+xesc(msg)+'</div>'; return; }
+  if(!_media.length){
+    grid.innerHTML='<div class="gal-empty">'+(_mediaLoaded?'No images yet — upload one to start the library.':'Loading…')+'</div>';
+    return;
+  }
+  const current=bEl('bHero').value.trim();
+  grid.innerHTML=_media.map(m=>`
+    <div class="gal-item${m.url===current?' on':''}">
+      <img src="${xesc(m.url)}" alt="" loading="lazy">
+      <div class="gal-name" title="${xesc(m.originalFilename||'')}">${xesc(m.originalFilename||'image')}</div>
+      <div class="gal-meta">${fmtKb(m.size||0)}</div>
+      <div class="gal-acts">
+        <button onclick="useMedia('${xesc(m.url)}')">Use</button>
+        <button onclick="copyMedia('${xesc(m.url)}')">Copy</button>
+        <button class="del" title="Delete" onclick="deleteMedia('${xesc(m.id)}')">×</button>
+      </div>
+    </div>`).join('');
+}
+
+function useMedia(url){
+  bEl('bHero').value=url;
+  _heroData=null;_heroName='';     // a library pick replaces any pending upload
+  renderHeroPrev();
+  closeGallery();
+  toast('Hero image set');
+}
+function copyMedia(url){
+  const done=()=>toast('Link copied');
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(()=>fallbackCopy(url,done));
+  else fallbackCopy(url,done);
+}
+function fallbackCopy(text,done){
+  const t=document.createElement('textarea');
+  t.value=text;t.style.position='fixed';t.style.opacity='0';
+  document.body.appendChild(t);t.select();
+  try{document.execCommand('copy');done();}catch(e){toast('Copy failed');}
+  document.body.removeChild(t);
+}
+function deleteMedia(id){
+  const m=_media.find(x=>x.id===id);
+  if(!confirm('Delete '+((m&&m.originalFilename)||'this image')+' from the library? Posts already using it will show a broken image.'))return;
+  if(!BLOG_BRIDGE){ toast('Not connected'); return; }
+  blogPost({type:'admin:mediaDelete',id});
+  showBusy('Deleting…');
+}
+
+/** Reads a file and hands it to the library; returns the stored item's URL. */
+async function uploadToGallery(file){
+  if(!file.type.startsWith('image/')){ showResult(false,'That is not an image file.'); return; }
+  if(file.size > MAX_HERO_MB*1024*1024){
+    showResult(false,file.name+' is '+fileSizeMB(file.size)+' — the limit is '+MAX_HERO_MB+' MB.');
+    return;
+  }
+  const dataUri=await new Promise((res,rej)=>{
+    const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error); r.readAsDataURL(file);
+  });
+  if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to upload'); return; }
+  showBusy('Uploading '+file.name+'…',0);
+  blogPost({type:'admin:mediaUpload',dataUri,filename:file.name});
 }
 
 /* ---- hero image: paste a URL or upload a file ----
@@ -2219,11 +2360,18 @@ function loadHtmlSource(text){
 const MAX_HERO_MB = 5;
 /** Set when a file is picked; cleared on close, on Remove, and after a save. */
 let _heroData = null, _heroName = '';
+/* The complete uploaded document, kept so the SERVER can split design from
+   body — the console does not decide what the shared design is. */
+let _themeSource = null;
+/* True while a hero upload is in flight, so the result knows to fill the box. */
+let _heroPending = false;
 
 function pickHeroFile(){ const f = bEl('heroFile'); f.value = ''; f.click(); }
 
 /** The value the save will send: a picked file wins over the URL box. */
 function heroValue(){
+  // The hidden input holds the Storage URL of an already-saved post; a fresh
+  // upload sits in _heroData until the save hoists it.
   return _heroData || (bEl('bHero').value.trim() || null);
 }
 
@@ -2244,7 +2392,16 @@ function clearHero(){
   renderHeroPrev();
 }
 
+/** The hero's own Upload button. Routes through the library so an image used
+    as a hero is also available to every later post — and so the post carries a
+    URL rather than a megabyte of base64. */
 async function loadHeroFile(file){
+  _heroPending = true;
+  return uploadToGallery(file);
+}
+
+/** Kept for the data-URI path the backend still accepts (see resolveHero). */
+async function loadHeroFileInline(file){
   if(!file.type.startsWith('image/')){ showResult(false, 'That is not an image file.'); return; }
   if(file.size > MAX_HERO_MB*1024*1024){
     showResult(false, file.name+' is '+fileSizeMB(file.size)+' — the hero image limit is '+MAX_HERO_MB+' MB.');
@@ -2299,7 +2456,7 @@ function openPreview(){
   // save hoists it, and the preview has to show what will actually publish.
   const hero=heroValue()||'';
   const html=bodyHtml();
-  const css=(_format==='html')?bEl('bCss').value:'';
+  const css='';   // the design lives in the shared theme, not on the post
   const scoped=css.trim()?scopeCssPreview(css,'.prev-body'):'';
   stage.innerHTML=
     (hero?'<img class="prev-hero" src="'+xesc(hero)+'" alt="">':'')+
@@ -2346,10 +2503,10 @@ function openBlogModal(zone,editId,draft,format){
   _format=format||p.format||(_pendingPdf?((/\.docx$/i.test(_pendingPdf.name||''))?'doc':'pdf'):'text');
   bEl('bmTitle').textContent=(editId?'Edit article':'New article')+' · '+(FORMATS[_format]||_format);
   bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';
-  _heroData=null;_heroName='';
+  _heroData=null;_heroName='';_themeSource=null;
   bEl('bHero').value=p.heroImageUrl||'';
   renderHeroPrev();
-  bEl('bCss').value=(Array.isArray(p.css)?p.css:[]).join('\n\n');
+
   bEl('bRank').value=p.rank||nextRank(z,editId);
   applyFormatUI(p.html||'');
   renderDocView(p);
@@ -2389,7 +2546,7 @@ function renderDocView(p){
 
 function closeBlogModal(){
   _pendingPdf=null;
-  _heroData=null;_heroName='';
+  _heroData=null;_heroName='';_themeSource=null;
   // Drop the embed so a closed dialog is not still holding a PDF in memory.
   bEl('bDocView').innerHTML='';
   // Same for the editor: a live ProseMirror instance per opened post would
@@ -2450,7 +2607,22 @@ function savePublish(){
      job fills it automatically, a manual upload usually leaves it blank — so
      there is no required-field check on it. */
   const d={zone:bEl('bZone').value||'edu',kick:bEl('bKick').value||'MarketCatalyst',title:bEl('bTitle').value.trim(),dek:bEl('bDek').value.trim(),author:bEl('bAuthor').value||'Desk',read:bEl('bRead').value||'3 min',html:bodyHtml()};
-  if(!d.title){toast('Add a title first');return;}
+  /* A written post needs all three: the summary is the standfirst under the
+     headline AND the board card's excerpt, and the hero is the article image
+     AND the card thumbnail. Missing either publishes a visibly broken card, so
+     it is caught here as well as on the server. Documents are exempt — they
+     are their own cover and their own opening line. */
+  if(_format==='html'||_format==='text'){
+    const missing=[];
+    if(!d.title) missing.push('a title');
+    if(!d.dek) missing.push('a summary');
+    if(!heroValue()) missing.push('a hero image');
+    if(missing.length){
+      showResult(false,'This post still needs '+
+        (missing.length>1?missing.slice(0,-1).join(', ')+' and '+missing[missing.length-1]:missing[0])+'.');
+      return;
+    }
+  } else if(!d.title){toast('Add a title first');return;}
   const typed=parseInt(bEl('bRank').value,10);
   d.rank=(typed&&typed>0)?typed:nextRank(d.zone,_editId);
   // This button publishes — that is what it now says. A draft opened here and
@@ -2463,10 +2635,11 @@ function savePublish(){
      tag: CSS left inline would be deleted and the post would publish unstyled.
      The backend also pulls any <style> still in the markup, so an admin who
      pastes a whole document into the source box keeps its design either way. */
-  if(_format==='html'){
-    const css=bEl('bCss').value.trim();
-    msg.css=css?[css]:[];
-  }
+  /* For html we send the WHOLE uploaded document when there is one, so the
+     server splits design from body by the same rule every time. With no
+     upload (an edit, or markup typed straight in) the body alone goes, and the
+     saved design is left alone. */
+  if(_format==='html'&&_themeSource){ msg.html=_themeSource; }
   if(_pendingPdf){msg.pdfDataUri=_pendingPdf.dataUri;msg.pdfName=_pendingPdf.name;msg.pdfPages=_pendingPdf.pages;msg.pdfAspect=_pendingPdf.aspect;}
   if(_editId)msg.id=_editId;
   const editing=!!_editId;
@@ -2507,6 +2680,29 @@ function togglePublish(id){
    replace the working set wholesale and re-render, so the board always ends up
    matching the true backend state — reverting any optimistic edit that failed. */
 window.addEventListener('message',function(e){
+  const md=e.data||{};
+  if(md.type==='admin:mediaProgress'){
+    const pct=md.total?Math.round(md.loaded/md.total*100):0;
+    showBusy('Uploading '+(md.name||'image')+'… '+pct+'%',pct);
+    return;
+  }
+  if(md.type==='admin:mediaResult'){
+    hideBusy();
+    if(!md.ok){ showResult(false,md.error||'The gallery request failed.'); return; }
+    _media=Array.isArray(md.media)?md.media:[];
+    _mediaLoaded=true;
+    /* A hero upload fills the box with the newest item — the one just stored.
+       The list comes back newest-first, so that is simply the head. */
+    if(_heroPending&&_media.length){
+      _heroPending=false;
+      bEl('bHero').value=_media[0].url;
+      _heroData=null;_heroName='';
+      renderHeroPrev();
+      toast('Hero image set');
+    }
+    renderGallery();
+    return;
+  }
   const d=e.data||{};
   /* Bytes on their way up. The bar tracks the request body, which is the part
      that actually takes time on a big import; once it is all sent the server
@@ -2617,6 +2813,17 @@ function initBlogs(){
     e.target.value='';
   };
   bEl('bHero').addEventListener('input',()=>{ if(!_heroData) renderHeroPrev(); });
+  const gf=bEl('galFile');
+  gf.onchange=async e=>{
+    const files=[...(e.target.files||[])];
+    e.target.value='';
+    // One at a time: each upload is its own request and its own progress bar,
+    // and a failure part-way leaves the ones before it already stored.
+    for(const f of files){
+      try{ await uploadToGallery(f); }
+      catch(err){ showResult(false,'Could not read '+f.name+': '+err.message); }
+    }
+  };
   const hif=bEl('heroFile');
   hif.onchange=async e=>{
     const f=e.target.files[0];

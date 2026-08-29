@@ -142,12 +142,10 @@ export default function AdminPage() {
           read: d.read,
           html: d.html,
           status: d.status,
-          // Authored formats only. `format` decides how the site renders the
-          // post; `css` holds the stylesheet an html post was designed with,
-          // which the backend keeps out of the body because the sanitizer would
-          // delete a <style> tag.
+          // `format` decides how the site renders the post. The design that used
+          // to ride along as `css` is now lifted server-side into one shared
+          // theme, so nothing per-post is sent for it.
           ...(d.format ? { format: d.format } : {}),
-          ...(Array.isArray(d.css) ? { css: d.css } : {}),
           ...(d.heroImageUrl !== undefined ? { heroImageUrl: d.heroImageUrl } : {}),
           // Source PDF, present only when the article was imported from one.
           // The backend hoists it to Storage and keeps the URL on the doc; it is
@@ -181,6 +179,32 @@ export default function AdminPage() {
             await apiUpload("/api/admin/blogs", body, { onProgress });
           }
         });
+      }
+      /* ── image library ─────────────────────────────────────────────────
+         Same delegation as the blog writes: the console iframe holds no
+         backend token, so it asks the parent, which has the admin session. */
+      if (d.type === "admin:mediaList" || d.type === "admin:mediaUpload" || d.type === "admin:mediaDelete") {
+        const reply = (m: Record<string, unknown>) =>
+          iframeRef.current?.contentWindow?.postMessage({ type: "admin:mediaResult", ...m }, "*");
+        try {
+          if (d.type === "admin:mediaUpload") {
+            // Over XHR, not fetch: an image is the one admin payload that is
+            // routinely megabytes, and the console shows real upload progress.
+            await apiUpload("/api/admin/media", { dataUri: d.dataUri, filename: d.filename }, {
+              onProgress: (p: { loaded: number; total: number }) =>
+                iframeRef.current?.contentWindow?.postMessage(
+                  { type: "admin:mediaProgress", loaded: p.loaded, total: p.total, name: d.filename ?? null },
+                  "*",
+                ),
+            });
+          } else if (d.type === "admin:mediaDelete") {
+            await apiDelete(`/api/admin/media/${encodeURIComponent(String(d.id))}`);
+          }
+          const list = await apiGet<{ media: unknown[] }>("/api/admin/media");
+          reply({ ok: true, media: list.media ?? [] });
+        } catch (err) {
+          reply({ ok: false, error: (err as Error).message });
+        }
       }
       if (d.type === "admin:blogDelete") {
         await blogWrite("admin:blogDeleteResult", async () => {
