@@ -114,7 +114,7 @@ export function ManagePlanScreen() {
         {/* Pricing cards — prices and currency come from plans.registry.ts (USD:
             Free $0, Plus $29.99/mo, Pro $49.99/mo), rendered via PLAN_PRICING so
             the screen can never drift from the catalog again. */}
-        <div className="col-12" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        <div className="col-12" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           {PLAN_PRICING.map((p) => {
             const isCurrent = tier === p.id;
             const isPaid = p.amountMinor > 0;

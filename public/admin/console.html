@@ -2167,7 +2167,13 @@ function mountRich(html){
     element:bEl('bRichMount'),
     extensions:[
       T.StarterKit,
-      T.Link.configure({openOnClick:false,autolink:true}),
+      /* autolink OFF. It turns anything that looks like a domain into a link,
+         and plenty of prose is not a domain: ".NET" is a real TLD, so pasting
+         "ASP.NET Core" produced <a href="http://ASP.NET">ASP.NET</a> — a dead
+         link the reader can click, and it split the real link around it into
+         two. A link the author did not ask for is worse than one they have to
+         add: the toolbar's link button is one click. */
+      T.Link.configure({openOnClick:false,autolink:false,linkOnPaste:true}),
       T.Image,
       T.Placeholder.configure({placeholder:'Write the article…'}),
     ],

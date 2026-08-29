@@ -796,7 +796,7 @@ export function CommentaryScreen() {
             its select are one inline-flex unit: as loose siblings in a wrapping
             row they could break apart, leaving "Market cap" stranded on one row
             with its dropdown on the next. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap", justifyContent: "flex-end", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", minWidth: 0 }}>
           {/* nowrap keeps Search / Sector / Market cap on ONE line. The search
               box is the only element allowed to give: basis 190 shrinking to
               110 absorbs the squeeze, so the two dropdowns never drop to a

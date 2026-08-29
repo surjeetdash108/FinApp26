@@ -392,6 +392,7 @@ export function MoversScreen() {
 
       <div className="card">
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", padding: "8px 12px 0" }}><VendorTag v="polygon" /></div>
+        <div className="tbl-wrap">
         <table className="tbl">
           <thead>
             <tr>
@@ -470,6 +471,7 @@ export function MoversScreen() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Why-it-moved hover: latest headline for the row under the cursor. Bulk

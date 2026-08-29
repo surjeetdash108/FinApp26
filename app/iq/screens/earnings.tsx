@@ -1201,7 +1201,7 @@ export function EarningsScreen() {
                 {/* One line: wrapping put the buttons on a row of their own under
                     the price, which read as two separate headers. Nothing here
                     is long enough to need to wrap. */}
-                <div className="card-h" style={{ gap: 10, flexWrap: "nowrap" }}>
+                <div className="card-h" style={{ gap: 10, flexWrap: "wrap" }}>
                   <StockLogo sym={sel} size={45} />
                   <span style={{ fontWeight: 700, fontFamily: "var(--f-mono)", color: "var(--text-hi)", fontSize: ".95rem" }}>{sel}</span>
                   {liveCompanySel?.price != null && (

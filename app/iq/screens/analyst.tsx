@@ -443,6 +443,7 @@ export function AnalystScreen() {
               {selAnalystActions.length === 0 ? (
                 <DataState loading={consensusLoading} label="No recent rating changes for this analyst." />
               ) : (
+                <div style={{ overflowX: "auto" }}>
                 <table className="tbl">
                   <thead>
                     <tr><th>Ticker</th><th>Action</th><th>Previous → New</th><th className="num">Date</th></tr>
@@ -458,6 +459,7 @@ export function AnalystScreen() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>

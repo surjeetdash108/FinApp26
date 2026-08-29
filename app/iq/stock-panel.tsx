@@ -132,7 +132,7 @@ export function StockListCard({
   children?: ReactNode;
 }) {
   return (
-    <div style={{ width: 340, flexShrink: 0, display: "flex", flexDirection: "column" }}>
+    <div className="sp-listcard" style={{ width: 340, flexShrink: 0, display: "flex", flexDirection: "column" }}>
       <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <div className="card-h">
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -353,7 +353,7 @@ export function StockPanelLayout({
 }) {
   return (
     <>
-      <div style={{ display: "flex", gap: 14, alignItems: "stretch", marginBottom: 14 }}>
+      <div className="sp-row" style={{ display: "flex", gap: 14, alignItems: "stretch", marginBottom: 14 }}>
         {listCard}
         <ChartCard sym={selectedSym} px={chartPx} emptyText={chartEmptyText} />
       </div>

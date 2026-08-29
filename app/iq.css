@@ -126,6 +126,7 @@
   color: var(--text);
   overflow: hidden;
   height: 100vh;
+  height: 100dvh; /* dynamic vh: excludes mobile browser chrome (same as 100vh on desktop) */
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   position: relative;
@@ -149,6 +150,7 @@
   grid-template-rows: 54px 34px 1fr;
   grid-template-areas: 'brand topbar' 'brand ticker' 'rail main';
   height: 100vh;
+  height: 100dvh; /* same as 100vh on desktop; on mobile it tracks the visible viewport */
   position: relative;
   z-index: 1;
 }
@@ -1942,6 +1944,20 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 @media (max-width: 900px) {
   .ec-grid > .ec-day-solo { grid-column: 1 / -1; }
 }
+/* Phones: 5 day-columns squeeze the earnings chips to unreadable slivers, so the
+   week/month calendars stack into a single readable column of days. The month's
+   weekday header row is dropped since each day cell already shows its own date. */
+@media (max-width: 560px) {
+  .ec-grid, .emc-grid { grid-template-columns: 1fr; }
+  .emc-head { display: none; }
+}
+/* Master-detail panels (Portfolio / Watchlist / Themes / Screener): the fixed
+   340px list card + chart row stacks on phones so neither gets crushed. Desktop
+   keeps the side-by-side inline layout untouched. */
+@media (max-width: 767px) {
+  .sp-row { flex-wrap: wrap; }
+  .sp-listcard { width: 100% !important; }
+}
 /* Earnings month grid (full weekday earnings calendar) — emc- prefix to avoid
    colliding with the pre-existing macro month-calendar (.ecm-*) classes below. */
 .emc-head { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 8px; }
@@ -2685,10 +2701,18 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 @media (max-width: 767px) {
   /* ---- App shell: single-column ---- */
   .app {
-    grid-template-columns: 1fr;
+    /* minmax(0,1fr) — NOT plain 1fr. A 1fr grid track keeps an implicit
+       min-width:auto, so any wide child (a tab bar, a table) forces the whole
+       content column past the viewport and .iq-root{overflow:hidden} then clips
+       the right edge (the "cut-off / distorted on mobile" bug). minmax(0,1fr)
+       lets the column shrink to the viewport; wide children scroll inside .main
+       instead. Desktop .app is untouched. */
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 54px 34px 1fr;
     grid-template-areas: 'topbar' 'ticker' 'main';
   }
+  /* Let the content column actually shrink below its children's intrinsic width. */
+  .main { min-width: 0; }
 
   /* Brand cell goes away — logo lives in topbar on mobile */
   .brandcell { display: none; }
@@ -2798,11 +2822,31 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
   }
   .iq-root .copilot-fab .fab-label { display: none; }
 
-  /* ---- Command palette: near full width ---- */
-  .cmd-dropdown { width: calc(100vw - 24px); }
+  /* ---- Command palette: pin the results panel to the viewport ----
+     Base rule anchors it left:0/right:0 of the squeezed .cmd-wrap, which sits
+     right-of-centre on mobile, so the panel ran off-screen. Fix to the viewport. */
+  .cmd-dropdown { position: fixed; left: 12px; right: 12px; width: auto; }
 
-  /* ---- Options chain: hide stock sidebar on mobile ---- */
-  .opt-side { display: none; }
+  /* Inputs must be ≥16px or iOS Safari zooms the viewport on focus (which
+     visibly distorts the fixed-grid shell). */
+  .cmd-input, .copilot-inp input { font-size: 16px; }
+
+  /* Mobile brand = icon only. The wordmark ("MarketCatalyst", white-space:nowrap,
+     ~140px, non-shrinkable) otherwise eats the topbar and collapses the search.
+     (The old .mob-brand .wordmark shrink rules were dead — BrandLogo emits
+     .brand-logo, not .wordmark.) */
+  .mob-brand { min-width: 0; }
+  .mob-brand .brand-logo > span { display: none; }
+
+  /* Any tab bar scrolls sideways rather than overflowing the page. The Live Feed
+     (6 tabs) and Movers (5 tabs) bars exceed a phone's width; let them scroll. */
+  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex-shrink: 0; }
+
+  /* ---- Options chain: keep the stock picker reachable on mobile ----
+     display:none removed the ONLY symbol search on the screen. The ≤860 rule
+     below stacks it full-width above the chain, so just let it show. */
   .opt-wrap  { gap: 0; }
 
   /* ---- Nav items: brighter in mobile drawer ---- */
@@ -2866,19 +2910,12 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
      page sideways. */
   .tbl-wrap, .opt-chain-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-  /* OPTIONS CHAIN — this table went from 6 to 12 columns when per-contract
-     OHLCV was wired up, against a 760px min-width. On a phone that is a
-     horizontal scroll nobody can read, so the secondary price columns are
-     dropped and the identifying ones kept: type, strike, expiry, last, volume.
-     Columns are 4 Open, 5 High, 6 Low, 8 VWAP, 9 Range, 11 Trades, 12 As-of. */
-  .opt-chain { min-width: 0; font-size: .7rem; }
-  .opt-chain th:nth-child(4),  .opt-chain td:nth-child(4),
-  .opt-chain th:nth-child(5),  .opt-chain td:nth-child(5),
-  .opt-chain th:nth-child(6),  .opt-chain td:nth-child(6),
-  .opt-chain th:nth-child(8),  .opt-chain td:nth-child(8),
-  .opt-chain th:nth-child(9),  .opt-chain td:nth-child(9),
-  .opt-chain th:nth-child(11), .opt-chain td:nth-child(11),
-  .opt-chain th:nth-child(12), .opt-chain td:nth-child(12) { display: none; }
+  /* OPTIONS CHAIN — the live layout is a 13-column calls | strike | puts grid
+     (OI/Vol/IV/Last/Bid/Ask · Strike · Bid/Ask/Last/IV/Vol/OI). The old
+     per-column hiding was written for a since-removed OHLCV table and dropped
+     the WRONG (asymmetric) columns, so it is removed: the full chain scrolls
+     horizontally inside .opt-chain-scroll (overflow-x:auto) instead. */
+  .opt-chain { min-width: 620px; font-size: .68rem; }
 
   /* Nothing may make the page itself scroll sideways. */
   body { overflow-x: hidden; }
