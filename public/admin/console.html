@@ -429,6 +429,15 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .tt-wrap .ProseMirror img{max-width:100%;border-radius:8px}
 .tt-wrap .ProseMirror a{color:var(--brand2);text-decoration:underline}
 .tt-wrap .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--dim2);float:left;height:0;pointer-events:none}
+/* Hero image preview — the picked file or the pasted URL, drawn as the board
+   card will draw it so a wrong or broken image is obvious before publishing. */
+.hero-prev{display:flex;align-items:center;gap:12px;margin-top:9px;padding:9px 11px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:10px}
+.hero-prev img{width:96px;height:60px;object-fit:cover;border-radius:7px;flex:none;background:var(--surface)}
+.hero-prev-m{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.hero-prev-m b{font-size:12.5px;color:var(--hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hero-prev-m span{font-size:11px;color:var(--dim2)}
+
 /* Preview: the post as the site will draw it, on the site's own light page
    rather than the console's dark chrome — a dark backdrop would misrepresent
    every colour the post picked.
@@ -734,6 +743,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
         <!-- An html post is usually designed elsewhere and arrives as a file;
              its <style> blocks are split into the CSS field on import. -->
         <input type="file" id="htmlFile" accept=".html,.htm" hidden>
+        <input type="file" id="heroFile" accept="image/*" hidden>
       </section>
 
       <!-- SETTINGS -->
@@ -814,8 +824,18 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
     <textarea id="bDek" class="inp" rows="3" placeholder="Generated automatically for the daily recap. Leave blank to show nothing."></textarea>
     <!-- Authored posts only: a document post's own first page is its hero. -->
     <div id="bHeroRow" style="display:none">
-      <label class="fl">Hero image URL <span class="cc">shown above the article and on the board card</span></label>
-      <input id="bHero" class="inp" placeholder="https://… (optional)">
+      <div class="fl-row">
+        <label class="fl">Hero image <span class="cc">shown above the article and on the board card</span></label>
+        <button class="btn" style="flex:none;margin-left:auto;padding:5px 11px;font-size:11.5px" onclick="pickHeroFile()">Upload image</button>
+      </div>
+      <input id="bHero" class="inp" placeholder="https://… — or upload an image">
+      <!-- Shows what will actually be published: the pasted URL or the picked
+           file, drawn from the same value the save will send. -->
+      <div id="bHeroPrev" class="hero-prev" style="display:none">
+        <img id="bHeroImg" alt="">
+        <div class="hero-prev-m"><b id="bHeroName"></b><span id="bHeroNote"></span></div>
+        <button class="btn btn-danger" style="flex:none;padding:4px 10px;font-size:11.5px" onclick="clearHero()">Remove</button>
+      </div>
     </div>
     <div class="fl-row">
       <label class="fl" id="bBodyLabel">Body <span class="cc" id="bWords"></span></label>
@@ -2191,6 +2211,56 @@ function loadHtmlSource(text){
   toast(css.length?('Loaded · '+css.length+' stylesheet'+(css.length>1?'s':'')+' extracted'):'Loaded');
 }
 
+/* ---- hero image: paste a URL or upload a file ----
+   The file never touches Firestore: it travels in the save as a data URI and
+   the backend hoists it to Storage, the same path a pasted-in body image takes
+   (see resolveHero / externalizeImages). That is why the cap below matters —
+   the data URI rides inside the JSON body. */
+const MAX_HERO_MB = 5;
+/** Set when a file is picked; cleared on close, on Remove, and after a save. */
+let _heroData = null, _heroName = '';
+
+function pickHeroFile(){ const f = bEl('heroFile'); f.value = ''; f.click(); }
+
+/** The value the save will send: a picked file wins over the URL box. */
+function heroValue(){
+  return _heroData || (bEl('bHero').value.trim() || null);
+}
+
+function renderHeroPrev(){
+  const box = bEl('bHeroPrev'), src = heroValue();
+  if(!src){ box.style.display='none'; bEl('bHeroImg').removeAttribute('src'); return; }
+  bEl('bHeroImg').src = src;
+  bEl('bHeroName').textContent = _heroData ? _heroName : src;
+  bEl('bHeroNote').textContent = _heroData
+    ? 'Uploads when you publish'
+    : 'Linked from this address';
+  box.style.display = '';
+}
+
+function clearHero(){
+  _heroData = null; _heroName = '';
+  bEl('bHero').value = '';
+  renderHeroPrev();
+}
+
+async function loadHeroFile(file){
+  if(!file.type.startsWith('image/')){ showResult(false, 'That is not an image file.'); return; }
+  if(file.size > MAX_HERO_MB*1024*1024){
+    showResult(false, file.name+' is '+fileSizeMB(file.size)+' — the hero image limit is '+MAX_HERO_MB+' MB.');
+    return;
+  }
+  _heroData = await new Promise((res,rej)=>{
+    const r = new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error); r.readAsDataURL(file);
+  });
+  _heroName = file.name;
+  // The URL box and an uploaded file are two answers to one question; picking a
+  // file clears the box so the editor never shows both.
+  bEl('bHero').value = '';
+  renderHeroPrev();
+  toast('Image ready · '+file.name);
+}
+
 /* ---- preview ----
    Mirrors lib/blog/scope-css.ts on the site, which is the authoritative pass:
    this one exists so the admin sees the post confined to its own container the
@@ -2225,7 +2295,9 @@ function openPreview(){
   const stage=bEl('prevStage');
   const title=bEl('bTitle').value.trim()||'Untitled';
   const dek=bEl('bDek').value.trim();
-  const hero=bEl('bHero').value.trim();
+  // heroValue(), not the URL box: an uploaded file lives in _heroData until the
+  // save hoists it, and the preview has to show what will actually publish.
+  const hero=heroValue()||'';
   const html=bodyHtml();
   const css=(_format==='html')?bEl('bCss').value:'';
   const scoped=css.trim()?scopeCssPreview(css,'.prev-body'):'';
@@ -2274,7 +2346,9 @@ function openBlogModal(zone,editId,draft,format){
   _format=format||p.format||(_pendingPdf?((/\.docx$/i.test(_pendingPdf.name||''))?'doc':'pdf'):'text');
   bEl('bmTitle').textContent=(editId?'Edit article':'New article')+' · '+(FORMATS[_format]||_format);
   bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';
+  _heroData=null;_heroName='';
   bEl('bHero').value=p.heroImageUrl||'';
+  renderHeroPrev();
   bEl('bCss').value=(Array.isArray(p.css)?p.css:[]).join('\n\n');
   bEl('bRank').value=p.rank||nextRank(z,editId);
   applyFormatUI(p.html||'');
@@ -2315,6 +2389,7 @@ function renderDocView(p){
 
 function closeBlogModal(){
   _pendingPdf=null;
+  _heroData=null;_heroName='';
   // Drop the embed so a closed dialog is not still holding a PDF in memory.
   bEl('bDocView').innerHTML='';
   // Same for the editor: a live ProseMirror instance per opened post would
@@ -2383,7 +2458,7 @@ function savePublish(){
   d.status='Published';
   if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to save'); closeBlogModal(); return; }
   if(!confirm('Publish “'+d.title+'”? It will go live on the site immediately.')) return;   // Cancel: keep editing, nothing is saved
-  const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status,format:_format,heroImageUrl:bEl('bHero').value.trim()||null};
+  const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status,format:_format,heroImageUrl:heroValue()};
   /* Sent as its own field because the body sanitizer does not allow a <style>
      tag: CSS left inline would be deleted and the post would publish unstyled.
      The backend also pulls any <style> still in the markup, so an admin who
@@ -2539,6 +2614,13 @@ function initBlogs(){
     if(!f)return;
     try{loadHtmlSource(await f.text());}
     catch(err){showResult(false,'Could not read '+f.name+': '+err.message);}
+    e.target.value='';
+  };
+  bEl('bHero').addEventListener('input',()=>{ if(!_heroData) renderHeroPrev(); });
+  const hif=bEl('heroFile');
+  hif.onchange=async e=>{
+    const f=e.target.files[0];
+    if(f){ try{ await loadHeroFile(f); }catch(err){ showResult(false,'Could not read '+f.name+': '+err.message); } }
     e.target.value='';
   };
   bEl('bBody').addEventListener('input',updateBlogWords);
