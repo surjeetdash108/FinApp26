@@ -255,10 +255,35 @@ function MetricBars({
 }) {
   const gid = "gb-" + title.replace(/\W/g, "");
   const vals = data.map(d => d.v).filter((v): v is number => v != null);
+  /**
+   * The viewBox width tracks the MEASURED width, so the drawing is never
+   * scaled — the same pattern EarnIncChart uses below.
+   *
+   * With a fixed 340-wide viewBox the whole chart was magnified by whatever
+   * width it landed in: side by side in the main column it came out ~1.4x, and
+   * stacked full width in a drawer ~2.3x, where 8px type became 18px and the
+   * chart stood 500px tall. Sizing to the container instead keeps the bars and
+   * type at one physical size everywhere and spreads the bars into the extra
+   * room — which is what makes this read as a sibling of the Earnings Growth
+   * chart above it rather than a blown-up thumbnail.
+   */
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(560);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => { const cw = el.clientWidth; if (cw > 0) setW(cw); };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Height is fixed, matching EarningsGrowthChart's rendered height at the same
+  // width (its 560x161.5 viewBox scales to ~0.29 x width ≈ 227px at 788).
   // PADB/label baseline give the -45°-rotated period labels room to extend
   // down-left without clipping at the viewBox bottom (they used to lose their
-  // first 1-2 chars, e.g. "Jan-24" → "n-24"). ih is unchanged so bars keep size.
-  const W = 340, H = 222, PADT = 22, PADB = 46, PADX = 6;
+  // first 1-2 chars, e.g. "Jan-24" → "n-24").
+  const H = 222, PADT = 24, PADB = 48, PADX = 6;
   const LABEL_Y = H - 30;
   const iw = W - PADX * 2, ih = H - PADT - PADB;
   const maxV = Math.max(0, ...vals);
@@ -269,7 +294,7 @@ function MetricBars({
   const gw = iw / Math.max(1, data.length);
   const bw = Math.min(gw * 0.6, 26);
   return (
-    <div>
+    <div ref={wrapRef}>
       <div style={{ fontSize: ".72rem", fontWeight: 700, color: "var(--text-dim-solid)", marginBottom: 2 }}>{title}</div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }}>
         <defs>
@@ -290,10 +315,10 @@ function MetricBars({
               <rect x={(cx - bw / 2).toFixed(1)} y={y.toFixed(1)}
                 width={bw.toFixed(1)} height={h.toFixed(1)} rx="2.5" fill={`url(#${gid})`} />
               <text x={cx.toFixed(1)} y={(above ? y - 4 : y + h + 9).toFixed(1)}
-                textAnchor="middle" fontSize="8" fontFamily="JetBrains Mono,monospace"
+                textAnchor="middle" fontSize="11" fontFamily="JetBrains Mono,monospace"
                 fill="var(--text-hi)">{fmt(d.v)}</text>
               <text x={cx.toFixed(1)} y={LABEL_Y.toFixed(1)} textAnchor="end"
-                fontSize="7.5" fill="var(--text-dim-solid)"
+                fontSize="9.5" fill="var(--text-dim-solid)"
                 transform={`rotate(-45 ${cx.toFixed(1)} ${LABEL_Y.toFixed(1)})`}>{d.label}</text>
             </g>
           );
@@ -643,7 +668,16 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   const measureCols = useCallback(() => {
     const el = leftColRef.current;
     if (!el || typeof window === "undefined") return;
-    const next = window.matchMedia("(min-width: 901px)").matches ? el.offsetHeight : undefined;
+    // Whether the two columns exist is now a container question, not a window
+    // one (see .sd-grid's @container rule). Reading the grid's own computed
+    // track list is the direct answer — with the old matchMedia check, a drawer
+    // on a wide monitor reported "two columns" while the layout had already
+    // stacked, and the rail got pinned to the full height of everything above
+    // it.
+    const grid = el.parentElement;
+    const twoCol = !!grid &&
+      window.getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length > 1;
+    const next = twoCol ? el.offsetHeight : undefined;
     setRightColH(prev => (prev != null && next != null && Math.abs(prev - next) < 2 ? prev : next));
   }, []);
   useEffect(() => {
@@ -1603,10 +1637,10 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             overflow hidden, so Peers flex-fills/scrolls and Key levels sits at
             the base, level with Financials' bottom. Falls back to natural height
             (undefined) when stacked on narrow screens. */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, alignSelf: "start", height: rightColH, minHeight: 0, overflow: rightColH ? "hidden" : undefined }}>
+        <div className="sd-rail" style={{ height: rightColH, minHeight: 0, overflow: rightColH ? "hidden" : undefined }}>
 
           {/* Technical Rating */}
-          <div className="card">
+          <div className="card sd-rail-full">
             <div className="card-h">
               <h3>Technical Rating</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

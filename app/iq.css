@@ -800,6 +800,32 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 /* A 50/50 row that becomes one column when the container cannot seat two. */
 .sd-row2 { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch; }
 @container sd (min-width: 760px) { .sd-row2 { grid-template-columns: 1fr 1fr; } }
+/* The right rail. Two columns of the screen become one in a drawer, and when
+   that happens the rail's cards would run one under another down the page —
+   Technical Rating, then Peers, then Key levels — leaving a column of white
+   beside each short card. Pairing Peers and Key levels puts them back on one
+   line and closes that gap.
+
+   The cap is the Earnings Growth chart's own height, expressed the way that
+   chart computes it: its 560x161.5 viewBox renders at 0.29 x its width, so
+   29cqw of the scope is the same number. Clamped so it stays sane at the
+   extremes. */
+.sd-rail { display: flex; flex-direction: column; gap: 14px; align-self: start; }
+@container sd (max-width: 1100px) {
+  .sd-rail { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+  .sd-rail > .sd-rail-full { grid-column: 1 / -1; }
+  .sd-rail > .card:not(.sd-rail-full) {
+    max-height: clamp(200px, 29cqw, 340px);
+    display: flex; flex-direction: column;
+  }
+  .sd-rail > .card:not(.sd-rail-full) > .card-b { overflow-y: auto; min-height: 0; }
+}
+/* One card in the pair (the search panel, or a very narrow window) reads better
+   stacked than squeezed. */
+@container sd (max-width: 560px) {
+  .sd-rail { grid-template-columns: 1fr; }
+}
+
 /* Same idea for the flex pair — the cards already carry flex:1;min-width:0, so
    they only need permission to wrap. */
 .sd-rowflex { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; }
