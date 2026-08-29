@@ -98,6 +98,12 @@
 .iq-root[data-font="ibm-plex-sans"]    { --f-body: var(--font-ibm-plex-sans, 'IBM Plex Sans', sans-serif); }
 .iq-root[data-font="outfit"]           { --f-body: var(--font-outfit, 'Outfit', sans-serif); }
 .iq-root[data-font="manrope"]          { --f-body: var(--font-manrope, 'Manrope', sans-serif); }
+/* The one PAIRED option: it overrides --f-display too, so headings change with
+   the body. Every rule above leaves --f-display on Outfit. */
+.iq-root[data-font="inter-source"] {
+  --f-display: var(--font-inter, 'Inter', sans-serif);
+  --f-body: var(--font-source-sans-3, 'Source Sans 3', 'Source Sans Pro', sans-serif);
+}
 
 /* ---- RESET ---- */
 .iq-root *, .iq-root *::before, .iq-root *::after {

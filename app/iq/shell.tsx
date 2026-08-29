@@ -45,7 +45,9 @@ function logSearchedTicker(sym: string) {
 }
 
 // ---- Font type ----
-export type FontKey = "geist" | "inter" | "dm-sans" | "space-grotesk" | "plus-jakarta-sans" | "ibm-plex-sans" | "outfit" | "manrope";
+/** "inter-source" is a PAIRING, not a single face: it sets the heading font as
+ *  well as the body font. Every other key changes --f-body only. */
+export type FontKey = "geist" | "inter" | "dm-sans" | "space-grotesk" | "plus-jakarta-sans" | "ibm-plex-sans" | "outfit" | "manrope" | "inter-source";
 
 // ---- IQ Actions context ----
 interface IQActions {

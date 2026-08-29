@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { mapEarningsToBars, type ChartEarnings } from "./chart-earnings";
 export type { ChartEarnings };
-import { useState, useRef, useCallback, useMemo, useId } from "react";
+import { useState, useRef, useCallback, useMemo, useId, useEffect } from "react";
 import { backendUrl } from "./backend";
 // useBackendBars imports OHLCBar back from this file, but as `import type`,
 // which is erased before it reaches the bundler — so this pair does not form a
@@ -522,7 +522,29 @@ function CandleChartInner({
   const [tip, setTip] = useState<{ node: ReactNode; left: number } | null>(null);
   /** Which earnings dot is open. Index into `erMarks`, or null. */
   const [erOpen, setErOpen] = useState<number | null>(null);
+  /** Held open by a click, so it survives the pointer leaving the dot. */
+  const [erPinned, setErPinned] = useState(false);
+  const erCloseT = useRef<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  /**
+   * Closing is deferred by a beat.
+   *
+   * The card is a sibling of the chart, not a child of the dot, so the pointer
+   * has to cross a gap to reach it — closing the instant the dot is left would
+   * take the card away while the reader is moving toward it, and the numbers
+   * could never be read. The card cancels the pending close when the pointer
+   * arrives, and schedules its own when it leaves.
+   */
+  const cancelErClose = useCallback(() => {
+    if (erCloseT.current != null) { clearTimeout(erCloseT.current); erCloseT.current = null; }
+  }, []);
+  const scheduleErClose = useCallback(() => {
+    cancelErClose();
+    erCloseT.current = window.setTimeout(() => { erCloseT.current = null; setErOpen(null); }, 160);
+  }, [cancelErClose]);
+  // A timer outliving the chart would setState on an unmounted component.
+  useEffect(() => cancelErClose, [cancelErClose]);
 
   const data = useMemo(() => {
     // Guaranteed non-empty (>= 2 bars) by the CandleChart wrapper above; the
@@ -679,10 +701,18 @@ function CandleChartInner({
         // Percent of plot width, so the card tracks the dot when the SVG scales.
         const leftPct = Math.min(78, Math.max(2, (X(i) / W) * 100));
         return (
-          <div className="chart-erpop" style={{ left: `${leftPct}%` }}>
+          <div
+            className="chart-erpop"
+            style={{ left: `${leftPct}%` }}
+            onMouseEnter={cancelErClose}
+            onMouseLeave={() => { if (!erPinned) scheduleErClose(); }}
+          >
             <div className="chart-erpop-h">
               <span>{e.date}{e.session ? ` · ${e.session}` : ""}</span>
-              <button onClick={() => setErOpen(null)} aria-label="Close">✕</button>
+              <button
+                onClick={() => { cancelErClose(); setErPinned(false); setErOpen(null); }}
+                aria-label="Close"
+              >✕</button>
             </div>
             <div className="chart-erpop-r"><span>EPS actual</span><b>{eps(e.epsActual)}</b></div>
             <div className="chart-erpop-r"><span>Consensus</span><b>{eps(e.epsEstimate)}</b></div>
@@ -796,21 +826,6 @@ function CandleChartInner({
             <text className="caxis" x={10} y={PADT + 11 + (maStep + idx) * 12} fill={EMA_COLS[idx]}>·· EMA{MA_PERS[idx]}</text>
           </g>
         ))}
-        {/* Earnings dots — one per reported quarter, positioned by date. */}
-        {erMarks.map(({ i, e }, k) => {
-          const cy = Math.max(PADT + 6, Y(data[i].h) - 10);
-          const open = erOpen === k;
-          return (
-            <g key={`er${i}`} style={{ cursor: "pointer" }}
-              onClick={ev => { ev.stopPropagation(); setErOpen(open ? null : k); setTip(null); }}>
-              {/* Invisible pad: a 4px dot is a hard click target on a dense chart. */}
-              <circle cx={X(i)} cy={cy} r="11" fill="transparent" />
-              <circle cx={X(i)} cy={cy} r={open ? 5.5 : 4}
-                fill="var(--ai)" stroke="var(--surface-0)" strokeWidth="1.5" />
-              <text className="caxis" x={X(i)} y={cy - 8} textAnchor="middle" fill="var(--ai)">ER</text>
-            </g>
-          );
-        })}
         {/* X-axis date/time ticks — edge ticks anchor inward so their text never clips off the plot */}
         {xTickIdx.map((i, k) => (
           <text key={`x${i}`} className="caxis" x={X(i)} y={xAxisY}
@@ -821,6 +836,34 @@ function CandleChartInner({
         {/* Invisible hover rect */}
         <rect x="6" y={PADT} width={plotW} height={PH + GAP + VH} fill="transparent"
           onMouseMove={handleMove} onMouseLeave={() => setTip(null)} />
+        {/* Earnings dots — one per reported quarter, positioned by date.
+            AFTER the hover rect on purpose. SVG hit-testing goes topmost-first
+            and does not fall through, so while these were drawn earlier the
+            rect above covered every dot and swallowed the pointer: the dots
+            could not be hovered OR clicked, and nothing opened. */}
+        {erMarks.map(({ i, e }, k) => {
+          const cy = Math.max(PADT + 6, Y(data[i].h) - 10);
+          const open = erOpen === k;
+          return (
+            <g key={`er${i}`} style={{ cursor: "pointer" }}
+              onMouseEnter={() => { cancelErClose(); if (!erPinned) { setErOpen(k); setTip(null); } }}
+              onMouseLeave={() => { if (!erPinned) scheduleErClose(); }}
+              onClick={ev => {
+                ev.stopPropagation();
+                cancelErClose();
+                // Click pins the card open so it can be read without holding
+                // the pointer still; clicking the same dot again releases it.
+                if (erPinned && open) { setErPinned(false); setErOpen(null); }
+                else { setErOpen(k); setErPinned(true); setTip(null); }
+              }}>
+              {/* Invisible pad: a 4px dot is a hard target on a dense chart. */}
+              <circle cx={X(i)} cy={cy} r="11" fill="transparent" />
+              <circle cx={X(i)} cy={cy} r={open ? 5.5 : 4}
+                fill="var(--ai)" stroke="var(--surface-0)" strokeWidth="1.5" />
+              <text className="caxis" x={X(i)} y={cy - 8} textAnchor="middle" fill="var(--ai)">ER</text>
+            </g>
+          );
+        })}
       </svg>
     </div>
   );

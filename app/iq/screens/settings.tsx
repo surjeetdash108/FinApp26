@@ -18,6 +18,10 @@ const FONTS: { key: FontKey; rank: number; label: string; desc: string; stack: s
   { key: "ibm-plex-sans", rank: 2,    label: "IBM Plex Sans",    desc: "Technical & trustworthy · Finance fit",   stack: "var(--font-ibm-plex-sans,'IBM Plex Sans',sans-serif)" },
   { key: "outfit", rank: 8,           label: "Outfit",           desc: "Sharp geometric · Minimal & confident",   stack: "var(--font-outfit,'Outfit',sans-serif)" },
   { key: "manrope", rank: 3,          label: "Manrope",          desc: "Elegant & airy · Premium editorial feel", stack: "var(--font-manrope,'Manrope',sans-serif)" },
+  // The only entry that changes HEADINGS as well as body text — hence the
+  // "+ Inter headings" in the description, so the difference is visible in the
+  // list rather than a surprise after selecting it.
+  { key: "inter-source", rank: 9,     label: "Inter + Source Sans", desc: "Paired · Inter headings, Source Sans body", stack: "var(--font-source-sans-3,'Source Sans 3',sans-serif)" },
 ];
 
 function ConfirmModal({
