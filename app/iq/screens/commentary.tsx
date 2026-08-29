@@ -430,7 +430,7 @@ function BiggestPctTab() {
   );
 }
 
-// ── Week / Month at a glance ────────────────────────────────────────────────
+// ── Weekly / Monthly summary ────────────────────────────────────────────────
 type GlanceSentiment = "bullish" | "bearish" | "neutral" | "mixed";
 interface GlanceDoc {
   period: "weekly" | "monthly";
@@ -782,8 +782,8 @@ export function CommentaryScreen() {
           <button className={`tab${mainTab === 1 ? " on" : ""}`} style={mainTab === 1 ? SEL_TAB : undefined} onClick={() => setMainTab(1)}>Announcement</button>
           <button className={`tab${mainTab === 2 ? " on" : ""}`} style={mainTab === 2 ? SEL_TAB : undefined} onClick={() => setMainTab(2)}>Most Active</button>
           <button className={`tab${mainTab === 3 ? " on" : ""}`} style={mainTab === 3 ? SEL_TAB : undefined} onClick={() => setMainTab(3)}>Biggest %</button>
-          <button className={`tab${mainTab === 4 ? " on" : ""}`} style={mainTab === 4 ? SEL_TAB : undefined} onClick={() => setMainTab(4)}>Week at a Glance</button>
-          <button className={`tab${mainTab === 5 ? " on" : ""}`} style={mainTab === 5 ? SEL_TAB : undefined} onClick={() => setMainTab(5)}>Month at a Glance</button>
+          <button className={`tab${mainTab === 4 ? " on" : ""}`} style={mainTab === 4 ? SEL_TAB : undefined} onClick={() => setMainTab(4)}>Weekly Summary</button>
+          <button className={`tab${mainTab === 5 ? " on" : ""}`} style={mainTab === 5 ? SEL_TAB : undefined} onClick={() => setMainTab(5)}>Monthly Summary</button>
         </div>
       </div>
 
@@ -914,8 +914,8 @@ export function CommentaryScreen() {
       {mainTab === 1 && <EarningsAnnouncementsTab />}
       {mainTab === 2 && <MostActiveTab />}
       {mainTab === 3 && <BiggestPctTab />}
-      {mainTab === 4 && <GlanceTab period="weekly" heading="Week at a glance" />}
-      {mainTab === 5 && <GlanceTab period="monthly" heading="Month at a glance" />}
+      {mainTab === 4 && <GlanceTab period="weekly" heading="Weekly summary" />}
+      {mainTab === 5 && <GlanceTab period="monthly" heading="Monthly summary" />}
 
       {analysisTicker && (
         <TickerAnalysisDrawer sym={analysisTicker} onClose={() => setAnalysisTicker(null)} />
