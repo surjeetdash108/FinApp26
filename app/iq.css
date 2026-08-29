@@ -776,8 +776,39 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 .own-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 6px var(--brand); flex: none; display: inline-block; margin-right: 4px; vertical-align: middle; }
 
 /* stock detail */
+/* The stock screen renders at four different widths — full screen, the 860px
+   mover drawer, the 1080px detail popover, and the search panel — from ONE
+   layout. A viewport media query cannot serve that: inside an 860px drawer on
+   a 1920px monitor it never fires, so the rail kept its 400px and the main
+   column collapsed to ~410px. Every chart in the drawer was drawn at half the
+   width it was designed for, which is why they were unreadable.
+
+   Container queries ask the right question: how much room does THIS copy of
+   the screen have. `.sd-scope` is the element that answers it — the layout
+   below reads its width, wherever the screen is mounted. */
+.sd-scope { container-type: inline-size; container-name: sd; }
+
 .sd-grid { padding: 14px 18px; display: grid; grid-template-columns: minmax(0,1fr) 400px; gap: 14px; align-items: start; }
+/* Below this the rail costs more than it gives — the main column would end up
+   barely wider than the 400px rail beside it. Both drawers (860px and 1080px)
+   fall under it and stack, handing every card the drawer's full width; a real
+   screen keeps the two-column layout. */
+@container sd (max-width: 1100px) { .sd-grid { grid-template-columns: 1fr; } }
+/* Kept for browsers without container queries — same outcome, coarser trigger. */
 @media(max-width: 900px) { .sd-grid { grid-template-columns: 1fr; } }
+
+/* A 50/50 row that becomes one column when the container cannot seat two. */
+.sd-row2 { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch; }
+@container sd (min-width: 760px) { .sd-row2 { grid-template-columns: 1fr 1fr; } }
+/* Same idea for the flex pair — the cards already carry flex:1;min-width:0, so
+   they only need permission to wrap. */
+.sd-rowflex { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; }
+.sd-rowflex > .card { flex: 1 1 330px; }
+/* EPS and Sales sit side by side only while both stay readable. Ten bars with
+   rotated date labels need real width; below this they stack and each gets the
+   whole card. */
+.eps-sales-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@container sd (min-width: 900px) { .eps-sales-grid { grid-template-columns: 1fr 1fr; } }
 /* Symbol / price / change sized so the whole quote (e.g. "AAPL $309.69 ▲
    +$0.34 (+0.11%)") sits on ONE line in the header column instead of wrapping
    to three. Reduced from 1.5/1.7/.86rem; .sd-headline keeps flex-wrap so it

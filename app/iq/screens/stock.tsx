@@ -310,7 +310,7 @@ function EpsSalesBars({ data }: { data: EpsSalesPt[] }) {
   // (matches the Earnings Hub's split EPS / Sales cards).
   const box = { border: "1px solid var(--border-soft)", borderRadius: 10, background: "var(--surface-2)", padding: "10px 12px" };
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+    <div className="eps-sales-grid">
       <div style={box}>
         <MetricBars title="EPS" data={data.map(d => ({ label: d.label, v: d.eps }))}
           fmt={v => v.toFixed(2)} />
@@ -1091,7 +1091,12 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
   }
 
   return (
-    <>
+    // The container-query scope. This screen renders at four very different
+    // widths — full screen, the mover drawer, the detail popover and the
+    // search panel — and the layout below sizes itself from THIS element, not
+    // from the window, so each copy lays out for the room it actually has.
+    // See .sd-scope in iq.css.
+    <div className="sd-scope">
       {/* Symbol bar — search left, chips right */}
       {!hideHeader && (
         <div className="fbar" style={{ position: "relative" }}>
@@ -1811,7 +1816,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
             BELOW the two-column section, so the left column ends at Financials
             and Key levels (base of the right column) aligns with Financials'
             bottom border. Side-by-side pair, each with its own scroll. */}
-        <div style={{ gridColumn: "1 / -1", display: "flex", gap: 14, alignItems: "stretch" }}>
+        <div className="sd-rowflex">
           {(() => {
             const dh = dividendHistory;
             const hasReal = !!dh && dh.isPayer;
@@ -1972,7 +1977,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
 
         {/* Industry Group rank + Earnings history — full-width row, 50/50, equal
             height (grid align-items: stretch + flex-column cards). */}
-        <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "stretch" }}>
+        <div className="sd-row2">
           {/* Industry Group rank */}
           <div className="card" style={{ display: "flex", flexDirection: "column" }}>
             <div className="card-h">
@@ -2765,6 +2770,6 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
