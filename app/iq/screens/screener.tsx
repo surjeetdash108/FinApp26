@@ -371,7 +371,7 @@ export function ScreenerScreen() {
           </div>
 
           {/* Filter groups — horizontal */}
-          <div style={{ display: "flex" }}>
+          <div style={{ display: "flex", flexWrap: "wrap" }}>
             <div className="fgroup" style={{ flex: 1, borderBottom: "none", borderRight: "1px solid var(--border-soft)" }}>
               <div className="fl">Relative strength (6-mo)</div>
               <CheckOpt label="RS ≥ 90 (leaders)"  on={rs90}   onToggle={() => { setRs90(o => !o); setRs7090(false); setRsLt40(false); }} />

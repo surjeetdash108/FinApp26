@@ -1957,6 +1957,12 @@ table.tbl tr:hover td { background: var(--surface-2); cursor: pointer; }
 @media (max-width: 767px) {
   .sp-row { flex-wrap: wrap; }
   .sp-listcard { width: 100% !important; }
+  /* Screener manual-filter groups: two per row instead of four crushed columns. */
+  .fgroup { flex-basis: 45%; }
+}
+/* Recap hero: the 1.9fr/1fr headlines-vs-up-next split stacks on phones. */
+@media (max-width: 600px) {
+  .recap-hero { grid-template-columns: 1fr !important; }
 }
 /* Earnings month grid (full weekday earnings calendar) — emc- prefix to avoid
    colliding with the pre-existing macro month-calendar (.ecm-*) classes below. */

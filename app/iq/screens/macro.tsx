@@ -313,7 +313,7 @@ export function MacroScreen() {
 
   return (
     <>
-      <div className="page-head" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+      <div className="page-head" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap" }}>
         <button className="ecal-arrow" onClick={() => setEcoAnchor(isoDay(addDays(ecoAnchorDate, -7)))} aria-label="Previous week">‹</button>
         <span style={{ fontSize: "1.02rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)", minWidth: 220, textAlign: "center" }}>{ecoWeekLabel}</span>
         <button className="ecal-arrow" onClick={() => setEcoAnchor(isoDay(addDays(ecoAnchorDate, 7)))} aria-label="Next week">›</button>

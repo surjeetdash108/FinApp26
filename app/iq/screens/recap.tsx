@@ -474,7 +474,7 @@ export function RecapScreen({ mode = "daily" }: { mode?: "daily" | "weekly" }) {
               <button className="btn" onClick={() => downloadRecap(dateLabel, todayHeadlines, todaySurprises, todayGrades, "today")}>{DL_ICON} Today (EOD)</button>
             )}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.9fr) minmax(0, 1fr)", gap: 22, marginTop: 14 }}>
+          <div className="recap-hero" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.9fr) minmax(0, 1fr)", gap: 22, marginTop: 14 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <div className="eyebrow">Top headlines</div>
