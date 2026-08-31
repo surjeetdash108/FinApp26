@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { fmtDate } from "../calendar-range";
 import { useIQActions } from "../shell";
 import { DataState, StockLogo, VendorTag } from "../utils";
 import { useApiList } from "../hooks/useApiList";
@@ -38,9 +39,9 @@ function actionTone(action: string | null | undefined): string {
 }
 
 function shortDate(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "—";
-  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  // fmtDate keeps a date-only string on its own calendar day; an analyst action
+  // dated 2026-09-01 was printing as Aug 31 for readers west of Greenwich.
+  return fmtDate(iso, { month: "short", day: "numeric" });
 }
 
 const money = (v: number | null | undefined, d = 0): string =>

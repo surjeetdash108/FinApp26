@@ -7,7 +7,7 @@ import { apiGet } from "../backend";
 import { useIQActions, ExpandBtn } from "../shell";
 import { type Mover, type SectorRow, type Earning, type FolioItem, type WatchItem, maPostureLabel, isLeveragedProduct } from "../data";
 import { fmt, sign, cls, arr, Spark, SemiGauge, StockLogo, heatCol, DataState, NotAvailable, VendorTag } from "../utils";
-import { isoDay } from "../calendar-range";
+import { isoDay, fmtDate } from "../calendar-range";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
@@ -962,7 +962,7 @@ export function DashboardScreen() {
                 const lead = (r.sectorLeaders ?? [])[0] ?? null;
                 const lag = (r.sectorLaggards ?? [])[0] ?? null;
                 const gain = (r.topGainers ?? [])[0] ?? null;
-                const dateLabel = new Date(`${r.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                const dateLabel = fmtDate(r.date);
                 return (
                   <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                     <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>Market recap · {dateLabel}</div>

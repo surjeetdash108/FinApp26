@@ -8,7 +8,7 @@ import { useTapeStream } from "../hooks/useTapeStream";
 import { tapeItemsToIndexDocs } from "../live-market-indices";
 import type { MacroEventDoc, DividendHistoryDoc, CompanyDoc } from "../types";
 import type { MarketStatusPayload } from "../types/market-status";
-import { fmtMonthDay, isoDay, addDays, mondayOf } from "../calendar-range";
+import { fmtMonthDay, isoDay, addDays, mondayOf, fmtDate } from "../calendar-range";
 
 // ── Economic calendar ────────────────────────────────────────────────────────
 interface MacroEvent {
@@ -339,7 +339,7 @@ export function MacroScreen() {
                   <div>
                     <div style={{ fontSize: ".82rem", color: "var(--text-hi)", fontWeight: 600 }}>{h.name}</div>
                     <div style={{ fontSize: ".66rem", color: "var(--text-dim-solid)", fontFamily: "var(--f-mono)" }}>
-                      {new Date(h.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                      {fmtDate(h.date, { weekday: "short", month: "short", day: "numeric" })}
                     </div>
                   </div>
                   <span className="pill" style={{
@@ -541,7 +541,7 @@ export function MacroScreen() {
                   <div key={h.date + h.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
                     <div style={{ fontSize: ".84rem", color: "var(--text-hi)", fontWeight: 600 }}>{h.name}</div>
                     <div style={{ fontSize: ".72rem", color: "var(--text-dim-solid)", fontFamily: "var(--f-mono)" }}>
-                      {new Date(h.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                      {fmtDate(h.date, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
                     </div>
                   </div>
                 ))}
@@ -557,7 +557,13 @@ export function MacroScreen() {
         const unit = d.unit === "%" ? "%" : "";
         const fv = (v: number | null | undefined) => (v == null ? "—" : `${v}${unit}`);
         const change = d.actual != null && d.previous != null ? d.actual - d.previous : null;
-        const dateFull = new Date(`${d.eventDate}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+        /* Read back in UTC, because that is the instant just constructed.
+           Formatting midnight-UTC in the reader's own zone moved the date a day
+           earlier for anyone west of Greenwich — an event filed under Tue 1 in
+           the grid opened a popup headed "Monday, August 31". The grid buckets
+           on the date STRING and toMacroEvent uses getUTCDay, so UTC is what
+           the rest of this calendar already agrees on. */
+        const dateFull = fmtDate(d.eventDate, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
         const tier = d.importance === "high" ? "High" : d.importance === "medium" ? "Medium" : "Low";
         const tierColor = d.importance === "high" ? "var(--down)" : d.importance === "medium" ? "var(--warn)" : "var(--text-dim-solid)";
         return (

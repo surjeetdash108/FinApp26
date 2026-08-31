@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { fmtDate } from "../calendar-range";
 import dynamic from "next/dynamic";
 import { type Mover, maPostureLabel, isLeveragedProduct } from "../data";
 import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag, titleCaseLabel} from "../utils";
@@ -508,7 +509,7 @@ export function MoversScreen() {
                     {g.firm ?? "Analyst"}: {g.previousGrade ?? "—"} → <b>{g.newGrade ?? "—"}</b>
                     {g.action ? <span style={{ color: /down/i.test(g.action) ? "var(--down)" : /up/i.test(g.action) ? "var(--up)" : "var(--text-dim-solid)", textTransform: "capitalize" }}> · {g.action}</span> : null}
                   </div>
-                  <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 5 }}>Analyst rating change{g.date ? ` · ${new Date(g.date).toLocaleDateString()}` : ""}</div>
+                  <div style={{ fontSize: ".68rem", color: "var(--text-dim-solid)", marginTop: 5 }}>Analyst rating change{g.date ? ` · ${fmtDate(g.date, { month: "short", day: "numeric", year: "numeric" })}` : ""}</div>
                 </>
               ) : (() => {
                 // No news and no analyst change → surface the volume signal so the

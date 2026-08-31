@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { fmtDate } from "../calendar-range";
 import { useBackendBars } from "../hooks/useBackendBars";
 import type { OHLCBar } from "../utils";
 import { DataState, VendorTag } from "../utils";
@@ -75,7 +76,7 @@ const mean = (xs: number[]): number | null => {
 };
 const isoOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 const fmtLabel = (iso: string) =>
-  new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }).replace(/(\d{2})$/, "'$1");
+  fmtDate(iso, { month: "short", day: "numeric", year: "2-digit" }).replace(/(\d{2})$/, "'$1");
 
 function buildModel(reports: PlaybookReport[], bars: OHLCBar[] | undefined, maxReports = 12): Model | null {
   if (!bars || bars.length < 3) return null;

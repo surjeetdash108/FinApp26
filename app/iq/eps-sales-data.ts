@@ -25,6 +25,7 @@ import {
   estimatedAnnualEps,
   surprisePct,
 } from "./types";
+import { fmtDate } from "./calendar-range";
 
 /** "+12%" / "-4%" / "—" — rounded YoY %change, blank when either side is missing. */
 export function pctChangeStr(
@@ -131,9 +132,7 @@ export function epsSalesSeries(
       .sort((a, b) => (a.endDate as string).localeCompare(b.endDate as string))
       .slice(-12)
       .map(r => ({
-        label: new Date(r.endDate + "T00:00:00")
-          .toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-          .replace(" ", "-"),
+        label: fmtDate(r.endDate, { month: "short", year: "2-digit" }).replace(" ", "-"),
         eps: reportedQuarterEps(r),
         sales: r.revenue != null ? r.revenue / 1e6 : null,
       }));
@@ -219,10 +218,7 @@ export function quarterlyEpsSalesRows(
       label:
         r.fiscalPeriod && r.fiscalYear
           ? `${r.fiscalPeriod} ${r.fiscalYear}`
-          : new Date(r.endDate + "T00:00:00").toLocaleDateString("en-US", {
-              month: "short",
-              year: "2-digit",
-            }),
+          : fmtDate(r.endDate, { month: "short", year: "2-digit" }),
       eps,
       epsEst: r.epsEstimateReported ?? null,
       epsChg: pctChangeStr(eps, yoy ? reportedQuarterEps(yoy) : null),

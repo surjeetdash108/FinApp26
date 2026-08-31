@@ -11,7 +11,7 @@ import { backendUrl } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
-import { isoDay, addDays, mondayOf } from "../calendar-range";
+import { isoDay, addDays, mondayOf, fmtDate } from "../calendar-range";
 import { surprisePct, reportedQuarterEps, quarterEpsSurprisePct } from "../types";
 
 // Live source (Polygon SEC financials) has ticker/date/epsEstimate/epsActual —
@@ -1044,7 +1044,7 @@ export function EarningsScreen() {
     const surp = pairedSurp ?? 0;
     if (paired) { pairedTotal++; if (surp >= 0) pairedBeats++; }
     const label = q.endDate
-      ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", histPeriod === "A" ? { year: "numeric" } : { month: "short", year: "2-digit" })
+      ? fmtDate(q.endDate, histPeriod === "A" ? { year: "numeric" } : { month: "short", year: "2-digit" })
       : (histPeriod === "A" ? `${q.fiscalYear ?? ""}`.trim() : `${(q as QuarterFinancials).fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim());
     return { q: label, e: est ?? 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0 };
   });

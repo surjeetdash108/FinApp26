@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
+import { fmtDate } from "../calendar-range";
 import { useIQActions, ExpandBtn } from "../shell";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import { WatchlistPicker } from "../watchlist-picker";
@@ -1054,7 +1055,7 @@ export function StockScreen({ initialSym, hideHeader, hideChart }: { initialSym?
       const surp = pairedSurp ?? 0;
       return {
         q: q.endDate
-          ? new Date(q.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+          ? fmtDate(q.endDate, { month: "short", year: "2-digit" })
           : `${q.fiscalPeriod ?? ""} ${q.fiscalYear ?? ""}`.trim(),
         e: paired && repEst != null ? repEst : 0, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
       };

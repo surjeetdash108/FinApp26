@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { fmtDate } from "./calendar-range";
 import dynamic from "next/dynamic";
 import { CandleChart, ChartSelect, TF_OPTIONS, CHART_TYPE_OPTIONS, RsiPane, DataState, Spark, VendorTag, type EarnQ } from "./utils";
 import { ExpandBtn } from "./shell";
@@ -167,7 +168,7 @@ function useLiveEarningsForSym(sym: string): { hist: EarnQ[]; erDate: string; lo
       const est = e.epsEstimate as number, act = e.epsActual as number;
       const surp = surprisePct(act, est) ?? 0;
       return {
-        q: new Date(e.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        q: fmtDate(e.date, { month: "short", year: "2-digit" }),
         e: est, a: act, surp: parseFloat(surp.toFixed(1)), mv: 0,
       };
     });

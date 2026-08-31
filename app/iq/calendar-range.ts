@@ -25,6 +25,33 @@ export const addDays = (d: Date, n: number) => {
 /** Monday of the week containing d (UTC, Monday-start). */
 export const mondayOf = (d: Date) => addDays(d, -((d.getUTCDay() + 6) % 7));
 
+/**
+ * Formats a date string the way it was recorded.
+ *
+ * A date-only string is a CALENDAR DAY, not an instant. "2026-09-01" parses as
+ * midnight UTC, so formatting it in the reader's own zone moves it a day
+ * earlier for everyone west of Greenwich — an economic event filed under Tue 1
+ * opened a popup headed "Monday, August 31" in New York, while the same build
+ * looked correct from India. It is read back in UTC, the zone it was parsed in.
+ *
+ * A full timestamp IS an instant, so it is shown in the reader's own zone —
+ * which is what someone reading "published 3pm" wants to see.
+ *
+ * Every date-string in the app goes through here so the rule is applied once
+ * rather than remembered at each call site.
+ */
+export function fmtDate(
+  iso: string | null | undefined,
+  opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' },
+  locale: string | undefined = 'en-US',
+): string {
+  if (!iso) return '—';
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso);
+  const d = new Date(dateOnly ? `${iso}T00:00:00Z` : iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(locale, dateOnly ? { ...opts, timeZone: 'UTC' } : opts);
+}
+
 const MON_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 /** "2026-08-14" -> "Aug 14". Returns "—" for null so callers never print "null". */
