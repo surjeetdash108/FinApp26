@@ -96,6 +96,7 @@ function mergeMovers(
       marketCap: l.marketCap ?? c?.marketCap ?? null,
       // Real 5-session change from technical-indicators.job; null → "—".
       weekPct: c?.week5ChangePct ?? null,
+      weekBase: c?.week5BaseClose ?? null,
       techContext: `Live EOD data as of ${l.asOfDate}.`,
       newsContext: "",
     };
@@ -117,7 +118,13 @@ export function MoversScreen() {
    * from there and covers the whole tracked market.
    */
   const weeklyRows: Mover[] = rvolCompanies
-    .filter(c => c.ticker && typeof c.week5ChangePct === "number")
+    // Leveraged/inverse products are excluded here for the same reason
+    // mergeMovers excludes them from the daily tabs — a 2x ETF's move is a
+    // multiple of something else's, so it crowds out the names the board is
+    // for. This path was built from `companies` rather than the movers feed and
+    // never picked the filter up: "T-REX 2X Long CRWV Daily Target ETF" sat at
+    // the top of Weekly Gainers.
+    .filter(c => c.ticker && typeof c.week5ChangePct === "number" && !isLeveragedProduct(c.name))
     .map(c => ({
       ticker: c.ticker,
       name: c.name ?? c.ticker,
@@ -134,6 +141,7 @@ export function MoversScreen() {
       cap: capFromMarketCap(c.marketCap) as Mover["cap"],
       marketCap: c.marketCap ?? null,
       weekPct: c.week5ChangePct as number,
+      weekBase: c.week5BaseClose ?? null,
       techContext: "",
       newsContext: "",
     }));
@@ -423,7 +431,18 @@ export function MoversScreen() {
               // On the weekly tabs the Change column shows the 5-DAY move, so the
               // live quote (which is today's %) must NOT overwrite it — otherwise
               // a "Weekly Gainers" row could render today's negative number.
-              const v = isWeekTab(tab) ? m.weekPct : pq.pctChange;
+              //
+              // The stored move ends at the last stored BAR, which can be days
+              // behind the price beside it: DAIC read +1258% to a close two
+              // sessions old, from which it had since fallen ~37%. Given the base
+              // that move was measured from, re-measure it to the price this row
+              // is actually showing. Falls back to the stored figure when either
+              // the base or the live price is missing.
+              const v = isWeekTab(tab)
+                ? (pq.price != null && m.weekBase != null && m.weekBase > 0
+                    ? ((pq.price - m.weekBase) / m.weekBase) * 100
+                    : m.weekPct)
+                : pq.pctChange;
               return (
                 <tr
                   key={m.ticker}

@@ -95,7 +95,7 @@ function mergeMoversData(live: LiveMoverDoc[], companies: CompanyDoc[]): Mover[]
       rvolRatio: c?.rvol ?? 0, relativeStrength: c?.rsRating ?? 0,
       maPosture: maPostureLabel(c?.aboveSma50, c?.aboveSma200), owned: false,
       sector: l.sector ?? c?.sector ?? "—", cap: (l.cap as Mover["cap"]) ?? "Mid",
-      marketCap: l.marketCap ?? c?.marketCap ?? null, weekPct: c?.week5ChangePct ?? null,
+      marketCap: l.marketCap ?? c?.marketCap ?? null, weekPct: c?.week5ChangePct ?? null, weekBase: c?.week5BaseClose ?? null,
       techContext: `Live EOD data as of ${l.asOfDate}.`, newsContext: "",
     };
   });

@@ -73,6 +73,9 @@ export interface CompanyDoc {
   // More technicals from technical-indicators.job: true 5-session change,
   // Stochastic %K, Wilder ADX(14). beta (above) is now computed there too.
   week5ChangePct?: number | null;
+  /** The close week5ChangePct is measured FROM, so the move can be
+   *  re-measured to the live price instead of to a stale bar. */
+  week5BaseClose?: number | null;
   stochK?: number | null;
   adx14?: number | null;
   /** Annualized 30-day realized volatility (%) — the Macro "30d Vol" column. */

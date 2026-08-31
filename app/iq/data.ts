@@ -19,7 +19,10 @@ export interface Mover {
   /** Raw USD market cap for the Movers table's "Mkt Cap" column; null when the
    *  ticker isn't in the tracked `companies` universe (many daily micro-caps). */
   marketCap: number | null;
-  weekPct: number | null; techContext: string; newsContext: string;
+  weekPct: number | null;
+  /** Close the 5-day move is measured from; null when unknown. */
+  weekBase: number | null;
+  techContext: string; newsContext: string;
 }
 
 /** Moving-average posture label from the two booleans on the company doc
