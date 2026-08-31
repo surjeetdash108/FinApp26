@@ -34,6 +34,57 @@ const CHUNK = 250;
 const TICKER_RE = /^[A-Z.]{1,10}$/;
 const POLL_MS = 30_000;
 
+/**
+ * What these prices actually are, in the user's words.
+ *
+ * The poll interval is 30s, but that is OUR cadence, not the data's age: the
+ * Polygon feed behind /live/snapshot is itself ~15 minutes delayed (see the
+ * header of snapshot-cache.service.ts in the backend). Refreshing faster moves
+ * the number from ~900s old to ~910s old and no further.
+ *
+ * Surfaces used to describe this in their own words — the index drawer claimed
+ * "delayed ≤15s" and the movers table said "live prices", both off by a factor
+ * of sixty. A reader comparing against a real-time screener concluded the app
+ * was broken, which is a fair reading of a wrong label. One string, exported,
+ * so a price surface cannot quietly disagree about what it is showing.
+ */
+export const QUOTE_DELAY_LABEL = "~15 min delayed";
+
+/**
+ * Take price and change from the SAME source, never one from each.
+ *
+ * Screens overlay a live quote on a stored doc, and the natural way to write
+ * that is one `??` chain per field:
+ *
+ *     const price = live?.price     ?? stored?.price;
+ *     const pct   = live?.pctChange ?? stored?.pctChange;
+ *
+ * Those two chains are independent. A quote carrying a price but no percentage
+ * takes the first branch and the second, so the row shows a live price beside a
+ * stored percentage — two different moments, presented as one quote. That is
+ * how AEHL came to read $6.34 at +93.14% when $6.34 was +79.1% against the same
+ * previous close.
+ *
+ * Sources are tried in order and the first COMPLETE pair wins. If none is
+ * complete, the first source with anything at all is used whole, so a row may be
+ * partial but is never a splice of two.
+ */
+export function pairedQuote(
+  ...sources: Array<{ price?: number | null; pctChange?: number | null } | null | undefined>
+): { price: number | null; pctChange: number | null } {
+  for (const s of sources) {
+    if (s && s.price != null && s.pctChange != null) {
+      return { price: s.price, pctChange: s.pctChange };
+    }
+  }
+  for (const s of sources) {
+    if (s && (s.price != null || s.pctChange != null)) {
+      return { price: s.price ?? null, pctChange: s.pctChange ?? null };
+    }
+  }
+  return { price: null, pctChange: null };
+}
+
 interface SnapshotRow {
   ticker: string;
   price: number | null;

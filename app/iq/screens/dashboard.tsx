@@ -11,7 +11,7 @@ import { isoDay, fmtDate } from "../calendar-range";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
 import { useTapeStream } from "../hooks/useTapeStream";
-import { useLiveQuotes } from "../live-quotes-context";
+import { useLiveQuotes, pairedQuote } from "../live-quotes-context";
 import { pulseFromLive, buildSectorList, tapeItemsToIndexDocs } from "../live-market-indices";
 import type {
   LiveMoverDoc, LiveEarningsDoc, CompanyDoc, SectorApiDoc,
@@ -198,10 +198,10 @@ function DashPopContent({
       <div className="dp-note">{grades.length > 0 ? `${grades.length} recent rating change${grades.length === 1 ? "" : "s"} — open the analyst page for per-firm detail.` : "Analyst consensus vote count and price-target range."}</div>
     </>;
   } else if (block === "watchlist") {
-    const px = w?.price ?? mv?.price;
+    const { price: px, pctChange: pxPct } = pairedQuote(w, mv);
     body = <>
       {px != null && <DpRow label="Price"><span className="mono">${fmt(px, 2)}</span></DpRow>}
-      <DpRow label="Day"><span className={cls(w?.pctChange ?? mv?.pctChange ?? 0)}>{sign(w?.pctChange ?? mv?.pctChange ?? 0)}</span></DpRow>
+      <DpRow label="Day"><span className={cls(pxPct ?? 0)}>{sign(pxPct ?? 0)}</span></DpRow>
       <DpRow label="Mkt Cap">{scr?.marketCap != null ? fmt(scr.marketCap) : <NotAvailable />}</DpRow>
       <DpRow label="P/E">{scr?.peRatio != null ? scr.peRatio.toFixed(1) : <NotAvailable />}</DpRow>
       <DpRow label="RS rank">{scr?.rsRating != null ? `${scr.rsRating}/99` : <NotAvailable />}</DpRow>
@@ -233,7 +233,9 @@ function DashPopContent({
       <div className="dp-note">Why it&apos;s here: clears the leaders screen — high relative strength + growth.</div>
     </>;
   } else {
-    const c = mv?.pctChange ?? (w ? w.pctChange : 0);
+    // Price below reads from `mv`, so the percentage must too — falling through
+    // to `w` only when `mv` is absent entirely, never mid-pair.
+    const c = mv ? (mv.pctChange ?? 0) : (w ? w.pctChange : 0);
     body = <>
       <DpRow label="Price">{mv ? `$${fmt(mv.price)}` : "—"}</DpRow>
       <DpRow label="Today"><span className={cls(c)}>{sign(c)}</span></DpRow>
@@ -538,8 +540,7 @@ export function DashboardScreen() {
                     const c = companyByTicker.get(ticker);
                     // Prefer the live quote; fall back to the base companies doc.
                     const q = searchedLive.get(ticker);
-                    const price = q?.price ?? c?.price ?? null;
-                    const pct = q?.pctChange ?? c?.pctChange ?? null;
+                    const { price, pctChange: pct } = pairedQuote(q, c);
                     return (
                       <div key={ticker}
                         onClick={() => openStockDetail(ticker, searchedDeduped.map(x => x.ticker))}

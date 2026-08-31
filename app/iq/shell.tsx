@@ -30,7 +30,7 @@ import { WatchlistPicker } from "./watchlist-picker";
 import { pulseFromLive, tapeItemsToIndexDocs } from "./live-market-indices";
 import type { CompanyDoc, SectorApiDoc, LiveEarningsDoc } from "./types";
 import { surprisePct } from "./types";
-import { LiveQuotesProvider } from "./live-quotes-context";
+import { LiveQuotesProvider, QUOTE_DELAY_LABEL } from "./live-quotes-context";
 
 // ---- Route helpers ----
 function slugToHref(slug: string): string {
@@ -368,7 +368,7 @@ function IndexDrawer({ idx, pulse: livePulse, sectorsLive, loading, onClose }: {
       <div className="side-drawer">
         <div className="drawer-h">
           <div className="sd-logo" style={{ background: "linear-gradient(135deg,#1f4d6b,#0e2233)", color: "#7fd0ff" }}>{x.label[0]}</div>
-          <div><div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{x.label}</div><div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>{sub} · delayed ≤15s</div></div>
+          <div><div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-hi)", fontFamily: "var(--f-display)" }}>{x.label}</div><div style={{ fontSize: ".78rem", color: "var(--text-dim-solid)" }}>{sub} · {QUOTE_DELAY_LABEL}</div></div>
           <button className="closebtn" onClick={onClose}>✕</button>
         </div>
         <div className="drawer-b">

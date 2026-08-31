@@ -8,7 +8,7 @@ import { fmt, sign, arr, Spark, StockLogo, DataState, VendorTag, titleCaseLabel}
 import { apiGet } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
-import { useLiveQuotes } from "../live-quotes-context";
+import { useLiveQuotes, QUOTE_DELAY_LABEL, pairedQuote } from "../live-quotes-context";
 import { useWatchlistsContext } from "../hooks/useWatchlists";
 import type { LiveMoverDoc, CompanyDoc, NewsArticleDoc, AnalystConsensusDoc, AnalystRatingChange } from "../types";
 import { sectorFilterOptions, matchesSector } from "../sector-filter";
@@ -366,7 +366,7 @@ export function MoversScreen() {
         </div>
         {liveCount > 0 && (
           <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>
-            {liveCount} names · top 100 gainers + 100 losers · ranked by session move · live prices
+            {liveCount} names · top 100 gainers + 100 losers · ranked by session move · {QUOTE_DELAY_LABEL}
           </span>
         )}
       </div>
@@ -416,14 +416,14 @@ export function MoversScreen() {
                 </td>
               </tr>
             ) : filtered.map(m => {
-              const lq = quoteByTicker.get(m.ticker);
-              const price = lq?.price ?? m.price;
+              // Price and Change come from ONE source — see pairedQuote. Read
+              // per-field, a live price could land beside the stored percentage.
+              const pq = pairedQuote(quoteByTicker.get(m.ticker), m);
+              const price = pq.price;
               // On the weekly tabs the Change column shows the 5-DAY move, so the
               // live quote (which is today's %) must NOT overwrite it — otherwise
               // a "Weekly Gainers" row could render today's negative number.
-              const v = isWeekTab(tab)
-                ? m.weekPct
-                : (lq?.pctChange ?? m.pctChange);
+              const v = isWeekTab(tab) ? m.weekPct : pq.pctChange;
               return (
                 <tr
                   key={m.ticker}
@@ -445,7 +445,7 @@ export function MoversScreen() {
                       </div>
                     </div>
                   </td>
-                  <td className="num">${fmt(price)}</td>
+                  <td className="num">{price == null ? "—" : `$${fmt(price)}`}</td>
                   <td className="num" style={{ color: v == null ? undefined : v >= 0 ? "var(--up)" : "var(--down)", fontWeight: 600 }}>{v == null ? "—" : <>{arr(v)} {sign(v)}</>}</td>
                   <td className="num">
                     {m.rvolRatio > 0
