@@ -327,6 +327,55 @@ export function MoversScreen() {
   // ticker here always matches the same ticker on the heatmap/drawer exactly.
   const quoteByTicker = useLiveQuotes(shownTickers);
 
+  /**
+   * The Price and Change this row will actually SHOW.
+   *
+   * One function, used by the render and by the tab guard below, so what a row
+   * displays and what decides it belongs cannot come apart.
+   */
+  const shownValues = useCallback((m: Mover): { price: number | null; change: number | null } => {
+    // Price and Change come from ONE source — see pairedQuote. Read per-field,
+    // a live price could land beside the stored percentage.
+    const pq = pairedQuote(quoteByTicker.get(m.ticker), m);
+    // On the weekly tabs the Change column shows the 5-DAY move, so the live
+    // quote (which is today's %) must NOT overwrite it — otherwise a "Weekly
+    // Gainers" row could render today's negative number.
+    //
+    // The stored move ends at the last stored BAR, which can be days behind the
+    // price beside it: DAIC read +1258% to a close two sessions old, from which
+    // it had since fallen ~37%. Given the base that move was measured from,
+    // re-measure it to the price this row is actually showing. Falls back to the
+    // stored figure when either the base or the live price is missing.
+    const change = isWeekTab(tab)
+      ? (pq.price != null && m.weekBase != null && m.weekBase > 0
+          ? ((pq.price - m.weekBase) / m.weekBase) * 100
+          : m.weekPct)
+      : pq.pctChange;
+    return { price: pq.price, change };
+  }, [quoteByTicker, tab]);
+
+  /**
+   * A row whose LIVE number contradicts the tab it is sitting in.
+   *
+   * Membership is decided on the movers feed's stored move, which is as of the
+   * last sync; the number rendered is the live one. A stock that was down at the
+   * sync and has since turned up therefore stayed under "Top Losers" showing a
+   * green +24.25% — the tab and the figure disagreeing about the same stock.
+   *
+   * Applied here rather than in the tab filter on purpose. `shownTickers` is
+   * derived from `filtered`, so a row dropped here KEEPS its subscription and
+   * its quote keeps updating; it reappears the moment it turns negative again.
+   * Folding this into `filtered` would unsubscribe the row, strand it on its
+   * stored value, and flip it straight back into the list.
+   */
+  const visible = filtered.filter(m => {
+    const { change } = shownValues(m);
+    if (change == null) return true; // nothing live to contradict it
+    if (tab === "win" || tab === "weekwin") return change > 0;
+    if (tab === "lose" || tab === "weeklose") return change < 0;
+    return true;
+  });
+
   /** Click a column: first click applies that column's natural direction, further
    *  clicks toggle, and a third state returns to the tab's own ranking. */
   const toggleSort = (k: MoverSortKey) => {
@@ -396,7 +445,7 @@ export function MoversScreen() {
           style={{ marginLeft: 10, width: 230, boxSizing: "border-box", background: "var(--surface-3)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 9px", fontSize: ".74rem", color: "var(--text-hi)", outline: "none", fontFamily: "var(--f-mono)", textAlign: "left" }}
         />
         <div className="spacer" />
-        <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{filtered.length} stocks</span>
+        <span style={{ fontSize: ".72rem", color: "var(--text-dim-solid)" }}>{visible.length} stocks</span>
       </div>
 
       <div className="card">
@@ -415,7 +464,7 @@ export function MoversScreen() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {visible.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ padding: 0 }}>
                   {moversLoading && movers.length === 0
@@ -423,26 +472,9 @@ export function MoversScreen() {
                     : <div style={{ padding: 16, color: "var(--text-dim-solid)" }}>No stocks match these filters.</div>}
                 </td>
               </tr>
-            ) : filtered.map(m => {
-              // Price and Change come from ONE source — see pairedQuote. Read
-              // per-field, a live price could land beside the stored percentage.
-              const pq = pairedQuote(quoteByTicker.get(m.ticker), m);
-              const price = pq.price;
-              // On the weekly tabs the Change column shows the 5-DAY move, so the
-              // live quote (which is today's %) must NOT overwrite it — otherwise
-              // a "Weekly Gainers" row could render today's negative number.
-              //
-              // The stored move ends at the last stored BAR, which can be days
-              // behind the price beside it: DAIC read +1258% to a close two
-              // sessions old, from which it had since fallen ~37%. Given the base
-              // that move was measured from, re-measure it to the price this row
-              // is actually showing. Falls back to the stored figure when either
-              // the base or the live price is missing.
-              const v = isWeekTab(tab)
-                ? (pq.price != null && m.weekBase != null && m.weekBase > 0
-                    ? ((pq.price - m.weekBase) / m.weekBase) * 100
-                    : m.weekPct)
-                : pq.pctChange;
+            ) : visible.map(m => {
+              // Same values the tab guard used — see shownValues.
+              const { price, change: v } = shownValues(m);
               return (
                 <tr
                   key={m.ticker}
