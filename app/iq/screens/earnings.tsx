@@ -160,8 +160,11 @@ function inferredSession(
   rowDate?: string,
   today?: string,
 ): "BMO" | "AMC" | null {
-  // A report that has not happened yet has no reaction to read.
-  if (rowDate && today && rowDate > today) return null;
+  // ONLY the day of the report. The quote is TODAY's move, so it is the
+  // earnings reaction only for a company reporting today. Tomorrow's reporter
+  // has not moved yet; yesterday's reaction was yesterday's move, not this
+  // one. Either way the number would not describe the row.
+  if (rowDate && today && rowDate !== today) return null;
   const p = pre == null ? null : Math.abs(pre);
   const q = post == null ? null : Math.abs(post);
   if (p == null && q == null) return null;
@@ -181,6 +184,8 @@ function filterSortRows(
     today?: string;
     /** The date THESE rows report on — CalRow does not carry one itself. */
     rowDate?: string;
+    /** Each ticker's usual reporting session, for rows nothing else can place. */
+    usual?: Map<string, "BMO" | "AMC">;
     /** Live quotes, so a row with no vendor session can be placed by its move. */
     quotes?: Map<string, { earlyPct: number | null; latePct: number | null }>;
   },
@@ -189,7 +194,11 @@ function filterSortRows(
     if (opts.session === "both") return true;
     // Prefer a real vendor session if one ever arrives; fall back to the move.
     const q = opts.quotes?.get(r.s);
-    const side = r.sess ?? inferredSession(q?.earlyPct, q?.latePct, opts.rowDate, opts.today);
+    const side =
+      r.sess
+      ?? inferredSession(q?.earlyPct, q?.latePct, opts.rowDate, opts.today)
+      ?? opts.usual?.get(r.s)
+      ?? null;
     return side === opts.session;
   });
   out.sort((a, b) => {
@@ -887,6 +896,44 @@ export function EarningsScreen() {
   const weekMon   = mondayOf(new Date(`${anchor}T00:00:00Z`));
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
 
+  const annSessionByKey = new Map<string, "BMO" | "AMC">();
+  /**
+   * A ticker's USUAL reporting session, from its own filing history.
+   *
+   * Companies keep to one side: of 351 tickers with a BMO/AMC filing, 346 (99%)
+   * have never used the other. So when nothing else can place a row — an
+   * upcoming report has no 8-K yet and no reaction to read — the company's own
+   * habit is the best evidence available, and a far better answer than dropping
+   * it out of a narrowed view.
+   *
+   * Only used when a ticker is CONSISTENT. A company that has genuinely
+   * reported on both sides has no habit to appeal to, so it stays unclassified
+   * rather than being placed on a coin-flip.
+   */
+  const annUsualSession = new Map<string, "BMO" | "AMC">();
+  // Guidance rides the same 8-K feed and the same ticker|date key as session.
+  const annGuidanceByKey = new Map<string, EarningsAnnouncementDoc>();
+  for (const a of earningsAnnouncements) {
+    if (a.session === "BMO" || a.session === "AMC") {
+      annSessionByKey.set(`${a.ticker}|${a.announceDate}`, a.session);
+    }
+    annGuidanceByKey.set(`${a.ticker}|${a.announceDate}`, a);
+  }
+  {
+    const tally = new Map<string, { BMO: number; AMC: number }>();
+    for (const a of earningsAnnouncements) {
+      if (a.session !== "BMO" && a.session !== "AMC") continue;
+      const t = tally.get(a.ticker) ?? { BMO: 0, AMC: 0 };
+      t[a.session]++;
+      tally.set(a.ticker, t);
+    }
+    for (const [ticker, c] of tally) {
+      // Consistent only: one side used, the other never.
+      if (c.BMO > 0 && c.AMC === 0) annUsualSession.set(ticker, "BMO");
+      else if (c.AMC > 0 && c.BMO === 0) annUsualSession.set(ticker, "AMC");
+    }
+  }
+
   // Rows dated after today cannot be classified by their move — see
   // inferredSession. Computed once so every consumer agrees on "today".
   const todayIso = isoDay(new Date());
@@ -914,10 +961,10 @@ export function EarningsScreen() {
   // the grid unchanged while the same choice visibly narrowed the glance view,
   // which reads as the filter being broken in one mode. Week mode already
   // passed `session`; only this call was hardcoded.
-  const visibleRows = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: anchor });
+  const visibleRows = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: anchor, usual: annUsualSession });
   // Detail-mode side tray: the SELECTED DAY's reporting tickers (not the week),
   // narrowed live by the "Search earnings" box (symbol or company name).
-  const trayBaseItems = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: anchor });
+  const trayBaseItems = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: anchor, usual: annUsualSession });
   const trayQuery = tickerSearch.trim().toUpperCase();
   const trayItems = trayQuery
     ? trayBaseItems.filter(r => r.s.includes(trayQuery) || (r.n ?? "").toUpperCase().includes(trayQuery))
@@ -927,15 +974,6 @@ export function EarningsScreen() {
   // EDGAR 8-K `earnings_announcements` feed — Polygon's earnings_events carries
   // no session — joined by ticker + reporting date. Rows with no 8-K session
   // match fall into a "Time not specified" group rather than being hidden.
-  const annSessionByKey = new Map<string, "BMO" | "AMC">();
-  // Guidance rides the same 8-K feed and the same ticker|date key as session.
-  const annGuidanceByKey = new Map<string, EarningsAnnouncementDoc>();
-  for (const a of earningsAnnouncements) {
-    if (a.session === "BMO" || a.session === "AMC") {
-      annSessionByKey.set(`${a.ticker}|${a.announceDate}`, a.session);
-    }
-    annGuidanceByKey.set(`${a.ticker}|${a.announceDate}`, a);
-  }
   // ── At-a-glance snapshot rows ──────────────────────────────────────────────
   // Reporters for the current mode (day = the anchor day; week = its 5 weekdays;
   // month = the whole month), each with its Before-Open / After-Close session
@@ -950,7 +988,9 @@ export function EarningsScreen() {
     .map(it => (it.sess ? it : {
       ...it,
       sess: annSessionByKey.get(`${it.s}|${it.date}`)
-        ?? inferredSession(sessionQuotes.get(it.s)?.earlyPct, sessionQuotes.get(it.s)?.latePct, it.date, todayIso),
+        ?? inferredSession(sessionQuotes.get(it.s)?.earlyPct, sessionQuotes.get(it.s)?.latePct, it.date, todayIso)
+        ?? annUsualSession.get(it.s)
+        ?? null,
     }))
     .map(it => {
       const a = annGuidanceByKey.get(`${it.s}|${it.date}`);
@@ -1044,7 +1084,7 @@ export function EarningsScreen() {
     calNode = (
       <div className="ec-grid">
         {weekDays5.map((iso, di) => {
-          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: iso });
+          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: iso, usual: annUsualSession });
           const dn = ["Mon", "Tue", "Wed", "Thu", "Fri"][di];
           const isToday = iso === isoDay(new Date());
           return (
@@ -1091,7 +1131,7 @@ export function EarningsScreen() {
         <div className="emc-grid">
           {cells.map(iso => {
             if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="emc-day is-out" />;
-            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: iso });
+            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: iso, usual: annUsualSession });
             const isToday = iso === todayIso;
             const isSel   = iso === anchor && !isToday;
             const shown   = items.slice(0, MAX_LOGOS);
