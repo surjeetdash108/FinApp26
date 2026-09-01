@@ -27,6 +27,30 @@ import { apiGet } from "./backend";
 export interface LiveQuote {
   price: number | null;
   pctChange: number | null;
+  /**
+   * Today's PRE-MARKET move (04:00–09:30 ET), from the vendor's
+   * `early_trading_change_percent`. Verified: it persists through the regular
+   * session rather than clearing at the open, and squares with the open price.
+   */
+  earlyPct: number | null;
+  /**
+   * The vendor's `late_trading_change_percent`, shown as the after-hours move.
+   *
+   * CARRIED WITH A KNOWN CAVEAT. Measured 2026-09-01 with the market open, this
+   * came back as very nearly the NEGATIVE of the regular-session move for every
+   * stock that had not reported — WMT +1.211/-1.22, AAPL +2.601/-2.47, MSFT
+   * -1.40/+1.537, JNJ +1.186/-1.09, each summing to roughly zero. An after-hours
+   * move has no reason to mirror the day session, so the field is measuring
+   * something other than, or in addition to, late trading. Stocks reporting that
+   * day broke the pattern by a consistent ~+1.05 (CRDO -5.00/+6.06, DELL
+   * -4.12/+5.18, MDB -3.99/+5.02), which suggests a real signal is in there.
+   *
+   * The vendor's docs define neither the window nor the baseline; support has
+   * not been asked yet. Displayed at the product owner's direction with the
+   * column labelled as vendor-reported. If the meaning is ever pinned down,
+   * update this note and the column's tooltip together.
+   */
+  latePct: number | null;
 }
 
 /** Matches MAX_TICKERS on /live/snapshot (the vendor's per-call ceiling). */
@@ -90,6 +114,9 @@ interface SnapshotRow {
   price: number | null;
   /** NOTE: /live/snapshot names it `changePct`; /live/quotes calls it `pctChange`. */
   changePct: number | null;
+  /** Pre/post-market moves; absent from /live/quotes, which serves a narrower shape. */
+  earlyTradingChangePct?: number | null;
+  lateTradingChangePct?: number | null;
 }
 interface SnapshotResponse {
   quotes?: SnapshotRow[];
@@ -174,7 +201,12 @@ export function LiveQuotesProvider({ children }: { children: ReactNode }) {
         for (const r of results) {
           for (const q of r?.quotes ?? []) {
             if (!q.ticker) continue;
-            merged.set(q.ticker, { price: q.price, pctChange: q.changePct });
+            merged.set(q.ticker, {
+              price: q.price,
+              pctChange: q.changePct,
+              earlyPct: q.earlyTradingChangePct ?? null,
+              latePct: q.lateTradingChangePct ?? null,
+            });
           }
         }
         return merged;

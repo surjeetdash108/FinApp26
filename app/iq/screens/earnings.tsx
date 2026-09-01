@@ -10,6 +10,7 @@ import { EarningsPlaybook } from "./EarningsPlaybook";
 import { backendUrl } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
+import { useLiveQuotes } from "../live-quotes-context";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
 import { isoDay, addDays, mondayOf, fmtDate } from "../calendar-range";
 import { surprisePct, reportedQuarterEps, quarterEpsSurprisePct } from "../types";
@@ -562,7 +563,7 @@ function GlanceQuarters({ ticker, colSpan }: { ticker: string; colSpan: number }
   );
 }
 
-function GlanceRow({ it, showDate, onSelect, colSpan }: { it: EarnCalItem; showDate: boolean; onSelect: (s: string, date: string) => void; colSpan: number }) {
+function GlanceRow({ it, showDate, onSelect, colSpan, prePct, postPct }: { it: EarnCalItem; showDate: boolean; onSelect: (s: string, date: string) => void; colSpan: number; prePct: number | null; postPct: number | null }) {
   const epsSurp = surprise(it.epsE, it.epsA);
   const yoyRev = surprise(it.revYearAgo, it.revA); // (rev - yearAgo)/|yearAgo|
   const [open, setOpen] = useState(false);
@@ -599,6 +600,17 @@ function GlanceRow({ it, showDate, onSelect, colSpan }: { it: EarnCalItem; showD
       <td className="r ecal-num">{fmtRev(it.revA)}</td>
       <td className="r ecal-num">{fmtRev(it.revE)}</td>
       <td className={`r ecal-num ${fmtUpDn(yoyRev)}`}>{fmtPctSigned(yoyRev)}</td>
+      {/* Today's pre-market move. The vendor keeps this populated through the
+          regular session rather than clearing it at the open — measured with the
+          market open, AAPL read 0.047, DELL 0.399, MDB -2.20 — so the column
+          stays meaningful all day for a stock that reported before the bell.
+          "—" means the vendor had no pre-market print, not that it was flat. */}
+      <td className={`r ecal-num ${fmtUpDn(prePct)}`}>{fmtPctSigned(prePct, 2)}</td>
+      {/* After-hours, as the vendor reports it. See LiveQuote.latePct: this
+          field mirrored the regular-session move for non-reporters when
+          measured, so treat a value here as vendor-reported rather than
+          verified. Shown at the product owner's direction. */}
+      <td className={`r ecal-num ${fmtUpDn(postPct)}`}>{fmtPctSigned(postPct, 2)}</td>
       <td className="r ecal-num"><GuidanceCell it={it} /></td>
     </tr>
     {/* Mounted only while open, so closing a row also drops its fetched doc —
@@ -700,7 +712,14 @@ function GlanceTable({ title, items, showDate, onSelect }: { title: string; item
   // Company, Surprise, Actual, Consensus, 1 Yr Ago, Actual Rev, Cons. Rev,
   // Yr/Yr Rev, Guidance — plus Date when it is shown. Kept next to the header
   // it counts so the two move together.
-  const colCount = 9 + (showDate ? 1 : 0);
+  const colCount = 11 + (showDate ? 1 : 0);
+
+  // PRE-MARKET reaction for the rows on screen. Uses the app-wide shared poll,
+  // so a ticker here reads exactly as it does on the movers board and drawer.
+  //
+  // Pre-market only. The vendor's after-hours field is not wired — see the note
+  // on LiveQuote.earlyPct for the measurement that disqualified it.
+  const preQuotes = useLiveQuotes(shown.map(i => i.s));
   return (
     <div className="ecal-day" style={{ marginBottom: 14 }}>
       <div className="ecal-day-h">
@@ -720,11 +739,13 @@ function GlanceTable({ title, items, showDate, onSelect }: { title: string; item
               {sortTh("actualRev", "Actual Rev")}
               {sortTh("consRev", "Cons. Rev")}
               {sortTh("yoyRev", "Yr/Yr Rev")}
+              <th className="r" title="Today's pre-market move (04:00-09:30 ET), ~15 min delayed">Pre-mkt</th>
+              <th className="r" title="After-hours move as reported by the data vendor (~15 min delayed). Vendor-reported: the field's window and baseline are undocumented — see LiveQuote.latePct.">After-hrs</th>
               {sortTh("guidance", "Guidance")}
             </tr>
           </thead>
           <tbody>
-            {shown.map((it, i) => <GlanceRow key={`${it.s}-${it.date}-${i}`} it={it} showDate={showDate} onSelect={onSelect} colSpan={colCount} />)}
+            {shown.map((it, i) => <GlanceRow key={`${it.s}-${it.date}-${i}`} it={it} showDate={showDate} onSelect={onSelect} colSpan={colCount} prePct={preQuotes.get(it.s)?.earlyPct ?? null} postPct={preQuotes.get(it.s)?.latePct ?? null} />)}
           </tbody>
         </table>
       </div>
