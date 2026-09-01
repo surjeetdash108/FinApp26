@@ -57,6 +57,16 @@ function fmtMcap(mc: number | null | undefined): string {
 // was missing entirely before.
 const CAP_ORDER = ["Mega", "Large", "Mid", "Small", "Micro"];
 
+/** One row of GET /market-data/volume-leaders — pre-ranked on the server. */
+interface VolumeLeaderDoc {
+  ticker: string;
+  volume: number;
+  avgVolume: number;
+  rvol: number;
+  close: number | null;
+  changePct: number | null;
+}
+
 /** Sortable columns. `cap` orders by the tier's rank (Mega→Micro), not the
  *  label's alphabet, so the sort reads as a real size ordering. */
 type MoverSortKey = "company" | "price" | "change" | "rvol" | "mcap" | "cap";
@@ -109,42 +119,99 @@ export function MoversScreen() {
   const companyByTicker = new Map(rvolCompanies.map(c => [c.ticker, c]));
   const movers = mergeMovers(liveMovers, companyByTicker);
 
+  /** One `companies` doc as a board row. Shared by every tab built from the
+   *  tracked universe rather than the daily movers feed. */
+  const companyRow = (c: CompanyDoc): Mover => ({
+    ticker: c.ticker,
+    name: c.name ?? c.ticker,
+    price: c.price ?? 0,
+    // pctChange stays TODAY's move (the Price column and live overlay still
+    // want it); the weekly number lives in weekPct.
+    pctChange: c.pctChange ?? 0,
+    rvolRatio: c.rvol ?? 0,
+    relativeStrength: 0,
+    maPosture: maPostureLabel(c.aboveSma50, c.aboveSma200),
+    owned: false,
+    sector: c.sector ?? "—",
+    cap: capFromMarketCap(c.marketCap) as Mover["cap"],
+    marketCap: c.marketCap ?? null,
+    weekPct: c.week5ChangePct ?? null,
+    weekBase: c.week5BaseClose ?? null,
+    techContext: "",
+    newsContext: "",
+  });
+
+  // Leveraged/inverse products are excluded from every universe-built tab for
+  // the same reason mergeMovers excludes them from the daily feed: a 2x ETF's
+  // move is a multiple of something else's.
+  const universeRows = rvolCompanies.filter(
+    c => c.ticker && !isLeveragedProduct(c.name),
+  );
+
   /**
-   * 5-day rows, built from the COMPANIES universe rather than the daily movers
-   * feed. That feed is the day's top-100 gainers/losers — overwhelmingly
-   * micro-caps outside the tracked universe — so only ~46 of its 200 rows carry
-   * `week5ChangePct` at all, which would make a weekly board look broken.
-   * `companies` has the field for ~565 names, so the weekly ranking is drawn
-   * from there and covers the whole tracked market.
+   * 5-day rows, from the COMPANIES universe rather than the daily movers feed.
+   * That feed is the day's top-100 gainers/losers — overwhelmingly micro-caps
+   * outside the tracked universe — so only ~46 of its 200 rows carry
+   * `week5ChangePct` at all, which made the weekly board look broken.
    */
-  const weeklyRows: Mover[] = rvolCompanies
-    // Leveraged/inverse products are excluded here for the same reason
-    // mergeMovers excludes them from the daily tabs — a 2x ETF's move is a
-    // multiple of something else's, so it crowds out the names the board is
-    // for. This path was built from `companies` rather than the movers feed and
-    // never picked the filter up: "T-REX 2X Long CRWV Daily Target ETF" sat at
-    // the top of Weekly Gainers.
-    .filter(c => c.ticker && typeof c.week5ChangePct === "number" && !isLeveragedProduct(c.name))
-    .map(c => ({
-      ticker: c.ticker,
-      name: c.name ?? c.ticker,
-      price: c.price ?? 0,
-      // pctChange stays TODAY's move (the Price column and live overlay still
-      // want it); the weekly number lives in weekPct and is what these tabs
-      // rank and display.
-      pctChange: c.pctChange ?? 0,
-      rvolRatio: c.rvol ?? 0,
-      relativeStrength: 0,
-      maPosture: maPostureLabel(c.aboveSma50, c.aboveSma200),
-      owned: false,
-      sector: c.sector ?? "—",
-      cap: capFromMarketCap(c.marketCap) as Mover["cap"],
-      marketCap: c.marketCap ?? null,
-      weekPct: c.week5ChangePct as number,
-      weekBase: c.week5BaseClose ?? null,
-      techContext: "",
-      newsContext: "",
-    }));
+  const weeklyRows: Mover[] = universeRows
+    .filter(c => typeof c.week5ChangePct === "number")
+    .map(companyRow);
+
+  /**
+   * UNUSUAL VOLUME, ranked across the whole tracked universe.
+   *
+   * It used to rank RVOL within the daily movers feed — the top 100 gainers and
+   * 100 losers, chosen by PRICE. Unusual volume is a volume event, and the
+   * clearest cases are heavy trading on a flat price, which that feed by
+   * construction never contains. Measured against the live data, 17 of the 20
+   * highest-RVOL names in the universe could not appear at all: WBS at 13.97x on
+   * +0.23%, LBRDK 11.62x on +0.31%, AVY 10.23x on +0.11%, ROIV 6.58x on +0.04%.
+   * A cross-check of 30 names against Yahoo Finance and MarketChameleon matched
+   * only 2.
+   *
+   * `companies` carries rvol for ~900 names, so ranking there covers the tracked
+   * market instead of a price-selected slice of it.
+   */
+  /**
+   * UNUSUAL VOLUME — the whole US market, ranked on the server.
+   *
+   * It used to rank RVOL inside the daily movers feed: the top 100 gainers and
+   * 100 losers, chosen by PRICE. Unusual volume is a volume event and its
+   * clearest cases are heavy trading on a FLAT price, which that feed never
+   * contains — 17 of the 20 highest-RVOL names could not appear at all, and a
+   * 30-name cross-check against Yahoo Finance and MarketChameleon matched 2.
+   *
+   * The server now ranks ~12,600 listed symbols and publishes only the leaders,
+   * so this reads one small document instead of sorting the universe in the
+   * browser. Falls back to the tracked-universe ranking (~900 names) until the
+   * volume-leaders job has run, so the tab is never empty.
+   */
+  const { data: volumeLeaders } = useApiResource<{ leaders: VolumeLeaderDoc[] }>(
+    "/market-data/volume-leaders",
+  );
+  const volumeRows: Mover[] = useMemo(() => {
+    const served = volumeLeaders?.leaders ?? [];
+    if (served.length > 0) {
+      return served
+        .filter(l => !isLeveragedProduct(companyByTicker.get(l.ticker)?.name))
+        .map(l => {
+          const c = companyByTicker.get(l.ticker);
+          return {
+            ...companyRow(c ?? ({ ticker: l.ticker } as CompanyDoc)),
+            // The served row is the authority for the volume numbers; the
+            // companies doc only supplies name/sector/cap where we track it.
+            price: l.close ?? c?.price ?? 0,
+            pctChange: l.changePct ?? c?.pctChange ?? 0,
+            rvolRatio: l.rvol,
+          };
+        });
+    }
+    return universeRows
+      .filter(c => typeof c.rvol === "number" && (c.rvol as number) > 0)
+      .map(companyRow);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volumeLeaders, rvolCompanies]);
 
 
   // Per-ticker news → the "why it moved" headline shown on row hover. Keep the
@@ -204,7 +271,10 @@ export function MoversScreen() {
   const [sortKey,      setSortKey]      = useState<MoverSortKey | null>(null);
   const [sortDir,      setSortDir]      = useState<"asc" | "desc">("desc");
   const [selectedSym,  setSelectedSym]  = useState<string | null>(null);
-  const sourceRows = isWeekTab(tab) ? weeklyRows : movers;
+  const sourceRows =
+    isWeekTab(tab) ? weeklyRows
+    : tab === "vol" ? volumeRows
+    : movers;
   const liveCount = sourceRows.length;
   const q = query.trim().toUpperCase();
 
