@@ -124,6 +124,15 @@ function toCalRow(item: EarnCalItem): CalRow {
 type SortKey = "symbol" | "surprise";
 type SessionKey = "both" | "BMO" | "AMC";
 
+/**
+ * Show the pre-market / after-market filter.
+ *
+ * OFF because no vendor on our plan supplies the timing — see the note at the
+ * filter's render site for what was probed. Flip to true when one does; nothing
+ * else needs changing, the filter below already works.
+ */
+const SESSION_FILTER_ENABLED = false;
+
 function filterSortRows(rows: CalRow[], opts: { sort: SortKey; session: SessionKey; mcap?: Map<string, number> }): CalRow[] {
   const out = rows.filter(r => opts.session === "both" || r.sess === opts.session);
   out.sort((a, b) => {
@@ -1099,12 +1108,31 @@ export function EarningsScreen() {
             <button className={`ecal-segbtn${mode === "week" ? " on" : ""}`} onClick={() => setMode("week")}>Week</button>
             <button className={`ecal-segbtn${mode === "day" ? " on" : ""}`} onClick={() => setMode("day")}>Day</button>
           </div>
-          {/* Session filter — narrows the calendar to pre-market / after-market. */}
-          <div className="ecal-seg">
-            <button className={`ecal-segbtn${session === "both" ? " on" : ""}`} onClick={() => setSession("both")}>All</button>
-            <button className={`ecal-segbtn${session === "BMO" ? " on" : ""}`} onClick={() => setSession("BMO")}>Pre-market</button>
-            <button className={`ecal-segbtn${session === "AMC" ? " on" : ""}`} onClick={() => setSession("AMC")}>After-market</button>
-          </div>
+          {/* Session filter — narrows the calendar to pre-market / after-market.
+              HIDDEN while no vendor supplies the timing, because both buttons
+              could only ever empty the list: `sess` is null on every row, and
+              filterSortRows keeps a row only when r.sess === the chosen session.
+              A control that always returns nothing reads as broken data.
+
+              Verified 2026-09-01 against FMP directly, not from documentation:
+              /stable/earnings-calendar returns exactly seven fields — date,
+              epsActual, epsEstimated, lastUpdated, revenueActual,
+              revenueEstimated, symbol — across 449 rows. The legacy endpoints
+              that carried `time` ("bmo"/"amc") now refuse with "Legacy
+              Endpoint", /stable/earnings-calendar-confirmed 404s, and Polygon
+              has no announcement feed at all (the reporting date comes from the
+              SEC filing date for that reason).
+
+              Restore the two buttons the moment a feed supplies session: the
+              filter, the type and the state all still work — only the source is
+              missing. See SESSION_FILTER_ENABLED. */}
+          {SESSION_FILTER_ENABLED && (
+            <div className="ecal-seg">
+              <button className={`ecal-segbtn${session === "both" ? " on" : ""}`} onClick={() => setSession("both")}>All</button>
+              <button className={`ecal-segbtn${session === "BMO" ? " on" : ""}`} onClick={() => setSession("BMO")}>Pre-market</button>
+              <button className={`ecal-segbtn${session === "AMC" ? " on" : ""}`} onClick={() => setSession("AMC")}>After-market</button>
+            </div>
+          )}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 10 }}>
             <button
               className={`ecal-segbtn ecal-glancebtn${atGlance ? " on" : ""}`}
