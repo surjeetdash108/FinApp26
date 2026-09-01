@@ -489,16 +489,19 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .prev-body :where(th,td){border:1px solid #e2ddd2;padding:7px 10px;text-align:left}
 .prev-body :where(a){color:#2f4bd8;text-decoration:underline}
 .prev-body :where(blockquote){border-left:3px solid #e2ddd2;padding-left:14px;margin:0 0 14px;color:#4a463d}
-/* How-to: a numbered procedure, long enough to be read once and referred back
-   to. Scrolls inside the modal — .modal already caps its own height. */
-.sop{margin:0;padding:0 0 0 26px;display:flex;flex-direction:column;gap:15px}
-.sop li{color:var(--text)}
-.sop li::marker{color:var(--brand);font-weight:700;font-size:12.5px}
-.sop li>b{display:block;color:var(--hi);font-size:13px;margin-bottom:3px}
-.sop li>p{margin:0;font-size:12.5px;line-height:1.62;color:var(--dim)}
-.sop li>p b{color:var(--text);font-weight:600}
-.sop li>p code{font-family:var(--f-mono,ui-monospace,monospace);font-size:11.5px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 4px;color:var(--text)}
-.sop-note{margin-top:18px;padding:12px 14px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);font-size:12px;line-height:1.6;color:var(--dim)}
+/* How-to: four steps read in one glance, then the handful of rules the form
+   itself cannot tell you. Short on purpose — a procedure nobody finishes
+   reading is a procedure nobody follows. */
+.sop{margin:0;padding:0 0 0 20px;display:flex;flex-direction:column;gap:9px}
+.sop li{color:var(--dim);font-size:12.5px;line-height:1.55}
+.sop li::marker{color:var(--brand);font-weight:700}
+.sop b{color:var(--text);font-weight:600}
+.sop-note{margin-top:17px;padding:13px 15px 14px;border-radius:9px;background:var(--bg2);border:1px solid var(--border)}
+.sop-note>b{display:block;color:var(--dim2);font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;margin-bottom:8px}
+.sop-note ul{margin:0;padding:0 0 0 16px;display:flex;flex-direction:column;gap:7px}
+.sop-note li{color:var(--dim);font-size:12px;line-height:1.55}
+.sop-note li b{color:var(--text);font-weight:600}
+.sop-note code{font-family:var(--f-mono);font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--text)}
 /* Delete sits where Cancel did, so it is coloured as the destructive action it
    is rather than looking like the neutral dismiss it replaced. */
 .btn-danger{color:#ff5d7a;border-color:rgba(255,93,122,.45)}
@@ -835,47 +838,26 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
      shared design, and which three fields are refused without — so they are
      written down next to the button that starts the job. -->
 <div class="scrim" id="sopScrim" onclick="closeSop()" style="z-index:70"></div>
-<div class="modal" id="sopModal" style="width:720px;z-index:80">
+<div class="modal" id="sopModal" style="width:560px;z-index:80">
   <div class="mh">
     <h3>Publishing an HTML article</h3>
     <button class="x" style="margin-left:auto" onclick="closeSop()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
   </div>
   <div class="mb">
     <ol class="sop">
-      <li>
-        <b>Start it</b>
-        <p><b>Add blog</b> → pick the section it belongs in → choose <b>HTML</b>. The section decides which column of the newspaper page it lands in; you can drag the card between sections afterwards.</p>
-      </li>
-      <li>
-        <b>Give it a body</b>
-        <p>Two ways, and they end in the same place. Paste your markup into the <b>HTML</b> tab, or use <b>Load .html file</b> to bring in a designed page. Either a complete document or a bare fragment is fine.</p>
-      </li>
-      <li>
-        <b>Know what the design does</b>
-        <p>Only what sits inside <code>&lt;body&gt;</code> becomes <em>this</em> article. The <code>&lt;style&gt;</code>, the font and stylesheet links and any scripts are lifted out and saved as the design <b>every</b> blog uses — so loading a page with a new design restyles the posts already published. Load a design when you mean to change it site-wide; paste only the body when you do not.</p>
-      </li>
-      <li>
-        <b>Fill the three required fields</b>
-        <p><b>Title</b>, <b>Summary</b> and <b>Hero image</b>. The summary is the standfirst under the headline and the card's excerpt; the hero is the article image and the card's thumbnail. A post missing any of them is refused here and again by the server, because it would publish a visibly broken card.</p>
-      </li>
-      <li>
-        <b>Mind the two tabs</b>
-        <p><b>HTML</b> is the artifact you are publishing. <b>Rich</b> is a plain document editor — it keeps headings, lists, quotes, links and images, and drops custom containers, classes and inline styles. Switching either way asks first, and only when something would actually be lost. If your markup is designed, stay on the HTML tab.</p>
-      </li>
-      <li>
-        <b>Handle images</b>
-        <p>Set the hero from <b>Gallery</b> or <b>Upload</b>. Images embedded in the body as base64 are moved to storage automatically when you save, so a picture-heavy article is not a problem.</p>
-      </li>
-      <li>
-        <b>Preview before you publish</b>
-        <p><b>Preview</b> draws the article with its own design applied, confined to the sheet. What you see there is what the page publishes.</p>
-      </li>
-      <li>
-        <b>Publish</b>
-        <p>It goes live on the site immediately. Use a card's <b>Live / Draft</b> toggle to pull it back, and drag cards to reorder them — the order on this board is the order on the site.</p>
-      </li>
+      <li><b>Add blog</b> &rarr; pick a section &rarr; choose <b>HTML</b>.</li>
+      <li>Paste your markup, or <b>Load .html file</b>.</li>
+      <li>Fill <b>Title</b>, <b>Summary</b> and <b>Hero image</b> &mdash; all three are required.</li>
+      <li><b>Preview</b>, then <b>Publish</b>. It goes live straight away.</li>
     </ol>
-    <div class="sop-note">If the markup has a tag left open, publishing stops and names the line. The browser silently repairs broken markup, so a post can look right here and come out wrong on the site — that check is what catches it.</div>
+    <div class="sop-note">
+      <b>Worth knowing</b>
+      <ul>
+        <li>The <code>&lt;style&gt;</code> in your file becomes the design for <b>every</b> blog &mdash; not only this one.</li>
+        <li>Stay on the <b>HTML</b> tab. <b>Rich</b> drops custom containers, classes and inline styles.</li>
+        <li>Unclosed tags are caught before publishing. A card&rsquo;s <b>Live / Draft</b> toggle pulls a post back.</li>
+      </ul>
+    </div>
   </div>
 </div>
 
