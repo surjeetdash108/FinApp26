@@ -872,11 +872,30 @@ export function EarningsScreen() {
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
 
   const dayRows = rowsForDate(anchor, liveEarningsData).map(toCalRow);
-  // Quotes for the selected DAY's reporters, so the session filter can place a
-  // row by where its move landed. Capped: the shared cache tracks a bounded set
-  // of tickers, and one screen must not crowd out every other live surface.
-  const sessionQuotes = useLiveQuotes(dayRows.slice(0, SESSION_QUOTE_CAP).map(r => r.s));
-  const visibleRows = filterSortRows(dayRows, { sort, session: "both", mcap: mcapByTicker });
+  const glanceRaw: EarnCalItem[] =
+    mode === "month"
+      ? liveEarningsData.filter(d => d.date.slice(0, 7) === anchor.slice(0, 7)).map(toEarnCalItem)
+      : (mode === "week" ? weekDays5 : [anchor]).flatMap(iso => rowsForDate(iso, liveEarningsData));
+
+  // Quotes for every reporter ON SCREEN, so a row can be placed by where its
+  // move landed.
+  //
+  // Must cover the glance rows too, not just the anchor day: at-a-glance in week
+  // or month mode lists reporters the day view never mentions, and a row with no
+  // quote cannot be classified — it would silently vanish from a narrowed view.
+  //
+  // Capped: the shared snapshot cache tracks a bounded ticker set, and one
+  // screen subscribing to a whole month would evict the heatmap and movers.
+  const sessionTickers = [
+    ...new Set([...dayRows.map(r => r.s), ...glanceRaw.map(r => r.s)]),
+  ].slice(0, SESSION_QUOTE_CAP);
+  const sessionQuotes = useLiveQuotes(sessionTickers);
+  // Honours the session chip. It was pinned to "both", so with at-a-glance off
+  // the day calendar ignored the filter completely — picking "pre-market" left
+  // the grid unchanged while the same choice visibly narrowed the glance view,
+  // which reads as the filter being broken in one mode. Week mode already
+  // passed `session`; only this call was hardcoded.
+  const visibleRows = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes });
   // Detail-mode side tray: the SELECTED DAY's reporting tickers (not the week),
   // narrowed live by the "Search earnings" box (symbol or company name).
   const trayBaseItems = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes });
@@ -903,12 +922,17 @@ export function EarningsScreen() {
   // month = the whole month), each with its Before-Open / After-Close session
   // resolved from the EDGAR 8-K feed (ticker|date), then filtered by the session
   // chip and ordered largest-cap first — the same ordering as the calendar.
-  const glanceRaw: EarnCalItem[] =
-    mode === "month"
-      ? liveEarningsData.filter(d => d.date.slice(0, 7) === anchor.slice(0, 7)).map(toEarnCalItem)
-      : (mode === "week" ? weekDays5 : [anchor]).flatMap(iso => rowsForDate(iso, liveEarningsData));
   const glanceItems: EarnCalItem[] = glanceRaw
-    .map(it => (it.sess ? it : { ...it, sess: annSessionByKey.get(`${it.s}|${it.date}`) ?? null }))
+    // Session, best source first: the vendor's own field, then the EDGAR 8-K
+    // feed, then where the stock's move actually landed. Without the last one
+    // every row fell through to "Time not specified", because the vendor field
+    // is null on every row and 8-K coverage is partial — the Before-open and
+    // After-close tables were permanently empty.
+    .map(it => (it.sess ? it : {
+      ...it,
+      sess: annSessionByKey.get(`${it.s}|${it.date}`)
+        ?? inferredSession(sessionQuotes.get(it.s)?.earlyPct, sessionQuotes.get(it.s)?.latePct),
+    }))
     .map(it => {
       const a = annGuidanceByKey.get(`${it.s}|${it.date}`);
       return a
