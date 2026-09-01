@@ -767,8 +767,8 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
         <div class="board-note">Drop a <b>Word</b> or <b>PDF</b> file (up to <b id="noteLimit">20</b> MB) anywhere on a section below — the document itself becomes the article and publishes straight to your site. Use each card's <b>Live / Draft</b> toggle to control whether it shows publicly. <b>Drag cards</b> to reorder them or move them between sections; the order here is the order on the site. This board mirrors <span class="cash">marketcatalyst.ai</span> · the newspaper page.</div>
         <div class="bl-head">
           <h2>Articles</h2>
-          <button class="btn-add ghost" onclick="openSop()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.2 3.1c-.5.2-.8.7-.8 1.2v.4"/><path d="M12 17.2h.01"/></svg>How to</button>
           <button class="btn-add ghost" onclick="openGallery()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="9" cy="9" r="1.4"/></svg>Gallery</button>
+          <button class="btn-add ghost" onclick="openSop()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M9 7.5h6M9 11h4"/></svg>Publishing guide</button>
           <button class="btn-add" onclick="openAddBlog()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add blog</button>
         </div>
         <div class="blogboard" id="blogboard"></div>
@@ -2325,40 +2325,26 @@ function bodyHtml(){
   if(_tt)return _tt.getHTML();
   return bEl('bBody').innerHTML;
 }
-/* An edit in the source box has to reach the save. For an html post loaded from
-   a file it is the WHOLE document that gets sent, so it is rebuilt here from the
-   design that file carried plus the body as it now reads — otherwise the edit
-   is silently dropped on publish. Markup typed straight in has no captured
-   design and travels as itself, so it needs nothing. */
-function onSourceEdit(){
-  if(_themeSource!==null) _themeSource=_themeHead+'\n<body>\n'+bEl('bSrc').value+'\n</body>';
-  updateBlogWords();
-}
 
 /* ---- import a designed .html file ---- */
 function pickHtmlFile(){const f=bEl('htmlFile');f.value='';f.click();}
 function loadHtmlSource(text){
-  /* Parsed rather than regexed so a full document contributes only its body:
-     keeping <head> would publish the title and meta as loose text.
+  /* The file goes into the box exactly as it was written — the whole document,
+     <head> and <style> included — because the whole document is what the save
+     sends and what the server splits (see extractTheme). Showing only the body
+     hid the design the admin came here to check, and showing it as
+     `doc.body.innerHTML` showed the PARSER'S rewrite of the markup rather than
+     the markup itself: re-quoted attributes, re-encoded entities, reordered
+     nothing the admin typed. The box is the source now, so what is read is what
+     is published.
 
-     The <style>, fonts and scripts are NOT this post — they are the blog's
-     shared design, and the server stores them once for every post to use
-     (see extractTheme / saveTheme). They travel with the save so the server
-     can lift them out; nothing about them is edited here. */
+     Parsed as well, but only to read the title out of it and to describe the
+     design in the note below. */
   const doc=new DOMParser().parseFromString(text,'text/html');
   const css=[...doc.querySelectorAll('style')].map(n=>n.textContent.trim()).filter(Boolean);
   const links=[...doc.querySelectorAll('link[rel~="stylesheet"]')].map(n=>n.getAttribute('href')).filter(Boolean);
   const scripts=[...doc.querySelectorAll('script[src]')].map(n=>n.getAttribute('src')).filter(Boolean);
-  /* The whole document is what the server parses, so the source box keeps the
-     body and the theme rides along in _themeSource. */
-  _themeSource=text;
-  /* Kept apart so a later edit in the source box can be recombined with the
-     design this file carried. Without it an edit has to lose one or the other:
-     the whole file is what gets sent, so the edit is dropped — and sending only
-     the body instead would drop the design. */
-  _themeHead=[...doc.querySelectorAll('style,link[rel~="stylesheet"],script')].map(n=>n.outerHTML).join('\n');
-  doc.querySelectorAll('style,script,link').forEach(n=>n.remove());
-  bEl('bSrc').value=(doc.body?doc.body.innerHTML:text).trim();
+  bEl('bSrc').value=text.trim();
   if(!bEl('bTitle').value.trim()){
     const h1=doc.querySelector('h1');
     bEl('bTitle').value=(doc.title||(h1&&h1.textContent)||'').trim().slice(0,120);
@@ -2485,12 +2471,6 @@ async function uploadToGallery(file){
 const MAX_HERO_MB = 5;
 /** Set when a file is picked; cleared on close, on Remove, and after a save. */
 let _heroData = null, _heroName = '';
-/* The complete uploaded document, kept so the SERVER can split design from
-   body — the console does not decide what the shared design is. */
-let _themeSource = null;
-/* Just the design tags out of that document, so an edit to the body can be put
-   back together with them (see onSourceEdit). */
-let _themeHead = '';
 /* True while a hero upload is in flight, so the result knows to fill the box. */
 let _heroPending = false;
 
@@ -2601,8 +2581,7 @@ function openPreview(){
      two the admin produced — the whole loaded document, or the markup typed
      into the source box. Previewing the same value is what makes the preview
      agree with the published page. */
-  const raw=(_format==='html')?(_themeSource||bodyHtml()):bodyHtml();
-  const part=(_format==='html')?splitDesign(raw):{html:bodyHtml(),css:''};
+  const part=(_format==='html')?splitDesign(bodyHtml()):{html:bodyHtml(),css:''};
   const html=part.html;
   /* Scoped, never mounted as-is: the post's own `body`, `:root` and `*` rules
      would otherwise repaint the console around the preview and outlive the
@@ -2654,7 +2633,7 @@ function openBlogModal(zone,editId,draft,format){
   _format=format||p.format||(_pendingPdf?((/\.docx$/i.test(_pendingPdf.name||''))?'doc':'pdf'):'text');
   bEl('bmTitle').textContent=(editId?'Edit article':'New article')+' · '+(FORMATS[_format]||_format);
   bEl('bZone').value=z;bEl('bKick').value=p.kick||'';bEl('bTitle').value=p.title||'';bEl('bDek').value=p.dek||'';bEl('bAuthor').value=p.author||'';bEl('bRead').value=p.read||'';
-  _heroData=null;_heroName='';_themeSource=null;_themeHead='';
+  _heroData=null;_heroName='';
   bEl('bHero').value=p.heroImageUrl||'';
   renderHeroPrev();
 
@@ -2697,7 +2676,7 @@ function renderDocView(p){
 
 function closeBlogModal(){
   _pendingPdf=null;
-  _heroData=null;_heroName='';_themeSource=null;_themeHead='';
+  _heroData=null;_heroName='';
   // Drop the embed so a closed dialog is not still holding a PDF in memory.
   bEl('bDocView').innerHTML='';
   // Same for the editor: a live ProseMirror instance per opened post would
@@ -2834,7 +2813,7 @@ function savePublish(){
      Checked against the value the save will actually send — the whole loaded
      document when there is one, the source box when there is not. */
   if(_format==='html'){
-    const sending=_themeSource||d.html;
+    const sending=d.html;
     const errs=findMarkupErrors(sending);
     if(errs.length){
       showResult(false,'This markup will not publish as written: '+errs.join('; ')+'.');
@@ -2855,15 +2834,10 @@ function savePublish(){
   if(!BLOG_BRIDGE){ toast('Not connected — sign in as the admin to save'); closeBlogModal(); return; }
   if(!confirm('Publish “'+d.title+'”? It will go live on the site immediately.')) return;   // Cancel: keep editing, nothing is saved
   const msg={type:'admin:blogSave',zone:d.zone,rank:d.rank,kick:d.kick,title:d.title,dek:d.dek,author:d.author,read:d.read,html:d.html,status:d.status,format:_format,heroImageUrl:heroValue()};
-  /* Sent as its own field because the body sanitizer does not allow a <style>
-     tag: CSS left inline would be deleted and the post would publish unstyled.
-     The backend also pulls any <style> still in the markup, so an admin who
-     pastes a whole document into the source box keeps its design either way. */
-  /* For html we send the WHOLE uploaded document when there is one, so the
-     server splits design from body by the same rule every time. With no
-     upload (an edit, or markup typed straight in) the body alone goes, and the
-     saved design is left alone. */
-  if(_format==='html'&&_themeSource){ msg.html=_themeSource; }
+  /* An html post sends the source box as it stands: a whole document when one
+     was loaded, a bare fragment when the markup was typed in. The server splits
+     design from body by the same rule either way, and leaves the saved design
+     alone when the markup carries none. */
   if(_pendingPdf){msg.pdfDataUri=_pendingPdf.dataUri;msg.pdfName=_pendingPdf.name;msg.pdfPages=_pendingPdf.pages;msg.pdfAspect=_pendingPdf.aspect;}
   if(_editId)msg.id=_editId;
   const editing=!!_editId;
@@ -3055,7 +3029,7 @@ function initBlogs(){
     e.target.value='';
   };
   bEl('bBody').addEventListener('input',updateBlogWords);
-  bEl('bSrc').addEventListener('input',onSourceEdit);
+  bEl('bSrc').addEventListener('input',updateBlogWords);
   bEl('bDelete').onclick=deleteFromModal;
   bEl('bZone').addEventListener('change',updatePlaceChip);
   bEl('bPublish').onclick=savePublish;
