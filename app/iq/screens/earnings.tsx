@@ -143,13 +143,25 @@ type SessionKey = "both" | "BMO" | "AMC";
 const SESSION_FILTER_ENABLED = true;
 
 /**
- * Which extended session a row's move landed in, or null when neither number is
- * available. Ties and absent data fall to null rather than guessing a side.
+ * Which extended session a row's move landed in, or null when it cannot be told.
+ *
+ * ONLY MEANINGFUL ONCE THE COMPANY HAS REPORTED. The quote carries TODAY's
+ * pre-market and after-hours moves for that ticker. For a company reporting
+ * today that IS its earnings reaction, which is what makes the inference work.
+ * For one reporting in three weeks it is just today's trading, and says nothing
+ * about a session that has not happened — so a future row returns null and is
+ * left unclassified rather than sorted by an unrelated number.
+ *
+ * Ties and absent data also fall to null. Nothing is guessed onto a side.
  */
 function inferredSession(
   pre: number | null | undefined,
   post: number | null | undefined,
+  rowDate?: string,
+  today?: string,
 ): "BMO" | "AMC" | null {
+  // A report that has not happened yet has no reaction to read.
+  if (rowDate && today && rowDate > today) return null;
   const p = pre == null ? null : Math.abs(pre);
   const q = post == null ? null : Math.abs(post);
   if (p == null && q == null) return null;
@@ -165,6 +177,10 @@ function filterSortRows(
     sort: SortKey;
     session: SessionKey;
     mcap?: Map<string, number>;
+    /** Today (ISO). Rows dated after it cannot be classified by their move. */
+    today?: string;
+    /** The date THESE rows report on — CalRow does not carry one itself. */
+    rowDate?: string;
     /** Live quotes, so a row with no vendor session can be placed by its move. */
     quotes?: Map<string, { earlyPct: number | null; latePct: number | null }>;
   },
@@ -173,7 +189,7 @@ function filterSortRows(
     if (opts.session === "both") return true;
     // Prefer a real vendor session if one ever arrives; fall back to the move.
     const q = opts.quotes?.get(r.s);
-    const side = r.sess ?? inferredSession(q?.earlyPct, q?.latePct);
+    const side = r.sess ?? inferredSession(q?.earlyPct, q?.latePct, opts.rowDate, opts.today);
     return side === opts.session;
   });
   out.sort((a, b) => {
@@ -871,6 +887,9 @@ export function EarningsScreen() {
   const weekMon   = mondayOf(new Date(`${anchor}T00:00:00Z`));
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
 
+  // Rows dated after today cannot be classified by their move — see
+  // inferredSession. Computed once so every consumer agrees on "today".
+  const todayIso = isoDay(new Date());
   const dayRows = rowsForDate(anchor, liveEarningsData).map(toCalRow);
   const glanceRaw: EarnCalItem[] =
     mode === "month"
@@ -895,10 +914,10 @@ export function EarningsScreen() {
   // the grid unchanged while the same choice visibly narrowed the glance view,
   // which reads as the filter being broken in one mode. Week mode already
   // passed `session`; only this call was hardcoded.
-  const visibleRows = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes });
+  const visibleRows = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: anchor });
   // Detail-mode side tray: the SELECTED DAY's reporting tickers (not the week),
   // narrowed live by the "Search earnings" box (symbol or company name).
-  const trayBaseItems = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes });
+  const trayBaseItems = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: anchor });
   const trayQuery = tickerSearch.trim().toUpperCase();
   const trayItems = trayQuery
     ? trayBaseItems.filter(r => r.s.includes(trayQuery) || (r.n ?? "").toUpperCase().includes(trayQuery))
@@ -931,7 +950,7 @@ export function EarningsScreen() {
     .map(it => (it.sess ? it : {
       ...it,
       sess: annSessionByKey.get(`${it.s}|${it.date}`)
-        ?? inferredSession(sessionQuotes.get(it.s)?.earlyPct, sessionQuotes.get(it.s)?.latePct),
+        ?? inferredSession(sessionQuotes.get(it.s)?.earlyPct, sessionQuotes.get(it.s)?.latePct, it.date, todayIso),
     }))
     .map(it => {
       const a = annGuidanceByKey.get(`${it.s}|${it.date}`);
@@ -1025,7 +1044,7 @@ export function EarningsScreen() {
     calNode = (
       <div className="ec-grid">
         {weekDays5.map((iso, di) => {
-          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes });
+          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: iso });
           const dn = ["Mon", "Tue", "Wed", "Thu", "Fri"][di];
           const isToday = iso === isoDay(new Date());
           return (
@@ -1072,7 +1091,7 @@ export function EarningsScreen() {
         <div className="emc-grid">
           {cells.map(iso => {
             if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="emc-day is-out" />;
-            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes });
+            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: iso });
             const isToday = iso === todayIso;
             const isSel   = iso === anchor && !isToday;
             const shown   = items.slice(0, MAX_LOGOS);
