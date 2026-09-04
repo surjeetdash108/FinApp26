@@ -29,11 +29,26 @@ export type PlaybookReport = {
 // Nothing is fabricated: a report with no usable bar window, or no estimate,
 // simply leaves that cell blank rather than inventing a number.
 //
-// Reaction day (D0) = the first trading day on/after the report date; "gap" is
-// its open vs the prior close, and Day 1/3/5 are its close / +2 / +4 closes vs
-// that same prior close. The report date is Polygon's SEC filing date, so for
-// after-hours reports the window can be a session early — this is a directional
-// read of the pattern, not a backtest.
+// Reaction day (D0) is found by VOLUME, not by the report date.
+//
+// The dates on hand are Polygon's SEC FILING dates — when the 10-Q was lodged,
+// not when results were announced. For DELL those are twelve days apart: it
+// announced on 28 May after the close, the market reacted on 29 May with 5.3x
+// normal volume, and the 10-Q was filed on 9 June. Anchoring on 9 June measured
+// an ordinary session — 0.88x volume, a +0.5% "gap" — and reported it as the
+// reaction to a 64% beat. Every row read that way: six consecutive gaps under
+// 1% and volume BELOW average, which cannot happen on a real earnings day.
+//
+// An earnings reaction is the most reliably marked event in a daily series: it
+// prints 2.5x+ volume. So D0 is the heaviest-volume session in a window around
+// the filing date, which lands on the right day for a before-open reporter (the
+// announcement day itself) and an after-hours one (the following session)
+// without needing to know which it was. When no session in the window clears
+// the threshold — a quiet report, or missing bars — it falls back to the old
+// filing-date anchor rather than inventing one.
+//
+// "gap" is D0's open vs the prior close; Day 1/3/5 are its close / +2 / +4
+// closes against that same prior close.
 
 type Row = {
   date: string;
@@ -91,6 +106,39 @@ function buildModel(reports: PlaybookReport[], bars: OHLCBar[] | undefined, maxR
   }
   const normalDay = median(dailyMoves);
 
+  /**
+   * Index of the session that actually reacted to a report.
+   *
+   * Searches back from the filing date (the announcement always precedes the
+   * filing) with a small forward margin, and takes the heaviest relative volume.
+   * The window is narrower than the ~63 sessions between quarters, so it cannot
+   * stray into a neighbouring report.
+   */
+  const findReactionIdx = (reportDate: string): number => {
+    const anchor = dates.findIndex((d) => d >= reportDate);
+    if (anchor <= 0) return -1;
+    const lo = Math.max(1, anchor - 25);
+    const hi = Math.min(sorted.length - 1, anchor + 3);
+    let best = -1;
+    let bestRatio = 0;
+    for (let i = lo; i <= hi; i++) {
+      const prior = sorted
+        .slice(Math.max(0, i - 20), i)
+        .map((b) => b.v)
+        .filter((v) => v > 0);
+      if (prior.length < 5) continue;
+      const avg = prior.reduce((a, b) => a + b, 0) / prior.length;
+      if (!(avg > 0)) continue;
+      const ratio = sorted[i].v / avg;
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        best = i;
+      }
+    }
+    // 2x is well below a typical earnings day and well above ordinary noise.
+    return bestRatio >= 2 && best > 0 ? best : anchor;
+  };
+
   const past = reports
     .filter((e) => e.epsActual != null && e.date <= today)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -98,7 +146,7 @@ function buildModel(reports: PlaybookReport[], bars: OHLCBar[] | undefined, maxR
 
   const rows: Row[] = [];
   for (const e of past) {
-    const d0 = dates.findIndex((d) => d >= e.date);
+    const d0 = findReactionIdx(e.date);
     if (d0 <= 0) continue; // need a prior bar to measure against
     const pre = sorted[d0 - 1].c;
     if (!(pre > 0)) continue;
@@ -120,8 +168,10 @@ function buildModel(reports: PlaybookReport[], bars: OHLCBar[] | undefined, maxR
     const estReported = e.epsEstimateReported;
     const surprisePct = calcSurprisePct(reported, estReported);
     rows.push({
-      date: e.date,
-      label: fmtLabel(e.date),
+      // The session measured, not the filing date — a row labelled 9 June while
+      // describing 29 May would be its own small lie.
+      date: dates[d0] ?? e.date,
+      label: fmtLabel(dates[d0] ?? e.date),
       beat: surprisePct == null ? null : surprisePct >= 0,
       surprisePct,
       epsAct: reported ?? null,

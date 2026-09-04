@@ -10,6 +10,7 @@ import { EarningsPlaybook } from "./EarningsPlaybook";
 import { backendUrl } from "../backend";
 import { useApiList } from "../hooks/useApiList";
 import { useApiResource } from "../hooks/useApiResource";
+import { useLiveQuotes } from "../live-quotes-context";
 import type { LiveEarningsDoc, CompanyDoc, FinancialsDoc, QuarterFinancials, AnnualFinancials, EarningsAnnouncementDoc, AnalystConsensusDoc } from "../types";
 import { isoDay, addDays, mondayOf, fmtDate } from "../calendar-range";
 import { surprisePct, reportedQuarterEps, quarterEpsSurprisePct } from "../types";
@@ -124,8 +125,82 @@ function toCalRow(item: EarnCalItem): CalRow {
 type SortKey = "symbol" | "surprise";
 type SessionKey = "both" | "BMO" | "AMC";
 
-function filterSortRows(rows: CalRow[], opts: { sort: SortKey; session: SessionKey; mcap?: Map<string, number> }): CalRow[] {
-  const out = rows.filter(r => opts.session === "both" || r.sess === opts.session);
+/**
+ * Show the pre-market / after-hours filter.
+ *
+ * The filter no longer claims to know a company's ANNOUNCED schedule — no
+ * vendor on our plan sells that (see the render site for what was probed). It
+ * now splits on where the stock's move actually landed, which is observable:
+ * an earnings reaction shows up in whichever extended session followed the
+ * release, so the larger of the two moves is a reasonable proxy for when the
+ * company reported.
+ *
+ * INFERENCE, NOT SCHEDULE. A stock can move pre-market for reasons that have
+ * nothing to do with its own results, and the after-hours half rests on a
+ * vendor field whose meaning is unverified (see LiveQuote.latePct). The labels
+ * and tooltip say "moved", not "reports", so the column does not overstate it.
+ */
+const SESSION_FILTER_ENABLED = true;
+
+/**
+ * Which extended session a row's move landed in, or null when it cannot be told.
+ *
+ * ONLY MEANINGFUL ONCE THE COMPANY HAS REPORTED. The quote carries TODAY's
+ * pre-market and after-hours moves for that ticker. For a company reporting
+ * today that IS its earnings reaction, which is what makes the inference work.
+ * For one reporting in three weeks it is just today's trading, and says nothing
+ * about a session that has not happened — so a future row returns null and is
+ * left unclassified rather than sorted by an unrelated number.
+ *
+ * Ties and absent data also fall to null. Nothing is guessed onto a side.
+ */
+function inferredSession(
+  pre: number | null | undefined,
+  post: number | null | undefined,
+  rowDate?: string,
+  today?: string,
+): "BMO" | "AMC" | null {
+  // ONLY the day of the report. The quote is TODAY's move, so it is the
+  // earnings reaction only for a company reporting today. Tomorrow's reporter
+  // has not moved yet; yesterday's reaction was yesterday's move, not this
+  // one. Either way the number would not describe the row.
+  if (rowDate && today && rowDate !== today) return null;
+  const p = pre == null ? null : Math.abs(pre);
+  const q = post == null ? null : Math.abs(post);
+  if (p == null && q == null) return null;
+  if (q == null) return "BMO";
+  if (p == null) return "AMC";
+  if (p === q) return null;
+  return p > q ? "BMO" : "AMC";
+}
+
+function filterSortRows(
+  rows: CalRow[],
+  opts: {
+    sort: SortKey;
+    session: SessionKey;
+    mcap?: Map<string, number>;
+    /** Today (ISO). Rows dated after it cannot be classified by their move. */
+    today?: string;
+    /** The date THESE rows report on — CalRow does not carry one itself. */
+    rowDate?: string;
+    /** Each ticker's usual reporting session, for rows nothing else can place. */
+    usual?: Map<string, "BMO" | "AMC">;
+    /** Live quotes, so a row with no vendor session can be placed by its move. */
+    quotes?: Map<string, { earlyPct: number | null; latePct: number | null }>;
+  },
+): CalRow[] {
+  const out = rows.filter(r => {
+    if (opts.session === "both") return true;
+    // Prefer a real vendor session if one ever arrives; fall back to the move.
+    const q = opts.quotes?.get(r.s);
+    const side =
+      r.sess
+      ?? inferredSession(q?.earlyPct, q?.latePct, opts.rowDate, opts.today)
+      ?? opts.usual?.get(r.s)
+      ?? null;
+    return side === opts.session;
+  });
   out.sort((a, b) => {
     // Market-cap descending is the primary order (largest companies first);
     // ties and unknowns (mcap 0) fall back to alphabetical.
@@ -386,6 +461,10 @@ const MAX_CAL_LOGOS = 24;
 // The at-a-glance snapshot shows this many rows per session (per side) before
 // its "+N more" toggle.
 const GLANCE_MAX = 25;
+/** How many of a day's reporters get a live quote for the session filter. The
+ *  shared snapshot cache tracks a bounded ticker set; one screen subscribing to
+ *  an entire earnings day would evict the heatmap and movers. */
+const SESSION_QUOTE_CAP = 120;
 
 /** One row of the at-a-glance snapshot — the Earnings-Hub "results" layout:
  *  actual vs consensus EPS + surprise, revenue actual/consensus, and the
@@ -553,7 +632,7 @@ function GlanceQuarters({ ticker, colSpan }: { ticker: string; colSpan: number }
   );
 }
 
-function GlanceRow({ it, showDate, onSelect, colSpan }: { it: EarnCalItem; showDate: boolean; onSelect: (s: string, date: string) => void; colSpan: number }) {
+function GlanceRow({ it, showDate, onSelect, colSpan, prePct, postPct }: { it: EarnCalItem; showDate: boolean; onSelect: (s: string, date: string) => void; colSpan: number; prePct: number | null; postPct: number | null }) {
   const epsSurp = surprise(it.epsE, it.epsA);
   const yoyRev = surprise(it.revYearAgo, it.revA); // (rev - yearAgo)/|yearAgo|
   const [open, setOpen] = useState(false);
@@ -590,6 +669,17 @@ function GlanceRow({ it, showDate, onSelect, colSpan }: { it: EarnCalItem; showD
       <td className="r ecal-num">{fmtRev(it.revA)}</td>
       <td className="r ecal-num">{fmtRev(it.revE)}</td>
       <td className={`r ecal-num ${fmtUpDn(yoyRev)}`}>{fmtPctSigned(yoyRev)}</td>
+      {/* Today's pre-market move. The vendor keeps this populated through the
+          regular session rather than clearing it at the open — measured with the
+          market open, AAPL read 0.047, DELL 0.399, MDB -2.20 — so the column
+          stays meaningful all day for a stock that reported before the bell.
+          "—" means the vendor had no pre-market print, not that it was flat. */}
+      <td className={`r ecal-num ${fmtUpDn(prePct)}`}>{fmtPctSigned(prePct, 2)}</td>
+      {/* After-hours, as the vendor reports it. See LiveQuote.latePct: this
+          field mirrored the regular-session move for non-reporters when
+          measured, so treat a value here as vendor-reported rather than
+          verified. Shown at the product owner's direction. */}
+      <td className={`r ecal-num ${fmtUpDn(postPct)}`}>{fmtPctSigned(postPct, 2)}</td>
       <td className="r ecal-num"><GuidanceCell it={it} /></td>
     </tr>
     {/* Mounted only while open, so closing a row also drops its fetched doc —
@@ -691,7 +781,14 @@ function GlanceTable({ title, items, showDate, onSelect }: { title: string; item
   // Company, Surprise, Actual, Consensus, 1 Yr Ago, Actual Rev, Cons. Rev,
   // Yr/Yr Rev, Guidance — plus Date when it is shown. Kept next to the header
   // it counts so the two move together.
-  const colCount = 9 + (showDate ? 1 : 0);
+  const colCount = 11 + (showDate ? 1 : 0);
+
+  // PRE-MARKET reaction for the rows on screen. Uses the app-wide shared poll,
+  // so a ticker here reads exactly as it does on the movers board and drawer.
+  //
+  // Pre-market only. The vendor's after-hours field is not wired — see the note
+  // on LiveQuote.earlyPct for the measurement that disqualified it.
+  const preQuotes = useLiveQuotes(shown.map(i => i.s));
   return (
     <div className="ecal-day" style={{ marginBottom: 14 }}>
       <div className="ecal-day-h">
@@ -711,11 +808,13 @@ function GlanceTable({ title, items, showDate, onSelect }: { title: string; item
               {sortTh("actualRev", "Actual Rev")}
               {sortTh("consRev", "Cons. Rev")}
               {sortTh("yoyRev", "Yr/Yr Rev")}
+              <th className="r" title="Today's pre-market move (04:00-09:30 ET), ~15 min delayed">Pre-mkt</th>
+              <th className="r" title="After-hours move as reported by the data vendor (~15 min delayed). Vendor-reported: the field's window and baseline are undocumented — see LiveQuote.latePct.">After-hrs</th>
               {sortTh("guidance", "Guidance")}
             </tr>
           </thead>
           <tbody>
-            {shown.map((it, i) => <GlanceRow key={`${it.s}-${it.date}-${i}`} it={it} showDate={showDate} onSelect={onSelect} colSpan={colCount} />)}
+            {shown.map((it, i) => <GlanceRow key={`${it.s}-${it.date}-${i}`} it={it} showDate={showDate} onSelect={onSelect} colSpan={colCount} prePct={preQuotes.get(it.s)?.earlyPct ?? null} postPct={preQuotes.get(it.s)?.latePct ?? null} />)}
           </tbody>
         </table>
       </div>
@@ -797,11 +896,75 @@ export function EarningsScreen() {
   const weekMon   = mondayOf(new Date(`${anchor}T00:00:00Z`));
   const weekDays5 = [0, 1, 2, 3, 4].map(i => isoDay(addDays(weekMon, i)));
 
+  const annSessionByKey = new Map<string, "BMO" | "AMC">();
+  /**
+   * A ticker's USUAL reporting session, from its own filing history.
+   *
+   * Companies keep to one side: of 351 tickers with a BMO/AMC filing, 346 (99%)
+   * have never used the other. So when nothing else can place a row — an
+   * upcoming report has no 8-K yet and no reaction to read — the company's own
+   * habit is the best evidence available, and a far better answer than dropping
+   * it out of a narrowed view.
+   *
+   * Only used when a ticker is CONSISTENT. A company that has genuinely
+   * reported on both sides has no habit to appeal to, so it stays unclassified
+   * rather than being placed on a coin-flip.
+   */
+  const annUsualSession = new Map<string, "BMO" | "AMC">();
+  // Guidance rides the same 8-K feed and the same ticker|date key as session.
+  const annGuidanceByKey = new Map<string, EarningsAnnouncementDoc>();
+  for (const a of earningsAnnouncements) {
+    if (a.session === "BMO" || a.session === "AMC") {
+      annSessionByKey.set(`${a.ticker}|${a.announceDate}`, a.session);
+    }
+    annGuidanceByKey.set(`${a.ticker}|${a.announceDate}`, a);
+  }
+  {
+    const tally = new Map<string, { BMO: number; AMC: number }>();
+    for (const a of earningsAnnouncements) {
+      if (a.session !== "BMO" && a.session !== "AMC") continue;
+      const t = tally.get(a.ticker) ?? { BMO: 0, AMC: 0 };
+      t[a.session]++;
+      tally.set(a.ticker, t);
+    }
+    for (const [ticker, c] of tally) {
+      // Consistent only: one side used, the other never.
+      if (c.BMO > 0 && c.AMC === 0) annUsualSession.set(ticker, "BMO");
+      else if (c.AMC > 0 && c.BMO === 0) annUsualSession.set(ticker, "AMC");
+    }
+  }
+
+  // Rows dated after today cannot be classified by their move — see
+  // inferredSession. Computed once so every consumer agrees on "today".
+  const todayIso = isoDay(new Date());
   const dayRows = rowsForDate(anchor, liveEarningsData).map(toCalRow);
-  const visibleRows = filterSortRows(dayRows, { sort, session: "both", mcap: mcapByTicker });
+  const glanceRaw: EarnCalItem[] =
+    mode === "month"
+      ? liveEarningsData.filter(d => d.date.slice(0, 7) === anchor.slice(0, 7)).map(toEarnCalItem)
+      : (mode === "week" ? weekDays5 : [anchor]).flatMap(iso => rowsForDate(iso, liveEarningsData));
+
+  // Quotes for every reporter ON SCREEN, so a row can be placed by where its
+  // move landed.
+  //
+  // Must cover the glance rows too, not just the anchor day: at-a-glance in week
+  // or month mode lists reporters the day view never mentions, and a row with no
+  // quote cannot be classified — it would silently vanish from a narrowed view.
+  //
+  // Capped: the shared snapshot cache tracks a bounded ticker set, and one
+  // screen subscribing to a whole month would evict the heatmap and movers.
+  const sessionTickers = [
+    ...new Set([...dayRows.map(r => r.s), ...glanceRaw.map(r => r.s)]),
+  ].slice(0, SESSION_QUOTE_CAP);
+  const sessionQuotes = useLiveQuotes(sessionTickers);
+  // Honours the session chip. It was pinned to "both", so with at-a-glance off
+  // the day calendar ignored the filter completely — picking "pre-market" left
+  // the grid unchanged while the same choice visibly narrowed the glance view,
+  // which reads as the filter being broken in one mode. Week mode already
+  // passed `session`; only this call was hardcoded.
+  const visibleRows = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: anchor, usual: annUsualSession });
   // Detail-mode side tray: the SELECTED DAY's reporting tickers (not the week),
   // narrowed live by the "Search earnings" box (symbol or company name).
-  const trayBaseItems = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker });
+  const trayBaseItems = filterSortRows(dayRows, { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: anchor, usual: annUsualSession });
   const trayQuery = tickerSearch.trim().toUpperCase();
   const trayItems = trayQuery
     ? trayBaseItems.filter(r => r.s.includes(trayQuery) || (r.n ?? "").toUpperCase().includes(trayQuery))
@@ -811,26 +974,24 @@ export function EarningsScreen() {
   // EDGAR 8-K `earnings_announcements` feed — Polygon's earnings_events carries
   // no session — joined by ticker + reporting date. Rows with no 8-K session
   // match fall into a "Time not specified" group rather than being hidden.
-  const annSessionByKey = new Map<string, "BMO" | "AMC">();
-  // Guidance rides the same 8-K feed and the same ticker|date key as session.
-  const annGuidanceByKey = new Map<string, EarningsAnnouncementDoc>();
-  for (const a of earningsAnnouncements) {
-    if (a.session === "BMO" || a.session === "AMC") {
-      annSessionByKey.set(`${a.ticker}|${a.announceDate}`, a.session);
-    }
-    annGuidanceByKey.set(`${a.ticker}|${a.announceDate}`, a);
-  }
   // ── At-a-glance snapshot rows ──────────────────────────────────────────────
   // Reporters for the current mode (day = the anchor day; week = its 5 weekdays;
   // month = the whole month), each with its Before-Open / After-Close session
   // resolved from the EDGAR 8-K feed (ticker|date), then filtered by the session
   // chip and ordered largest-cap first — the same ordering as the calendar.
-  const glanceRaw: EarnCalItem[] =
-    mode === "month"
-      ? liveEarningsData.filter(d => d.date.slice(0, 7) === anchor.slice(0, 7)).map(toEarnCalItem)
-      : (mode === "week" ? weekDays5 : [anchor]).flatMap(iso => rowsForDate(iso, liveEarningsData));
   const glanceItems: EarnCalItem[] = glanceRaw
-    .map(it => (it.sess ? it : { ...it, sess: annSessionByKey.get(`${it.s}|${it.date}`) ?? null }))
+    // Session, best source first: the vendor's own field, then the EDGAR 8-K
+    // feed, then where the stock's move actually landed. Without the last one
+    // every row fell through to "Time not specified", because the vendor field
+    // is null on every row and 8-K coverage is partial — the Before-open and
+    // After-close tables were permanently empty.
+    .map(it => (it.sess ? it : {
+      ...it,
+      sess: annSessionByKey.get(`${it.s}|${it.date}`)
+        ?? inferredSession(sessionQuotes.get(it.s)?.earlyPct, sessionQuotes.get(it.s)?.latePct, it.date, todayIso)
+        ?? annUsualSession.get(it.s)
+        ?? null,
+    }))
     .map(it => {
       const a = annGuidanceByKey.get(`${it.s}|${it.date}`);
       return a
@@ -923,7 +1084,7 @@ export function EarningsScreen() {
     calNode = (
       <div className="ec-grid">
         {weekDays5.map((iso, di) => {
-          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker });
+          const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: iso, usual: annUsualSession });
           const dn = ["Mon", "Tue", "Wed", "Thu", "Fri"][di];
           const isToday = iso === isoDay(new Date());
           return (
@@ -970,7 +1131,7 @@ export function EarningsScreen() {
         <div className="emc-grid">
           {cells.map(iso => {
             if (iso.slice(0, 7) !== monthKey) return <div key={iso} className="emc-day is-out" />;
-            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker });
+            const items = filterSortRows(rowsForDate(iso, liveEarningsData).map(toCalRow), { sort, session, mcap: mcapByTicker, quotes: sessionQuotes, today: todayIso, rowDate: iso, usual: annUsualSession });
             const isToday = iso === todayIso;
             const isSel   = iso === anchor && !isToday;
             const shown   = items.slice(0, MAX_LOGOS);
@@ -1099,12 +1260,31 @@ export function EarningsScreen() {
             <button className={`ecal-segbtn${mode === "week" ? " on" : ""}`} onClick={() => setMode("week")}>Week</button>
             <button className={`ecal-segbtn${mode === "day" ? " on" : ""}`} onClick={() => setMode("day")}>Day</button>
           </div>
-          {/* Session filter — narrows the calendar to pre-market / after-market. */}
-          <div className="ecal-seg">
-            <button className={`ecal-segbtn${session === "both" ? " on" : ""}`} onClick={() => setSession("both")}>All</button>
-            <button className={`ecal-segbtn${session === "BMO" ? " on" : ""}`} onClick={() => setSession("BMO")}>Pre-market</button>
-            <button className={`ecal-segbtn${session === "AMC" ? " on" : ""}`} onClick={() => setSession("AMC")}>After-market</button>
-          </div>
+          {/* Session filter — splits the day's reporters by WHERE THEIR MOVE
+              LANDED, not by an announced schedule.
+
+              It used to filter on a vendor BMO/AMC flag. That flag is null on
+              every row and no vendor on our plan sells it: FMP's
+              /stable/earnings-calendar returns seven fields with no timing, the
+              legacy endpoints that carried `time` now answer "Legacy Endpoint",
+              /stable/earnings-calendar-confirmed 404s, and Polygon has no
+              announcement feed (the reporting date comes from the SEC filing
+              date for that reason). So both buttons could only ever empty the
+              list, and they were hidden.
+
+              Restored on something observable instead: an earnings reaction
+              shows up in whichever extended session followed the release, so
+              the larger of a stock's pre-market and after-hours moves places it.
+              The labels say "moved" so this does not read as the company's
+              schedule, and a row whose move cannot be placed simply drops out of
+              a narrowed view rather than being guessed onto a side. */}
+          {SESSION_FILTER_ENABLED && (
+            <div className="ecal-seg">
+              <button className={`ecal-segbtn${session === "both" ? " on" : ""}`} onClick={() => setSession("both")} title="Every reporter for this day">All</button>
+              <button className={`ecal-segbtn${session === "BMO" ? " on" : ""}`} onClick={() => setSession("BMO")} title="Stocks whose bigger move landed in the pre-market session. Inferred from price, not from an announced reporting time.">Moved pre-mkt</button>
+              <button className={`ecal-segbtn${session === "AMC" ? " on" : ""}`} onClick={() => setSession("AMC")} title="Stocks whose bigger move landed after hours. Inferred from price, not from an announced reporting time — and the after-hours field is vendor-reported, see LiveQuote.latePct.">Moved after-hrs</button>
+            </div>
+          )}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 10 }}>
             <button
               className={`ecal-segbtn ecal-glancebtn${atGlance ? " on" : ""}`}
