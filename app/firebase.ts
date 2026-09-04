@@ -38,6 +38,15 @@ export const firebaseApp = getApps().length
 // cross-origin cookies) cannot clear the auth state between navigations.
 // Falls back to getAuth if the instance was already created (e.g. hot reload).
 function createAuth() {
+  /* Not on the server. Every option below is a BROWSER implementation —
+     IndexedDB, localStorage, a popup resolver — and none of them exists while
+     Next prerenders these client components in Node. initializeAuth resolved
+     them there anyway and Firebase asserted on it, printing
+     "INTERNAL ASSERTION FAILED: Expected a class definition" on every single
+     server render. The catch below swallowed the throw, so the app worked and
+     the log filled with an error that was not one, which is exactly the kind of
+     noise a real failure then hides in. */
+  if (typeof window === "undefined") return getAuth(firebaseApp);
   try {
     return initializeAuth(firebaseApp, {
       persistence: [indexedDBLocalPersistence, browserLocalPersistence],
