@@ -255,7 +255,14 @@ interface BackendBlog {
 function toConsoleBlog(b: BackendBlog): ConsoleBlogRow {
   return {
     id: b.id,
-    zone: b.zone ?? "lead",
+    /* "edu", not "lead": the board's columns are edu | recap | research, and it
+       lists a column by filtering `zone === <key>` (zoneposts in console.html).
+       "lead" matches no column, so a row that arrived without a zone was put
+       somewhere that does not exist — it vanished from the board while staying
+       live on the site, which is the worst of both. The console's own
+       normalizeBlog already falls back to "edu"; this now agrees with it
+       instead of overriding it with a value it treats as valid. */
+    zone: b.zone ?? "edu",
     rank: typeof b.rank === "number" ? b.rank : 999,
     kick: b.kick ?? "",
     title: b.title ?? "",

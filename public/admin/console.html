@@ -18,6 +18,26 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--text);font-family:var(--f-body);font-size:14px;-webkit-font-smoothing:antialiased;overflow:hidden}
+
+/* ── scrollbars ────────────────────────────────────────────────────────────
+   The console had none of its own, so every scrolling panel drew the platform
+   default: on Windows a thick, near-white bar, which on this dark chrome read
+   as a bright seam down the side of each card.
+
+   Thin and drawn from the theme tokens instead, so a scrollbar looks like part
+   of the surface it sits on. Both syntaxes are given: the standards one
+   (scrollbar-width/color, Firefox and modern Chromium) and the ::-webkit-
+   pseudo-elements, which are what Chrome and Edge honour when a corner or a
+   hover state is wanted. */
+*{scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:8px;
+  /* The border is transparent and clipped to the padding box, so the thumb
+     reads as a 5px pill floating in the track rather than filling it. */
+  border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--dim2);background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
 .app{display:grid;grid-template-columns:236px 1fr;height:100vh}
 
 /* ---------- sidebar ---------- */
@@ -479,23 +499,73 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
    The WHOLE popup is white, frame included — header, body and close button.
    A white sheet inside a dark window still reads as a swatch sitting on the
    console, and the frame is the part the eye takes as the background. */
-#prevModal{background:#fff;border-color:#e4dfd4}
-#prevModal .mh{border-bottom-color:#ece7dc}
-#prevModal .mh h3{color:#181713}
-#prevModal .mh .x{background:#f4f1ea;border-color:#e4dfd4;color:#5a564d}
-#prevModal .mh .x:hover{background:#ece7dc}
-#prevModal .mb{background:#fff}
-.prev-stage{background:#fff;color:#181713;border-radius:10px;max-height:70vh;overflow:auto;padding:26px 28px 34px}
+/* The popup is CONSOLE chrome and is themed as such.
+
+   It used to be painted white end to end, on the reasoning that a dark backdrop
+   would misrepresent the colours the post picked. That reasoning belonged to a
+   preview where the document bled straight into the popup with no edge between
+   them. It now sits inside .prev-viewport — a bordered sheet at a real device
+   width — so the document has its own boundary and supplies its own background.
+   The chrome around it no longer has to pretend to be paper, and a white slab
+   inside a dark console only ever read as an unfinished panel. */
+.prev-stage{background:var(--bg2);color:var(--text);border-radius:10px;max-height:70vh;overflow:auto;padding:22px 24px 30px}
 .prev-stage .prev-hero{width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin-bottom:16px;display:block}
-.prev-stage .prev-title{font-family:var(--f-disp);font-size:26px;font-weight:800;line-height:1.15;margin:0 0 8px;color:#12100c}
-.prev-stage .prev-dek{font-size:14.5px;line-height:1.6;color:#4a463d;margin:0 0 14px}
-.prev-stage .prev-rule{border:0;border-top:1px solid #e2ddd2;margin:0 0 18px}
-.prev-body{font-size:15px;line-height:1.7}
+.prev-stage .prev-title{font-family:var(--f-disp);font-size:24px;font-weight:800;line-height:1.18;margin:0 0 8px;color:var(--hi)}
+.prev-stage .prev-dek{font-size:14px;line-height:1.6;color:var(--dim);margin:0 0 14px}
+.prev-stage .prev-rule{border:0;border-top:1px solid var(--border);margin:0 0 18px}
+/* Prose publishes onto the site's white article card, so it previews on one.
+   The surrounding popup stays console-dark: the sheet is the ARTICLE, and
+   giving it an edge is what keeps the two from being read as one surface 
+   the same reason a designed post sits in .prev-viewport. */
+.prev-body{font-size:15px;line-height:1.7;background:#fff;color:#181713;
+  border:1px solid var(--border2);border-radius:12px;padding:26px 30px 32px;
+  box-shadow:0 18px 44px -20px #000c}
+.prev-body :where(h1,h2,h3,h4,h5,h6){color:#12100c}
 /* An authored .html post is drawn in its own frame, so the document keeps the
    stylesheet, fonts and layout it was written with instead of being rewritten
    to fit this page. Sized to its content (fitPreviewFrame) so the stage keeps
    the only scrollbar and the article reads as one sheet. */
 .prev-frame{display:block;width:100%;border:0;background:#fff;min-height:320px}
+
+/* ── device preview ───────────────────────────────────────────────────────
+   The article is published to phones, tablets and desktops from one uploaded
+   file, and the admin could only ever see it at the width of this popup. The
+   toolbar below re-lays the SAME frame at a real device width: an iframe's
+   layout viewport is its own element width, so the document inside genuinely
+   reflows — media queries fire, grids collapse — rather than being scaled down
+   like a picture of a page. */
+.prev-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 0 12px}
+.prev-devs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:3px}
+.prev-dev{display:inline-flex;align-items:center;gap:6px;background:transparent;border:0;border-radius:7px;
+  color:var(--dim);font:600 11.5px var(--f-body);padding:6px 11px;cursor:pointer;white-space:nowrap}
+.prev-dev:hover{background:var(--surface);color:var(--hi)}
+.prev-dev.on{background:var(--brand);color:#fff;box-shadow:0 1px 3px #0006}
+.prev-dev svg{width:14px;height:14px;flex:none}
+.prev-dev .px{font:500 10.5px var(--f-mono);color:var(--dim2)}
+.prev-dev.on .px{color:#ffffffb0}
+/* The measured verdict for the width on screen. Not decoration — it is the
+   only place the admin is told the page will be cut off on a phone. */
+.prev-fit{display:inline-flex;align-items:center;gap:6px;margin-left:auto;
+  font:600 11px var(--f-body);padding:6px 10px;border-radius:7px;border:1px solid}
+.prev-fit.ok{background:#2fe6a615;border-color:#2fe6a63a;color:var(--up)}
+.prev-fit.bad{background:#ff5d7a15;border-color:#ff5d7a3a;color:var(--down)}
+.prev-fit.na{background:var(--surface2);border-color:var(--border);color:var(--dim)}
+.prev-fit svg{width:13px;height:13px;flex:none}
+/* Sits under the bar and only when something is actually wrong, so the normal
+   case carries no noise. */
+.prev-warn{background:#ff5d7a12;border:1px solid #ff5d7a33;color:#ffb3bf;border-radius:9px;
+  padding:9px 12px;margin:0 0 12px;font:500 12px var(--f-body);line-height:1.55}
+.prev-warn b{font-weight:700}
+
+/* The stage measures this; the viewport inside is what gets scaled. */
+.prev-devwrap{display:flex;justify-content:center;overflow:hidden}
+.prev-viewport{transform-origin:top center;flex:none;background:#fff;
+  border:1px solid var(--border2);border-radius:10px;overflow:hidden;box-shadow:0 18px 44px -20px #000c}
+/* At a device width the frame is that width exactly — never 100% of the
+   stage, or the whole point is lost. */
+.prev-viewport .prev-frame{width:100%}
+/* "Fit" keeps the old behaviour: the frame simply fills the popup. */
+.prev-devwrap.fit .prev-viewport{border:0;border-radius:0;box-shadow:none;width:100%!important}
 /* Mirrors the site: prose is capped and centred, a document or html post uses
    the whole sheet. Set per format when the preview is built. */
 .prev-body.narrow{max-width:820px;margin:0 auto}
@@ -510,16 +580,32 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 /* How-to: four steps read in one glance, then the handful of rules the form
    itself cannot tell you. Short on purpose — a procedure nobody finishes
    reading is a procedure nobody follows. */
-.sop{margin:0;padding:0 0 0 20px;display:flex;flex-direction:column;gap:9px}
-.sop li{color:var(--dim);font-size:12.5px;line-height:1.55}
+/* The steps. Bigger and looser than the old 12.5px/1.55: this is the one
+   thing in the console someone reads start to finish, and it was set like a
+   footnote. */
+.sop{margin:0 0 4px;padding:0 0 0 20px;display:flex;flex-direction:column;gap:12px}
+.sop li{color:var(--text);font-size:13.5px;line-height:1.62}
 .sop li::marker{color:var(--brand);font-weight:700}
-.sop b{color:var(--text);font-weight:600}
-.sop-note{margin-top:17px;padding:13px 15px 14px;border-radius:9px;background:var(--bg2);border:1px solid var(--border)}
-.sop-note>b{display:block;color:var(--dim2);font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;margin-bottom:8px}
-.sop-note ul{margin:0;padding:0 0 0 16px;display:flex;flex-direction:column;gap:7px}
-.sop-note li{color:var(--dim);font-size:12px;line-height:1.55}
-.sop-note li b{color:var(--text);font-weight:600}
-.sop-note code{font-family:var(--f-mono);font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--text)}
+.sop b{color:var(--text-hi,#fff);font-weight:650}
+
+/* ONE emphasised block, not six identical grey panels. Six boxes gave every
+   paragraph the same weight, which is the same as giving none of them any —
+   the three rules that actually break a post were buried among the trivia.
+   A single accent bar carries them and nothing competes. */
+.sop-warn{margin-top:18px;padding:13px 15px 14px;border-radius:0 9px 9px 0;
+  background:var(--bg2);border-left:3px solid var(--brand)}
+.sop-warn>b{display:block;color:var(--text-hi,#fff);font-size:12.5px;margin-bottom:9px;font-weight:650}
+.sop-warn ul{margin:0;padding:0 0 0 16px;display:flex;flex-direction:column;gap:9px}
+.sop-warn li{color:var(--dim);font-size:12.5px;line-height:1.6}
+.sop-warn li b{color:var(--text);font-weight:600}
+
+/* The leftovers, as a footnote rather than a fourth panel. */
+.sop-foot{margin:16px 0 0;color:var(--dim2);font-size:11.5px;line-height:1.65}
+.sop-foot b{color:var(--dim);font-weight:600}
+.sop code{font-family:var(--f-mono);font-size:11px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--text)}
+.sop-warn code,.sop-foot code{font-family:var(--f-mono);font-size:11px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--text)}
 /* Delete sits where Cancel did, so it is coloured as the destructive action it
    is rather than looking like the neutral dismiss it replaced. */
 .btn-danger{color:#ff5d7a;border-color:rgba(255,93,122,.45)}
@@ -547,6 +633,12 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .zcard .zby{font:600 9px var(--f-mono);color:var(--dim2);margin-top:6px;text-transform:uppercase}
 .zcard .zx{position:absolute;top:7px;right:7px;width:20px;height:20px;border:none;border-radius:6px;background:#0006;color:var(--dim);cursor:pointer;display:none;place-items:center;font-size:13px}
 .zcard:hover .zx{display:grid}.zcard .zx:hover{color:var(--down);background:#ff5d7a22}
+/* Preview, between the status pill and the delete cross. Same hover-reveal as
+   .zx so the card stays quiet until it is pointed at. */
+.zcard .zpv{position:absolute;top:7px;right:33px;width:20px;height:20px;border:none;border-radius:6px;background:#0006;color:var(--dim);cursor:pointer;display:none;place-items:center;padding:0}
+.zcard:hover .zpv{display:grid}
+.zcard .zpv:hover{color:var(--brand);background:#7c6cf522}
+.zcard .zpv svg{width:13px;height:13px;display:block}
 /* rank badge + reorder controls */
 .zcard .zrk{position:absolute;top:8px;left:-1px;font:600 9px var(--f-mono);background:var(--brand);color:#fff;padding:2px 6px;border-radius:0 6px 6px 0}
 .zcard{padding-left:16px}
@@ -556,7 +648,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .zmove button:disabled{opacity:.3;cursor:default}
 .zempty{color:var(--dim2);font-size:12px;text-align:center;padding:16px 0}
 /* per-card publish/draft toggle */
-.zcard .zst{position:absolute;top:7px;right:33px;border:1px solid transparent;border-radius:6px;padding:2px 7px;font:600 8.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;background:#2fe6a618;color:#2fe6a6;border-color:#2fe6a633;transition:.12s}
+.zcard .zst{position:absolute;top:7px;right:59px;border:1px solid transparent;border-radius:6px;padding:2px 7px;font:600 8.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;background:#2fe6a618;color:#2fe6a6;border-color:#2fe6a633;transition:.12s}
 .zcard .zst.draft{background:#ffb54718;color:#ffb547;border-color:#ffb54733}
 .zcard .zst:hover{filter:brightness(1.15)}
 /* staged-changes bar */
@@ -851,91 +943,43 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 </div>
 
 <!-- IMAGE GALLERY -->
-<!-- How to: the rules an HTML article is published under. They are not
-     guessable from the form — which parts of an uploaded document survive, what
-     is never executed, and what the page has to do at phone width — so they are
-     written down next to the button that starts the job.
+<!-- How to: what an admin has to know before uploading, and nothing else.
 
-     Kept in step with the reader: a post now carries its OWN stylesheet, so the
-     old warning that "the most recent upload wins" is gone. It was true, it was
-     the reason older articles silently restyled themselves, and it is fixed. -->
+     Kept deliberately short. The previous version ran to 817 words in six
+     identical grey boxes — a specification, not a guide, and one nobody reads
+     before uploading. Everything that only explained WHY is gone; what is left
+     is the four steps and the three rules that silently break a post. -->
 <div class="scrim" id="sopScrim" onclick="closeSop()" style="z-index:70"></div>
-<div class="modal" id="sopModal" style="width:600px;z-index:80">
+<div class="modal" id="sopModal" style="width:520px;z-index:80">
   <div class="mh">
     <h3>Publishing an HTML article</h3>
     <button class="x" style="margin-left:auto" onclick="closeSop()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
   </div>
   <div class="mb">
-    <div class="sop-note" style="margin-top:0">
-      <b>The short version</b>
-      <ul>
-        <li>Download <b>Preset 1 &middot; Article</b>, swap in your words and pictures, keep the structure, load it back. That is the whole job, and it is the route least likely to surprise you.</li>
-        <li>Writing your own file instead? It must be <b>responsive from 360px to 1920px</b> and must not rely on JavaScript. Both are covered below.</li>
-      </ul>
-    </div>
-
     <ol class="sop">
-      <li><b>Add blog</b> &rarr; pick a section &rarr; choose <b>HTML</b>.</li>
-      <li>In the <b>Design</b> row below, download <b>Preset 1 &middot; Article</b>. Open it in any editor, replace the headline, the text and the images with yours, and leave the layout and class names alone.</li>
-      <li>Bring it back with <b>Load .html file</b> &mdash; the whole document, <code>&lt;head&gt;</code> and all. You can also paste markup straight into the box.</li>
-      <li>Fill <b>Title</b>, <b>Summary</b> and <b>Hero image</b>. All three are required. They are the board card&rsquo;s headline, excerpt and thumbnail, and the page&rsquo;s title and link preview &mdash; the article itself shows your document&rsquo;s own headline and images.</li>
-      <li><b>Preview</b>. Your file is drawn in its own frame, exactly as written. The published article is that same document, full width &mdash; what you see here is what readers get.</li>
-      <li><b>Publish</b>. It goes live immediately &mdash; there is no draft step here.</li>
+      <li>Choose <b>HTML</b>, then download <b>Preset 1 &middot; Article</b> from the Design row below.</li>
+      <li>Replace its text and images with yours. Keep the layout and class names as they are.</li>
+      <li>Bring it back with <b>Load .html file</b>, then fill <b>Title</b>, <b>Summary</b> and <b>Hero image</b> &mdash; all three are required.</li>
+      <li><b>Preview</b> at each device width. Fix whatever it flags, then <b>Publish</b>; it goes live at once.</li>
     </ol>
 
-    <div class="sop-note">
-      <b>Which preset</b>
+    <div class="sop-warn">
+      <b>Three things that will break your post</b>
       <ul>
-        <li><b>Preset 1 &middot; Article</b> &mdash; a complete, responsive article: kicker, headline, standfirst, a KPI row, SVG charts, captioned figures, a data table and collapsible notes. <b>This is the one to publish as a blog post.</b></li>
-        <li><b>Preset 2 &middot; Blog page</b> &mdash; the design of the blog index, kept as a style reference. Its post cards are built by JavaScript, so publishing it as an article gives you a page with empty <i>Highlights</i> and <i>Latest posts</i> sections. Use it to match colours and type, not as an article.</li>
+        <li><b>JavaScript never runs</b> &mdash; not in the preview, not on the site. Anything a script draws (tabs, carousels, counters, charts, post lists) publishes empty. Write it as plain HTML.</li>
+        <li><b>Off-site fonts, stylesheets and <code>url()</code> images are dropped</b> by the site&rsquo;s security policy. Use a system font stack and upload your images. Tailwind classes do work &mdash; the site serves its own copy.</li>
+        <li><b>It must hold up from 360px.</b> Size with <code>max-width</code>, never a fixed <code>width:1200px</code>; use <code>repeat(auto-fit,minmax(240px,1fr))</code> over <code>repeat(4,300px)</code>; give card rows <code>flex-wrap:wrap</code>. The preview measures this and tells you, in pixels, when it does not fit.</li>
       </ul>
     </div>
 
-    <div class="sop-note">
-      <b>What happens to your file</b>
-      <ul>
-        <li>Everything inside <code>&lt;body&gt;</code> is this article, kept as you wrote it.</li>
-        <li>Its <code>&lt;style&gt;</code> is stored <b>with this post</b>. It styles this article and nothing else, and publishing another article will never change how this one looks.</li>
-        <li><code>lang</code> and <code>data-theme</code> on your <code>&lt;html&gt;</code> tag are carried across, so a stylesheet whose colours live in <code>html[data-theme="light"]</code> / <code>[data-theme="dark"]</code> blocks keeps working.</li>
-        <li>Images you embed as base64 are uploaded to storage and re-pointed for you. You do not need to host them anywhere.</li>
-        <li>A file that is all design and no body is refused &mdash; there would be nothing to read.</li>
-      </ul>
-    </div>
-
-    <div class="sop-note">
-      <b>What will not survive &mdash; design around it</b>
-      <ul>
-        <li><b><code>&lt;script&gt;</code> never runs.</b> Not in the preview, not on the site. Anything drawn by JavaScript &mdash; post lists, counters, tabs, carousels, lightboxes, theme toggles, charts &mdash; publishes <b>empty</b>. Write the content as plain HTML instead.</li>
-        <li><b>Off-site <code>&lt;link&gt;</code> and <code>url()</code> are dropped</b> by the site&rsquo;s security policy: Google Fonts, CDN stylesheets, remote background images. Use a system font stack, and embed or upload any image you need.</li>
-        <li><b>Tailwind classes do work</b> &mdash; the site serves its own copy. A <code>tailwind.config</code> block in a <code>&lt;script&gt;</code> tag does not, so custom colours and fonts set there will fall back to defaults.</li>
-        <li><code>&lt;iframe&gt;</code>, <code>&lt;form&gt;</code>, <code>&lt;video&gt;</code> and <code>on&hellip;</code> handlers are removed.</li>
-      </ul>
-    </div>
-
-    <div class="sop-note">
-      <b>Make it responsive &mdash; 360px to 1920px</b>
-      <ul>
-        <li><b>Preset 1 already does all of this</b> &mdash; border-box, fluid wrappers, auto-fit grids and breakpoints at 640, 700, 760, 1040 and 1180px. Start there and you inherit it; the rules below are for when you write your own.</li>
-        <li>Set <code>box-sizing:border-box</code> on everything, and <code>img{max-width:100%;height:auto}</code>.</li>
-        <li>Size wrappers with <code>max-width</code>, never a fixed <code>width:1200px</code> &mdash; a hard pixel width is the single most common reason an uploaded page runs off the side of a phone.</li>
-        <li>Grids: <code>repeat(auto-fit,minmax(240px,1fr))</code>, not <code>repeat(4,300px)</code>. Flex rows that hold cards need <code>flex-wrap:wrap</code>.</li>
-        <li>Add breakpoints at roughly <b>1024px</b> (laptop), <b>760px</b> (tablet) and <b>560px</b> (phone).</li>
-        <li>Wide tables are fine &mdash; they are given their own sideways scroll automatically.</li>
-        <li><b>Check it before you upload:</b> narrow your browser window to about 360px. There must be no sideways scrollbar and no text running under the edge.</li>
-        <li>The site adds a backstop that stops a page overflowing whatever you send. It can only prevent breakage &mdash; it cannot invent a mobile layout, so a page designed only for desktop will fit the screen but still read like a shrunken desktop page.</li>
-      </ul>
-    </div>
-
-    <div class="sop-note">
-      <b>Before it will publish</b>
-      <ul>
-        <li>Unclosed and stray tags are caught first and listed with line numbers. Fix them and publish again.</li>
-        <li>Stay on the <b>HTML</b> tab. <b>Rich</b> keeps headings, lists, quotes, links and images and drops everything else &mdash; custom containers, classes and inline styles do not survive the switch.</li>
-        <li>Hero image: 5 MB. A <b>.docx</b> or <b>.pdf</b> dropped on a section: 20 MB. The article itself: 700 KB, so move large embedded media to an upload.</li>
-        <li>Leave <b>Rank</b> blank to add the article to the end of its section. Drag a card, or use &uarr; &darr;, to reorder &mdash; the new order goes live at once.</li>
-        <li>A card&rsquo;s <b>Live / Draft</b> toggle pulls a published article back off the site.</li>
-      </ul>
-    </div>
+    <p class="sop-foot">
+      Your <code>&lt;style&gt;</code> is saved with this post only &mdash; a later upload will not restyle it.
+      On save the site drops your own masthead and any &ldquo;Back to blogs&rdquo; link, because it draws both itself;
+      it also uploads base64 images for you and gives wide tables their own sideways scroll.
+      Unclosed tags are caught before publishing, with line numbers.
+      Limits: hero 5&nbsp;MB, PDF/Word 20&nbsp;MB.
+      <b>Preset 2</b> is the blog-index design, not an article.
+    </p>
   </div>
 </div>
 
@@ -953,9 +997,22 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 
 <!-- ARTICLE PREVIEW -->
 <div class="scrim" id="prevScrim" onclick="closePreview()" style="z-index:70"></div>
-<div class="modal" id="prevModal" style="width:1000px;z-index:80">
+<!-- Wider than the old fixed 1000px: the laptop and desktop widths below are
+     1280 and 1440, and a popup narrower than the device it claims to be
+     previewing can only ever show a scaled-down picture. -->
+<div class="modal" id="prevModal" style="width:min(1560px,96vw);z-index:80">
   <div class="mh"><h3>Preview</h3><button class="x" onclick="closePreview()"><svg viewBox="0 0 24 24" width="16" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
-  <div class="mb"><div class="prev-stage" id="prevStage"></div></div>
+  <div class="mb">
+    <!-- Built by renderPreviewBar(); hidden for formats that have no design of
+         their own to break (prose publishes with the site's own responsive
+         styling, so there is nothing here for the admin to decide). -->
+    <div class="prev-bar" id="prevBar" style="display:none">
+      <div class="prev-devs" id="prevDevs"></div>
+      <span class="prev-fit na" id="prevFit">Measuring…</span>
+    </div>
+    <div class="prev-warn" id="prevWarn" style="display:none"></div>
+    <div class="prev-stage" id="prevStage"></div>
+  </div>
 </div>
 
 <!-- BLOG PUBLISH / EDIT MODAL (ported) -->
@@ -1035,7 +1092,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
           <a class="tpl" href="/admin/presets/preset-2-blog-page.html" download="preset-2-blog-page.html" title="Download the blog page template"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Preset 2 &middot; Blog page</a>
           <button class="btn tpl-load" onclick="pickHtmlFile()">Load .html file</button>
         </div>
-        <div id="bThemeNote" class="theme-note">Work from <b>Preset 1 &middot; Article</b>: download it, replace its text and images with yours, and <b>keep the structure as it is</b> &mdash; that is what makes the post lay out correctly on every screen. Load it back with <b>Load .html file</b>. Its &lt;style&gt; is stored with <b>this post only</b>, so publishing another article will not change how this one looks. Scripts never run, so anything drawn by JavaScript will be empty. Bringing your own file? It must work from 360px to 1920px &mdash; see <b>Publishing guide</b>.</div>
+        <div id="bThemeNote" class="theme-note">Start from <b>Preset 1 &middot; Article</b>: replace its text and images, keep the structure, then <b>Load .html file</b>. Its &lt;style&gt; is saved with this post only. Scripts never run, and the page must work from 360px to 1920px &mdash; see <b>Publishing guide</b>.</div>
       </div>
   </div>
   <div class="mf"><button class="btn btn-danger" style="flex:none" id="bDelete">Delete</button><button class="btn" style="flex:none" id="bPreview" onclick="openPreview()">Preview</button><button class="btn-pub sch" style="flex:none;padding:11px 22px" id="bPublish">Publish</button></div>
@@ -2069,6 +2126,7 @@ function moveBlog(id,dir){
   sendReorder(orders);
   toast('Moved to #'+(j+1));
 }
+function zeyeSVG(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6"/></svg>';}
 function zdropSVG(){return '<svg width="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M7 9l5-5 5 5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round"/></svg>';}
 function renderBoard(){
   const board=bEl('blogboard');if(!board)return;
@@ -2077,6 +2135,10 @@ function renderBoard(){
     const cards=posts.length?posts.map((p,i)=>`<div class="zcard ${z==='recap'&&i===0?'lead':''}" draggable="true" data-id="${p.id}" onclick="openBlogModal('${z}','${p.id}')">
         <span class="zrk">${i+1}</span>
         <button class="zst ${p.status==='Draft'?'draft':''}" title="${p.status==='Draft'?'Draft — click to publish':'Live — click to unpublish'}" onclick="event.stopPropagation();togglePublish('${p.id}')">${p.status==='Draft'?'Draft':'Live'}</button>
+        <!-- Preview sits beside Delete so an article can be checked — at every
+             device width — from the board, without opening the editor first.
+             stopPropagation, or the card's own click opens the editor behind it. -->
+        <button class="zpv" title="Preview at mobile / tablet / laptop / desktop" onclick="event.stopPropagation();previewBlog('${p.id}')">${zeyeSVG()}</button>
         <button class="zx" title="Remove" onclick="event.stopPropagation();deleteBlog('${p.id}')">×</button>
         <div class="zk">${xesc(p.kick||'')}</div><h5>${xesc(p.title||'Untitled')}</h5>
         ${p.dek?`<div class="zd">${xesc(p.dek)}</div>`:''}
@@ -2637,17 +2699,100 @@ async function loadHeroFileInline(file){
    content, which is safe with scripting off. */
 const PREV_SANDBOX='allow-same-origin';
 let _prevRO=null;
+
+/* ---- device preview ----------------------------------------------------
+   Widths are CSS pixels — the layout viewport a device reports, not its
+   hardware pixels. An iframe's viewport IS its element width, so setting the
+   frame to 390px makes the document inside reflow exactly as it would on a
+   phone: its media queries fire, its grids collapse, its nav wraps. That is
+   why this resizes the frame rather than applying a scale transform to a
+   desktop rendering, which would only shrink a picture of the wrong layout. */
+const PREV_DEVICES=[
+  {id:'fit',    label:'Fit',     w:0,    icon:'<path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>'},
+  {id:'mobile', label:'Mobile',  w:390,  icon:'<rect x="7" y="2.5" width="10" height="19" rx="2.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M11 18.5h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'},
+  {id:'tablet', label:'Tablet',  w:834,  icon:'<rect x="4.5" y="2.5" width="15" height="19" rx="2.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M11 18.5h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'},
+  {id:'laptop', label:'Laptop',  w:1280, icon:'<rect x="3.5" y="4.5" width="17" height="11" rx="1.8" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M2 19h20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'},
+  {id:'desktop',label:'Desktop', w:1440, icon:'<rect x="2.5" y="3.5" width="19" height="13" rx="1.8" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M8 20.5h8M12 16.5v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'}
+];
+/* Opens on Mobile deliberately. It is the width these uploaded designs are
+   least likely to have been drawn for, so it is the one worth showing first. */
+let _prevDevice='mobile';
+
+/* The SITE's own responsive net, re-anchored onto this frame's document.
+   On the site every rule is scoped to `.post-doc`, the element the article is
+   mounted in; inside this frame the document itself is that boundary, so
+   `body`/`html` is the same edge.
+
+   KEEP IN SYNC with BASELINE / RESPONSIVE_NET in
+   MarketCatalystWebsite/components/blog/PostHtmlDoc.tsx. Without this the
+   preview showed the raw document and quietly disagreed with the published
+   page: an overflow the site clamps looked broken here, and the clipping the
+   site applies did not show up at all. */
+const PREV_SITE_NET=`
+body, body *, body *::before, body *::after { box-sizing: border-box; }
+body img, body svg, body video { max-width: 100%; height: auto; }
+body pre { overflow-x: auto; }
+body > * { max-width: 100% !important; }
+@media (max-width: 1024px){ body * { min-width: 0 !important; max-width: 100% !important; } }
+@media (max-width: 760px){
+  body :where(img,svg,video,canvas){ height: auto !important; }
+  body :where(p,li,td,th,dd,blockquote,figcaption){ overflow-wrap: break-word; }
+  body :where(header,nav){ position: static !important; }
+  body :where(h1,h2,h3,h4,h5,h6,p,li,dd,blockquote,figcaption,a,span,div,strong,em){ white-space: normal !important; }
+}
+@media (max-width: 560px){
+  body :where(div,section,main,article,aside,ul,ol){ grid-template-columns: minmax(0,1fr) !important; }
+  body :where(div,section,ul,ol){ flex-wrap: wrap; }
+}
+/* The site clips what it cannot reflow (.post-doc in blog-doc.css). The class
+   is toggled from the parent when measuring — see measurePreviewFit. */
+html.mc-clip { overflow-x: clip; }
+`;
+
+/* The document as the frame should load it: the admin's markup verbatim, then
+   the site's net appended so it wins the ties it is meant to win. */
+function previewSrcdoc(src){
+  return String(src||'')+'<style data-mc-net>'+PREV_SITE_NET.replace(/<\/?(style|script)/gi,'')+'</style>';
+}
+
 /* Grows the frame to its content so the stage owns the only scrollbar. */
+/* Grows the frame to its content so the stage owns the only scrollbar.
+   Returns the height it set, which is what sizes the sleeve around it. */
 function fitPreviewFrame(f){
   try{
-    const d=f.contentDocument; if(!d||!d.documentElement) return;
+    const d=f.contentDocument; if(!d||!d.documentElement) return 0;
     /* Margin collapsing at the document edge makes the two heights disagree;
        the larger one is the honest answer. */
     const h=Math.max(d.documentElement.scrollHeight, d.body?d.body.scrollHeight:0);
-    if(h) f.style.height=(h+8)+'px';
-  }catch(e){}
+    if(!h) return 0;
+    const set=h+8;
+    f.style.height=set+'px';
+    return set;
+  }catch(e){ return 0; }
 }
 function stopPreviewFit(){ if(_prevRO){ try{_prevRO.disconnect();}catch(e){} _prevRO=null; } }
+
+/**
+ * How far the document overruns the width on screen.
+ *
+ * Measured with the clip lifted, because the clip is what HIDES the problem:
+ * with `overflow-x: clip` in force the page reports no overflow at all while
+ * the reader silently loses the right-hand side of it. Lifting it for one
+ * measurement is the only way to recover the number the admin needs, and the
+ * frame is same-origin so the parent can toggle the class even though nothing
+ * inside the frame is allowed to run.
+ */
+function measurePreviewFit(f){
+  try{
+    const d=f.contentDocument; if(!d||!d.documentElement) return null;
+    const el=d.documentElement;
+    el.classList.remove('mc-clip');
+    const over=Math.max(0, el.scrollWidth-el.clientWidth);
+    const vw=el.clientWidth;
+    el.classList.add('mc-clip');
+    return {over:Math.round(over), vw:Math.round(vw)};
+  }catch(e){ return null; }
+}
 /* The same split the server makes on save (see extractTheme): the <style>, the
    stylesheet links and the scripts in an authored document are the blog's
    shared design, and only what is left is this post. The preview has to make
@@ -2662,52 +2807,291 @@ function splitDesign(src){
   doc.querySelectorAll('style,script,link').forEach(n=>n.remove());
   return {html:(doc.body?doc.body.innerHTML:'').trim(),css:css.join('\n')};
 }
+/**
+ * Is this an authored DESIGN, or prose that merely happens to be stored as html?
+ *
+ * The distinction decides which preview is honest, because the SITE makes the
+ * same one (resolvePostDesign in the website's lib/blog/post-design.ts). A post
+ * typed into the rich editor is <h2>/<p>/<a> and nothing else. It carries no
+ * stylesheet of its own, so the backend hands it back composed against the
+ * SHARED theme — and that theme is whichever designed document was uploaded
+ * last, written for .card/.eyebrow/.meta. Not one of its selectors matches
+ * plain prose.
+ *
+ * Previewing that in the device frame showed the admin a bare, unstyled page,
+ * while the site draws the very same post as a proper article — headline,
+ * dateline and a measured column. The preview was disagreeing with the article.
+ *
+ * So: the design counts as this post's design only if it actually styles a
+ * class the body uses. Otherwise the post is prose and previews as prose.
+ */
+function previewIsDesigned(src){
+  const {html,css}=splitDesign(src);
+  if(!css.trim()) return false;
+  const used=new Set();
+  const re=/\sclass\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  let m; while((m=re.exec(html))!==null){
+    for(const n of (m[1]??m[2]??'').split(/\s+/)) if(n) used.add(n);
+  }
+  if(!used.size) return false;
+  /* A crude scan for `.name` rather than a real CSS parse. A false positive only
+     keeps the device frame — the behaviour this replaced — so it can never fail
+     to something worse than the status quo. */
+  const sel=/\.(-?[_a-zA-Z][\w-]*)/g;
+  while((m=sel.exec(css))!==null) if(used.has(m[1])) return true;
+  return false;
+}
+
+/* The device toolbar. Rebuilt on every open so the active pill matches
+   _prevDevice even when the popup was last closed on a different width. */
+function renderPreviewBar(){
+  const wrap=bEl('prevDevs');
+  wrap.innerHTML=PREV_DEVICES.map(d=>
+    '<button type="button" class="prev-dev'+(d.id===_prevDevice?' on':'')+'" data-dev="'+d.id+'">'+
+      '<svg viewBox="0 0 24 24">'+d.icon+'</svg>'+xesc(d.label)+
+      (d.w?'<span class="px">'+d.w+'</span>':'')+
+    '</button>').join('');
+  wrap.querySelectorAll('.prev-dev').forEach(b=>{
+    b.onclick=()=>{ _prevDevice=b.dataset.dev; renderPreviewBar(); layoutPreviewDevice(); };
+  });
+}
+
+/**
+ * Sizes the frame to the chosen device and fits the result into the stage.
+ *
+ * Two different widths are at play and conflating them is the trap: the frame
+ * is set to the DEVICE width so the document lays out for that device, and the
+ * result is then scaled down only if the popup cannot show that many pixels.
+ * The scale is presentation — the layout it is scaling has already happened at
+ * the real width.
+ */
+/* The device scale for the width on screen. Kept out of layoutPreviewDevice so
+   the re-sync below can reuse it without re-running the whole layout. */
+function previewScale(){
+  const wrap=bEl('prevDevWrap');
+  const dev=PREV_DEVICES.find(d=>d.id===_prevDevice)||PREV_DEVICES[0];
+  if(!wrap||!dev.w) return 0;
+  return Math.min(1, Math.max(240, wrap.clientWidth)/dev.w);
+}
+
+/**
+ * Re-measures the frame and gives the sleeve the height it now needs.
+ *
+ * BOTH heights, every time, which is the bug this fixes: the wrapper height was
+ * set once when the preview opened, while the ResizeObserver went on resizing
+ * only the IFRAME. So anything that arrived late  an image, a webfont, a
+ * remote stylesheet  grew the document inside a wrapper that was still the
+ * height of the document BEFORE it arrived, and .prev-devwrap clips, so the end
+ * of the article was cut off with no scrollbar that could reach it.
+ *
+ * A scaled element still occupies its UNSCALED box in flow, so the wrapper is
+ * given the visual height (getBoundingClientRect, which has the scale in it)
+ * rather than the frame's own.
+ */
+function syncPreviewFrame(){
+  const wrap=bEl('prevDevWrap'), vp=bEl('prevViewport'), f=bEl('prevFrame');
+  if(!wrap||!vp||!f) return;
+  const h=fitPreviewFrame(f);
+  if(wrap.classList.contains('fit')){ wrap.style.height=''; return; }
+  /* Computed from the height just SET on the frame, times the scale  not read
+     back off the sleeve. Reading it back inside a ResizeObserver callback
+     returned the layout from before this same function resized the frame, so
+     the sleeve was persistently short and .prev-devwrap clipped the tail of
+     every article whose content settled late. */
+  const k=previewScale()||1;
+  if(h) wrap.style.height=Math.ceil(h*k)+'px';
+}
+
+/**
+ * Sizes the frame to the chosen device and fits the result into the stage.
+ *
+ * Two different widths are at play and conflating them is the trap: the frame
+ * is set to the DEVICE width so the document lays out for that device, and the
+ * result is then scaled down only if the popup cannot show that many pixels.
+ * The scale is presentation  the layout it is scaling has already happened at
+ * the real width.
+ */
+function layoutPreviewDevice(){
+  const wrap=bEl('prevDevWrap'), vp=bEl('prevViewport'), f=bEl('prevFrame');
+  if(!wrap||!vp||!f) return;
+  const dev=PREV_DEVICES.find(d=>d.id===_prevDevice)||PREV_DEVICES[0];
+
+  if(!dev.w){                       // "Fit"  the frame simply fills the popup
+    wrap.classList.add('fit');
+    vp.style.width=''; vp.style.transform=''; wrap.style.height='';
+    setTimeout(()=>{ syncPreviewFrame(); reportPreviewFit(f, 0); },0);
+    return;
+  }
+  wrap.classList.remove('fit');
+  vp.style.width=dev.w+'px';
+  const k=previewScale();
+  vp.style.transform=k<1?'scale('+k+')':'';
+  setTimeout(()=>{ syncPreviewFrame(); reportPreviewFit(f, k); },0);
+}
+
+/* Turns the measurement into the one sentence the admin needs. */
+function reportPreviewFit(f, k){
+  const chip=bEl('prevFit'), warn=bEl('prevWarn');
+  const m=measurePreviewFit(f);
+  const zoom=(k&&k<1)?' · '+Math.round(k*100)+'%':'';
+  if(!m){ chip.className='prev-fit na'; chip.textContent='Measuring…'; warn.style.display='none'; return; }
+  if(m.over<=1){
+    chip.className='prev-fit ok';
+    chip.innerHTML='<svg viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Fits '+m.vw+'px'+xesc(zoom);
+    warn.style.display='none';
+    return;
+  }
+  chip.className='prev-fit bad';
+  chip.innerHTML='<svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5M12 16.5v.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M12 3l9.5 17h-19z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Overflows '+m.over+'px';
+  warn.style.display='';
+  warn.innerHTML='<b>This design has no layout for '+m.vw+'px.</b> Its content is '+m.over+
+    'px wider than the screen, and the site clips what it cannot reflow — so readers on this size will '+
+    'lose the right-hand edge of it. You can publish anyway; the page will not scroll sideways. '+
+    'To fix it in the source, look for fixed pixel widths, a <code>white-space:nowrap</code> run, '+
+    'or an element positioned outside its container.';
+}
+
+/* Opens the preview for the article being EDITED — the unsaved state of the
+   form, which is the thing the admin is about to publish. */
 function openPreview(){
+  showPreview({
+    title:bEl('bTitle').value.trim(),
+    dek:bEl('bDek').value.trim(),
+    // heroValue(), not the URL box: an uploaded file lives in _heroData until
+    // the save hoists it, and the preview has to show what will actually
+    // publish.
+    hero:heroValue()||'',
+    /* Whichever of the two the admin produced — the whole loaded document, or
+       the markup typed into the source box. Previewing this exact value,
+       unaltered, is what makes the preview agree with what the save sends. */
+    html:bodyHtml(),
+    format:_format
+  });
+}
+
+/* Opens the preview for a SAVED article, straight from the board — so the
+   article can be checked (and checked at each device width) without opening the
+   editor and without publishing anything. Same window, same measurements. */
+function previewBlog(id){
+  const p=BLOGS.find(x=>x.id===id); if(!p) return;
+  showPreview({
+    title:p.title, dek:p.dek, hero:p.heroImageUrl||'',
+    html:p.html, format:p.format||'text',
+    pdfUrl:p.pdfUrl||'', pdfName:p.pdfName||'', sourceKind:p.sourceKind||''
+  });
+}
+
+function showPreview(post){
   const stage=bEl('prevStage');
   stopPreviewFit();
-  const title=bEl('bTitle').value.trim()||'Untitled';
-  const dek=bEl('bDek').value.trim();
-  // heroValue(), not the URL box: an uploaded file lives in _heroData until the
-  // save hoists it, and the preview has to show what will actually publish.
-  const hero=heroValue()||'';
+  const title=(post.title||'').trim()||'Untitled';
+  const dek=(post.dek||'').trim();
+  const hero=post.hero||'';
   const head=
     (hero?'<img class="prev-hero" src="'+xesc(hero)+'" alt="">':'')+
     '<h1 class="prev-title">'+xesc(title)+'</h1>'+
     (dek?'<p class="prev-dek">'+xesc(dek)+'</p>':'')+
     '<hr class="prev-rule">';
-  /* Whichever of the two the admin produced — the whole loaded document, or the
-     markup typed into the source box. Previewing this exact value, unaltered,
-     is what makes the preview agree with what the save sends. */
-  const src=String(bodyHtml()||'');
-  if(_format==='html'){
-    stage.innerHTML=head+'<iframe class="prev-frame" id="prevFrame" sandbox="'+PREV_SANDBOX+'" referrerpolicy="no-referrer" title="Article preview"></iframe>';
+  const src=String(post.html||'');
+  const fmt=post.format||'text';
+
+  /* A source document IS the article — there is no markup of ours to reflow,
+     and no responsiveness question to answer, so no device toolbar. Mirrors
+     renderDocView: a PDF draws in the frame, Word cannot and is linked. */
+  if((fmt==='pdf'||fmt==='doc')&&post.pdfUrl){
+    bEl('prevBar').style.display='none';
+    bEl('prevWarn').style.display='none';
+    const name=post.pdfName||'the document';
+    stage.innerHTML=head+((post.sourceKind||'').toLowerCase()==='docx'
+      ? '<div class="bdv-note"><b>'+xesc(name)+'</b><br>Word documents cannot be previewed inside the browser. '+
+        '<a href="'+xesc(post.pdfUrl)+'" target="_blank" rel="noopener">Open the file</a> to check it.</div>'
+      : '<iframe class="prev-frame" style="height:70vh" src="'+xesc(post.pdfUrl)+'#toolbar=1&navpanes=0" title="'+xesc(name)+'"></iframe>');
+    bEl('prevModal').classList.add('on');bEl('prevScrim').classList.add('on');
+    return;
+  }
+
+  /* A design gets the device frame. Prose gets the site's article styling,
+     even when it is STORED as html  see previewIsDesigned. */
+  if(fmt==='html'&&previewIsDesigned(src)){
+    /* The heading block stays OUTSIDE the device viewport: it is the console's
+       own summary of the fields, not part of the document, and putting it
+       inside a 390px sleeve would have shrunk the admin's own preview chrome
+       along with the article. */
+    stage.innerHTML=head+
+      '<div class="prev-devwrap" id="prevDevWrap">'+
+        '<div class="prev-viewport" id="prevViewport">'+
+          '<iframe class="prev-frame" id="prevFrame" sandbox="'+PREV_SANDBOX+'" referrerpolicy="no-referrer" title="Article preview"></iframe>'+
+        '</div>'+
+      '</div>';
+    bEl('prevBar').style.display='';
+    renderPreviewBar();
     const f=bEl('prevFrame');
     f.onload=()=>{
-      fitPreviewFrame(f);
-      /* Webfonts and images settle after load and each one changes the height,
-         so the frame is watched rather than measured once. */
+      /* The site clips; so does the preview, until a measurement lifts it. */
+      try{ f.contentDocument.documentElement.classList.add('mc-clip'); }catch(e){}
+      layoutPreviewDevice();
       try{
-        _prevRO=new ResizeObserver(()=>fitPreviewFrame(f));
-        _prevRO.observe(f.contentDocument.documentElement);
+        const d=f.contentDocument;
+        /* syncPreviewFrame, NOT fitPreviewFrame: the sleeve has to grow with the
+           frame or it clips what arrives late. */
+        _prevRO=new ResizeObserver(()=>syncPreviewFrame());
+        _prevRO.observe(d.documentElement);
+        if(d.body) _prevRO.observe(d.body);
+        /* An <img> with no width/height attributes occupies ZERO height until
+           its bytes arrive, and a document of them can finish "loading" far
+           shorter than it ends up. Nothing inside the frame is allowed to run,
+           so the listeners are attached from here  same origin, scripting off.
+           decode() covers the already-cached case, where the load event has
+           been and gone before this line runs. */
+        for(const img of d.images){
+          if(img.complete){ if(img.decode) img.decode().then(syncPreviewFrame).catch(()=>{}); }
+          else img.addEventListener('load', syncPreviewFrame, {once:true});
+          img.addEventListener('error', syncPreviewFrame, {once:true});
+        }
+        /* Webfonts reflow the whole document when they swap in, and they are not
+           an element the observer above is watching. */
+        if(d.fonts&&d.fonts.ready) d.fonts.ready.then(syncPreviewFrame).catch(()=>{});
       }catch(e){}
     };
-    /* Verbatim. A whole document and a bare fragment both parse here exactly as
-       the browser would parse them on the site — no splitting, no scoping, no
-       re-serialising. If the design is missing, what is left is still the
-       admin's own markup in its own order, not a rewrite of it. */
-    f.srcdoc=src;
+    /* The admin's markup verbatim — a whole document and a bare fragment both
+       parse here exactly as the browser would parse them on the site — plus
+       the site's own responsive net appended (previewSrcdoc). The net is the
+       difference between previewing the FILE and previewing the PAGE: the site
+       applies it to every html post, so a preview without it disagrees with
+       what publishes at exactly the widths this toolbar exists to check. */
+    f.srcdoc=previewSrcdoc(src);
   } else {
     /* Prose carries no design of its own: it publishes with the site's styling,
-       which is what .prev-body is. */
-    stage.innerHTML=head+'<div class="prev-body narrow">'+src+'</div>';
+       which is what .prev-body is. Nothing here can fail to be responsive, so
+       the device toolbar would be a control with no question to answer. */
+    bEl('prevBar').style.display='none';
+    bEl('prevWarn').style.display='none';
+    /* An html-stored post reaches here too when its markup uses none of the
+       classes its stylesheet defines. splitDesign strips the <style>/<script>
+       wrapper off first, so the composed document the backend sends does not
+       publish its own CSS as loose text on the page. */
+    const prose=(fmt==='html')?splitDesign(src).html:src;
+    stage.innerHTML=head+'<div class="prev-body narrow">'+prose+'</div>';
   }
   bEl('prevModal').classList.add('on');bEl('prevScrim').classList.add('on');
+  /* The scale depends on how much room the popup actually got, which is not
+     known until it is on screen. */
+  if(fmt==='html') setTimeout(layoutPreviewDevice,0);
 }
 function closePreview(){
   bEl('prevModal').classList.remove('on');bEl('prevScrim').classList.remove('on');
   stopPreviewFit();
+  /* The resize listener is registered once and stays: it is guarded on the
+     popup being open, so it costs nothing while closed — and removing it here
+     meant the SECOND open never re-fitted on a window resize. */
   bEl('prevStage').innerHTML='';   // drops the frame, and the document with it
+  bEl('prevBar').style.display='none';
+  bEl('prevWarn').style.display='none';
 }
+/* Re-fits when the window changes size — the popup is a % of the viewport, so
+   the room available to a 1440px device preview changes with it. */
+const _prevResize=()=>{ if(bEl('prevModal').classList.contains('on')) layoutPreviewDevice(); };
+window.addEventListener('resize', _prevResize);
 function updatePlaceChip(){const z=bEl('bZone').value||'edu',m=ZONES[z]||ZONES.edu;bEl('bmPlace').className='bm-place '+m.cls;bEl('bmPlace').innerHTML=`<span style="width:8px;height:8px;border-radius:3px;background:${m.dot};display:inline-block"></span>${m.label} · ${m.pos}`;}
 /* Shows the fields this format actually uses. A document post asks for none
    of them — its own pages are the article — so leaving them on screen only
